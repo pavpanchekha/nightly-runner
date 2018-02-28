@@ -26,66 +26,82 @@ get() {
 branches() {
 	PROJ=$1
 	if [ ! -d $PROJ/master ]; then
-		echo "Cannot find directory $PROJ/master"
+		echo "Cannot find directory $PROJ/master" >&2
 		exit 255
 	fi
 
 	git -C $PROJ/master branch -r | grep -v 'master\|HEAD' | cut -d/ -f2
 }
 
-run() {
+check_branch() {
 	PROJ=$1
 	BRANCH=$2
         if [ -f "$PROJ/$BRANCH.last-commit" ]; then
             local LAST=$(cat "$PROJ/$BRANCH.last-commit")
             local CURRENT=$(git -C "$PROJ/$BRANCH" rev-parse HEAD)
             if [[ $LAST = $CURRENT ]]; then
-                echo "Branch $BRANCH has not changed since last run; skipping"
-                return
+                echo "Branch $BRANCH has not changed since last run; skipping" >&2
+                return 1
             fi
             git -C "$PROJ/$BRANCH" rev-parse HEAD > "$PROJ/$BRANCH.last-commit"
         fi
-	if ! make -C "$PROJ/$BRANCH" -n nightly 2>/dev/null ; then
-		echo "Branch $BRANCH does not have nightly rule; skipping"
-		return
+	if ! make -C "$PROJ/$BRANCH" -n nightly >/dev/null 2>/dev/null ; then
+		echo "Branch $BRANCH does not have nightly rule; skipping" >&2
+		return 1
 	fi
-	make -C "$PROJ/$BRANCH" nightly || echo "Running $PROJ on branch $BRANCH failed"
+        return 0
+}
+
+filter_branches() {
+    PROJ="$1"
+    shift
+    for branch in "$@"; do
+        if check_branch "$PROJ" "$branch"; then
+            echo "$branch"
+        fi
+    done
+}
+
+run() {
+	make -C "$PROJ/$BRANCH" nightly || echo "Running $PROJ on branch $BRANCH failed" >&2
 }
 
 TIME=$(date +%s)
 
 get "$PROJ" master
 if [ $# -gt 0 ]; then
-    cassius_branches="$@"
+    branches="$@"
 else
-    cassius_branches="master `branches $PROJ`"
+    branches="master `branches $PROJ`"
 fi
-for branch in $cassius_branches; do
+for branch in $branches; do
 	get "$PROJ" $branch
 done
 
+branches=`filter_branches "$PROJ" $branches`
+
 echo $TIME > ./last-run.txt
 
-for branch in $cassius_branches; do
-	echo "Running tests on branch" "$branch"
+for branch in $branches; do
+	echo "Running tests on branch" "$branch" >&2
 	run "$PROJ" $branch
 done
 
 rm -rf upload
 mkdir upload
-for branch in $cassius_branches; do
-	echo "Saving results from branch" "$branch"
+for branch in $branches; do
+	echo "Saving results from branch" "$branch" >&2
 	[ -d "$PROJ/$branch/reports/" ] &&
 	    cp -r "$PROJ/$branch/reports" "upload/$branch"
 done
 [ -f "$PROJ"/master/reports/reports.css ] && cp "$PROJ"/master/reports/report.css upload
 
-echo "Uploading"
+echo "Uploading" >&2
 RPATH=/var/www/"$PROJ"/reports/$TIME/
 rsync -r upload/ uwplse.org:$RPATH
 ssh uwplse.org chmod a+x $RPATH
 ssh uwplse.org chmod -R a+r $RPATH
-echo "Uploaded to http://$PROJ.uwplse.org/reports/$TIME"
+echo "Uploaded to http://$PROJ.uwplse.org/reports/$TIME" >&2
 
 if [ -f "$PROJ"/master/infra/publish.sh ]; then
     ( cd "$PROJ"/master ; bash infra/publish.sh download index upload )
