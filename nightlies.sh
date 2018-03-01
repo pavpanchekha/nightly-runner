@@ -3,10 +3,6 @@
 set -e
 shopt -s nullglob
 
-GITHUB="$1"
-PROJ=$(echo "$GITHUB" | cut -d/ -f2)
-shift
-
 cd /data/pavpan/nightlies
 PATH="$PATH:/home/p92/bin/"
 
@@ -66,45 +62,46 @@ run() {
 	make -C "$PROJ/$BRANCH" nightly || echo "Running $PROJ on branch $BRANCH failed" >&2
 }
 
-TIME=$(date +%s)
+for GITHUB in "$@"; do
+    PROJ=$(echo "$GITHUB" | cut -d/ -f2)
+    # Redirect output to log file
+    exec >$PROJ/out.log 2>$PROG/error.log
 
-get "$PROJ" master
-if [ $# -gt 0 ]; then
-    branches="$@"
-else
+    TIME=$(date +%s)
+
     branches="master `branches $PROJ`"
-fi
-for branch in $branches; do
-	get "$PROJ" $branch
+    for branch in $branches; do
+    	get "$PROJ" $branch
+    done
+
+    branches=`filter_branches "$PROJ" $branches`
+
+    echo $TIME > ./last-run.txt
+
+    for branch in $branches; do
+    	echo "Running tests on branch" "$branch" >&2
+    	run "$PROJ" $branch
+    done
+
+    rm -rf upload
+    mkdir upload
+    for branch in $branches; do
+    	echo "Saving results from branch" "$branch" >&2
+    	[ -d "$PROJ/$branch/reports/" ] &&
+    	    cp -r "$PROJ/$branch/reports" "upload/$branch"
+    done
+    [ -f "$PROJ"/master/reports/reports.css ] && cp "$PROJ"/master/reports/report.css upload
+
+    echo "Uploading" >&2
+    RPATH=/var/www/"$PROJ"/reports/$TIME/
+    rsync -r upload/ uwplse.org:$RPATH
+    ssh uwplse.org chmod a+x $RPATH
+    ssh uwplse.org chmod -R a+r $RPATH
+    echo "Uploaded to http://$PROJ.uwplse.org/reports/$TIME" >&2
+
+    if [ -f "$PROJ"/master/infra/publish.sh ]; then
+        ( cd "$PROJ"/master ; bash infra/publish.sh download index upload )
+    fi
+
+    rm -r upload
 done
-
-branches=`filter_branches "$PROJ" $branches`
-
-echo $TIME > ./last-run.txt
-
-for branch in $branches; do
-	echo "Running tests on branch" "$branch" >&2
-	run "$PROJ" $branch
-done
-
-rm -rf upload
-mkdir upload
-for branch in $branches; do
-	echo "Saving results from branch" "$branch" >&2
-	[ -d "$PROJ/$branch/reports/" ] &&
-	    cp -r "$PROJ/$branch/reports" "upload/$branch"
-done
-[ -f "$PROJ"/master/reports/reports.css ] && cp "$PROJ"/master/reports/report.css upload
-
-echo "Uploading" >&2
-RPATH=/var/www/"$PROJ"/reports/$TIME/
-rsync -r upload/ uwplse.org:$RPATH
-ssh uwplse.org chmod a+x $RPATH
-ssh uwplse.org chmod -R a+r $RPATH
-echo "Uploaded to http://$PROJ.uwplse.org/reports/$TIME" >&2
-
-if [ -f "$PROJ"/master/infra/publish.sh ]; then
-    ( cd "$PROJ"/master ; bash infra/publish.sh download index upload )
-fi
-
-rm -r upload
