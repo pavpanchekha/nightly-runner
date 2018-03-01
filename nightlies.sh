@@ -64,6 +64,7 @@ run() {
 
 for GITHUB in "$@"; do
     PROJ=$(echo "$GITHUB" | cut -d/ -f2)
+    mkdir -p $PROJ
     # Redirect output to log file
     exec >$PROJ/out.log 2>$PROG/error.log
 
