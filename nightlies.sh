@@ -23,7 +23,7 @@ branches() {
 	PROJ=$1
 	if [ ! -d $PROJ/master ]; then
 		echo "Cannot find directory $PROJ/master" >&2
-		exit 255
+                return
 	fi
 
 	git -C $PROJ/master branch -r | grep -v 'master\|HEAD' | cut -d/ -f2
@@ -59,6 +59,8 @@ filter_branches() {
 }
 
 run() {
+	PROJ=$1
+	BRANCH=$2
 	make -C "$PROJ/$BRANCH" nightly || echo "Running $PROJ on branch $BRANCH failed" >&2
 }
 
@@ -66,10 +68,11 @@ for GITHUB in "$@"; do
     PROJ=$(echo "$GITHUB" | cut -d/ -f2)
     mkdir -p $PROJ
     # Redirect output to log file
-    exec >$PROJ/out.log 2>$PROG/error.log
+    exec >$PROJ/out.log 2>$PROJ/error.log
 
     TIME=$(date +%s)
 
+    get "$PROJ" master
     branches="master `branches $PROJ`"
     for branch in $branches; do
     	get "$PROJ" $branch
