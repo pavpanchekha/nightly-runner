@@ -103,8 +103,8 @@ for GITHUB in "$@"; do
     ssh uwplse.org chmod -R a+r $RPATH
     echo "Uploaded to http://$PROJ.uwplse.org/reports/$TIME" >&2
 
-    if [ -f "$PROJ"/master/infra/publish.sh ]; then
-        ( cd "$PROJ"/master ; bash infra/publish.sh download index upload )
+    if ! make -C "$PROJ/master" -n index >/dev/null 2>/dev/null ; then
+        make -C "$PROJ/master" index
     fi
 
     rm -r upload
