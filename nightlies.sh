@@ -86,26 +86,4 @@ for GITHUB in "$@"; do
     	echo "Running tests on branch" "$branch" >&2
     	run "$PROJ" $branch
     done
-
-    rm -rf upload
-    mkdir upload
-    for branch in $branches; do
-    	echo "Saving results from branch" "$branch" >&2
-    	[ -d "$PROJ/$branch/reports/" ] &&
-    	    cp -r "$PROJ/$branch/reports" "upload/$branch"
-    done
-    [ -f "$PROJ"/master/reports/reports.css ] && cp "$PROJ"/master/reports/report.css upload
-
-    echo "Uploading" >&2
-    RPATH=/var/www/"$PROJ"/reports/$TIME/
-    rsync -r upload/ uwplse.org:$RPATH
-    ssh uwplse.org chmod a+x $RPATH
-    ssh uwplse.org chmod -R a+r $RPATH
-    echo "Uploaded to http://$PROJ.uwplse.org/reports/$TIME" >&2
-
-    if make -C "$PROJ/master" -n index >/dev/null 2>/dev/null ; then
-        make -C "$PROJ/master" index
-    fi
-
-    rm -r upload
 done
