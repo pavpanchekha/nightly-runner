@@ -40,6 +40,8 @@ check_branch() {
                 return 1
             fi
             git -C "$PROJ/$BRANCH" rev-parse HEAD > "$PROJ/$BRANCH.last-commit"
+        else
+            git -C "$PROJ/$BRANCH" rev-parse HEAD > "$PROJ/$BRANCH.last-commit"
         fi
 	if ! make -C "$PROJ/$BRANCH" -n nightly >/dev/null 2>/dev/null ; then
 		echo "Branch $BRANCH does not have nightly rule; skipping" >&2
