@@ -8,14 +8,13 @@ This script runs integration tests nightly.
 Start with a Github project, say `$ORG/$PROJ`. The nightly runner will:
 
 + Download each branch
-+ Run `make nightly`, expecting results in `reports/`
-+ Uploads the results to a timestamped directory in
-  `/var/www/$PROJ/reports` on `uwplse.org`
++ Run `make nightly`
 
-So, to use this nightly runner, you will need to:
+So, to use this nightly runner, you will need to add a `make` rule
+called `nightly` to your project. It should probably:
 
-+ Create `/var/www/$PROJ/reports` on `uwplse.org`
-+ Add a `make` rule called `nightly` to your project
++ Run your project on all its tests
++ Upload the results somewhere
 
 You might also want to delete your obsolete branches, so they don't
 take up time running nightlies you don't care about.
@@ -23,9 +22,8 @@ take up time running nightlies you don't care about.
 ## Features
 
 + *Logs*: The log files `$PROJ/out.log` and `$PROJ/error.log` are created
-+ *Dedup*: If the file `$PROJ/$BRANCH.last-commit` exists, that
-  branch's nightly won't be rerun if no commit has happened since the
-  last run.
++ *Dedup*: A branch's nightly won't be run if no commit has happened
+  since the last run.
 + *Heartbeat*: The file `last-run.txt` contains a timestamp for the
   last nightly run.
 
