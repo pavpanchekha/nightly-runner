@@ -34,7 +34,7 @@ check_branch() {
 	BRANCH=$2
         if [ -f "$PROJ/$BRANCH.last-commit" ]; then
             local LAST=$(cat "$PROJ/$BRANCH.last-commit")
-            local CURRENT=$(git -C "$PROJ/$BRANCH" rev-parse HEAD)
+            local CURRENT=$(git -C "$PROJ/$BRANCH" rev-parse origin/"$BRANCH")
             if [[ $LAST = $CURRENT ]]; then
                 echo "Branch $BRANCH has not changed since last run; skipping" >&2
                 return 1
@@ -61,7 +61,7 @@ run() {
 	PROJ=$1
 	BRANCH=$2
 	make -C "$PROJ/$BRANCH" nightly || echo "Running $PROJ on branch $BRANCH failed" >&2
-        git -C "$PROJ/$BRANCH" rev-parse HEAD > "$PROJ/$BRANCH.last-commit"
+        git -C "$PROJ/$BRANCH" rev-parse origin/"$BRANCH" > "$PROJ/$BRANCH.last-commit"
 }
 
 for GITHUB in "$@"; do
