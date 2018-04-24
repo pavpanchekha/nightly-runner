@@ -39,9 +39,6 @@ check_branch() {
                 echo "Branch $BRANCH has not changed since last run; skipping" >&2
                 return 1
             fi
-            git -C "$PROJ/$BRANCH" rev-parse HEAD > "$PROJ/$BRANCH.last-commit"
-        else
-            git -C "$PROJ/$BRANCH" rev-parse HEAD > "$PROJ/$BRANCH.last-commit"
         fi
 	if ! make -C "$PROJ/$BRANCH" -n nightly >/dev/null 2>/dev/null ; then
 		echo "Branch $BRANCH does not have nightly rule; skipping" >&2
@@ -64,6 +61,7 @@ run() {
 	PROJ=$1
 	BRANCH=$2
 	make -C "$PROJ/$BRANCH" nightly || echo "Running $PROJ on branch $BRANCH failed" >&2
+        git -C "$PROJ/$BRANCH" rev-parse HEAD > "$PROJ/$BRANCH.last-commit"
 }
 
 for GITHUB in "$@"; do
