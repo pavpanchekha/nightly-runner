@@ -15,7 +15,7 @@ get() {
 	fi
 	git -C $PROJ/$BRANCH fetch origin --prune
 	git -C $PROJ/$BRANCH fetch origin $BRANCH
-	git -C $PROJ/$BRANCH checkout origin/$BRANCH
+	git -C $PROJ/$BRANCH checkout $BRANCH
 	git -C $PROJ/$BRANCH reset --hard origin/$BRANCH
 }
 
