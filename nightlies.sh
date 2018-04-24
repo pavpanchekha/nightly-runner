@@ -68,7 +68,7 @@ for GITHUB in "$@"; do
     PROJ=$(echo "$GITHUB" | cut -d/ -f2)
     mkdir -p $PROJ
     # Redirect output to log file
-    exec >$PROJ/out.log 2>$PROJ/error.log
+    exec >$PROJ/out.log 2>&1
 
     TIME=$(date +%s)
 
