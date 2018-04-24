@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -e -x
 shopt -s nullglob
 
 cd /data/pavpan/nightlies
