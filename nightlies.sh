@@ -64,26 +64,37 @@ run() {
         git -C "$PROJ/$BRANCH" rev-parse origin/"$BRANCH" > "$PROJ/$BRANCH.last-commit"
 }
 
+START=$(date +%s)
+
+log() {
+    printf "%s\t%s\n" $(( $(date +%s) - $START )) "$*" >> last.log
+}
+
+log "Nightly script starting up at $(date)"
+
 for GITHUB in "$@"; do
+    log "Beginning nightly run for $GITHUB"
+
     PROJ=$(echo "$GITHUB" | cut -d/ -f2)
     mkdir -p $PROJ
+
     # Redirect output to log file
+    log "Redirecting output to $PROJ/out.log"
     exec >$PROJ/out.log 2>&1
 
-    TIME=$(date +%s)
-
+    log "Downloading all $GITHUB branches"
     get "$PROJ" master
     branches="master `branches $PROJ`"
     for branch in $branches; do
     	get "$PROJ" $branch
     done
 
+    log "Filtering $GITHUB branches $branches"
     branches=`filter_branches "$PROJ" $branches`
 
-    echo $TIME > ./last-run.txt
-
+    log "Running $GITHUB branches $branches"
     for branch in $branches; do
-    	echo "Running tests on branch" "$branch" >&2
+    	log "Running tests on $GITHUB branch $branch"
     	run "$PROJ" $branch
     done
 done
