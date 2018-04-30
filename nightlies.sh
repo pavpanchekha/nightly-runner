@@ -70,6 +70,7 @@ log() {
     printf "%s\t%s\n" $(( $(date +%s) - $START )) "$*" >> last.log
 }
 
+printf "\n\n" >> last.log
 log "Nightly script starting up at $(date)"
 
 for GITHUB in "$@"; do
@@ -97,4 +98,6 @@ for GITHUB in "$@"; do
     	log "Running tests on $GITHUB branch $branch"
     	run "$PROJ" $branch
     done
+
+    log "Finished nightly run for $GITHUB"
 done
