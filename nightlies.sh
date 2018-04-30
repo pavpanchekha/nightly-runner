@@ -26,7 +26,7 @@ branches() {
                 return
 	fi
 
-	git -C $PROJ/master branch -r | grep -v 'master\|HEAD' | cut -d/ -f2
+	git -C $PROJ/master branch -r | grep -v 'master\|HEAD' | cut -d/ -f2 | tr '\n' ' '
 }
 
 check_branch() {
