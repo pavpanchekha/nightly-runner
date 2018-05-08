@@ -52,7 +52,7 @@ filter_branches() {
     shift
     for branch in "$@"; do
         if check_branch "$PROJ" "$branch"; then
-            echo "$branch"
+            printf "%s " "$branch"
         fi
     done
 }
