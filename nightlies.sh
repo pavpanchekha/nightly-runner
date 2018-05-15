@@ -60,7 +60,7 @@ filter_branches() {
 run() {
 	PROJ=$1
 	BRANCH=$2
-	make -C "$PROJ/$BRANCH" nightly || echo "Running $PROJ on branch $BRANCH failed" >&2
+	nice make -C "$PROJ/$BRANCH" nightly || echo "Running $PROJ on branch $BRANCH failed" >&2
         git -C "$PROJ/$BRANCH" rev-parse origin/"$BRANCH" > "$PROJ/$BRANCH.last-commit"
 }
 
