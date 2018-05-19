@@ -26,7 +26,8 @@ def all_branches(project):
         sys.stderr.flush()
     
     branches = subprocess.run(["git", "-C", project + "/master", "branch", "-r"], stdout=subprocess.PIPE, stderr=sys.stderr).stdout.decode("utf8").strip().split("\n")
-    return [branch.split("/")[1] for branch in branches]
+    branches = [branch.split("/")[1] for branch in branches]
+    return [branch for branch in branches if not branch.startswith("HEAD") and branch != "master"]
 
 
 def check_branch(project, branch):
