@@ -70,7 +70,7 @@ for github in sys.argv[1:]:
     log("Beginning nightly run for " + github)
 
     user, project = github.split("/")
-    Path(proj).mkdir(parents=True)
+    Path(project).mkdir(parents=True)
 
     # Redirect output to log file
     log("Redirecting output to " + project + "/out.log")
