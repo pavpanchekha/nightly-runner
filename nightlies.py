@@ -46,7 +46,7 @@ def check_branch(project, branch):
     return True
 
 def filter_branches(project, branches):
-    return [branch for branch in branches if check_branch(proj, branch)]
+    return [branch for branch in branches if check_branch(project, branch)]
 
 def run(project, branch):
     if subprocess.run(["nice", "make", "-C", project + "/" + branch, "nightly" ]).returncode:
