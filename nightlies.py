@@ -11,7 +11,7 @@ os.putenv("PATH", os.getenv("PATH") + ":/home/p92/bin/")
 
 def get(user, project, branch):
     pproject = Path(project)
-    pproject.mkdir(parents=True)
+    pproject.mkdir(parents=True, exist_ok=True)
     if not (pproject / branch).is_dir():
         subprocess.run(["git", "clone", "https://github.com/" + user + "/" + project + ".git", project + "/" + branch])
     subprocess.run(["git", "-C", project + "/" + branch, "fetch", "origin", "--prune"])
@@ -70,7 +70,7 @@ for github in sys.argv[1:]:
     log("Beginning nightly run for " + github)
 
     user, project = github.split("/")
-    Path(project).mkdir(parents=True)
+    Path(project).mkdir(parents=True, exist_ok=True)
 
     # Redirect output to log file
     log("Redirecting output to " + project + "/out.log")
