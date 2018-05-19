@@ -34,7 +34,7 @@ def check_branch(project, branch):
     dir = Path(project) / branch
     last_commit = Path(project) / (branch + ".last-commit")
     if last_commit.is_file():
-        last = last_commit.open().read()
+        last = last_commit.open("rb").read()
         current = subprocess.run(["git", "-C", project + "/" + branch, "rev-parse", "origin/" + branch], stdout=subprocess.PIPE, stderr=sys.stderr).stdout
         if last == current:
             sys.stderr.write("Branch " + branch + " has not changed since last run; skipping\n")
