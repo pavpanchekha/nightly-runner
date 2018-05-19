@@ -54,7 +54,7 @@ def run(project, branch):
         sys.stderr.write("Running " + project + " on branch " + branch + " failed\n")
         sys.stderr.flush()
     current = subprocess.run(["git", "-C", project + "/" + branch, "rev-parse", "origin/" + branch], stdout=subprocess.PIPE, stderr=sys.stderr).stdout
-    Path(project) / (branch + ".last-commit").open("wb").write(current)
+    (Path(project) / (branch + ".last-commit")).open("wb").write(current)
 
 START = time.time()
     
