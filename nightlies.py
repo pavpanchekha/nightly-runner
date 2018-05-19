@@ -25,7 +25,7 @@ def all_branches(project):
         sys.stderr.write("Cannot find directory " + project + "/master\n")
         sys.stderr.flush()
     
-    branches = subprocess.run(["git", "-C", project + "/" + branch, "branch", "-r"], stdout=subprocess.PIPE).stdout.split("\n")
+    branches = subprocess.run(["git", "-C", project + "/master", "branch", "-r"], stdout=subprocess.PIPE).stdout.split("\n")
     return [branch.split("/")[1] for branch in branches]
 
 
