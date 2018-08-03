@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 os.chdir("/data/pavpan/nightlies")
-os.putenv("PATH", os.getenv("PATH") + ":/home/p92/bin/")
+os.putenv("PATH", "/home/p92/bin/:" + os.getenv("PATH"))
 
 def get(user, project, branch):
     pproject = Path(project)
