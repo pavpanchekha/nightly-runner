@@ -4,7 +4,9 @@ import subprocess
 import os
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
+import contextlib
 
 os.chdir("/data/pavpan/nightlies")
 os.putenv("PATH", "/home/p92/bin/:" + os.getenv("PATH"))
@@ -57,46 +59,67 @@ def run(project, branch):
     (Path(project) / (branch + ".last-commit")).open("wb").write(current)
 
 START = time.time()
-    
-def log(s):
-    with open("last.log", "at") as f:
-        f.write(str(int(time.time() - START)) + "\t" + s + "\n")
 
-with open("last.log", "at") as f:
-    f.write("\n\n")
+class Log:
+    dir = Path("logs/").resolve()
+    if not dir.is_dir(): dir.mkdir()
 
-log("Nightly script starting up at " + time.ctime(time.time()))
+    def __init__(self, project=None, branch=None):
+        name = "{date:%Y-%m-%d}{project}{branch}.log".format(
+            date=datetime.now(),
+            project=("-" + project) if project is not None else "",
+            branch=("-" + branch) if branch is not None else "")
+        self.path = self.dir / name
+
+    def log(self, s):
+        with self.path.open("at") as f:
+            f.write("{:.0f}\t{}\n".format(time.time() - START, s))
+
+    @contextlib.contextmanager
+    def open(self):
+        fd = self.path.open("at")
+        try:
+            yield fd
+        finally:
+            fd.close()
+
+@contextlib.contextmanager
+def output_to(fd):
+    _sout, _serr = sys.stdout, sys.stderr
+    sys.stdout, sys.stderr = fd, fd
+    try:
+        yield
+    finally:
+        sys.stdout, sys.stderr = _sout, _serr
+
+LOG = Log()
+LOG.log("Nightly script starting up at " + time.ctime(time.time()))
 
 for github in sys.argv[1:]:
-    log("Beginning nightly run for " + github)
+    LOG.log("Beginning nightly run for " + github)
 
     user, project = github.split("/")
     Path(project).mkdir(parents=True, exist_ok=True)
 
     # Redirect output to log file
-    log("Redirecting output to " + project + "/out.log")
-    outlog = open(project + "/out.log", "wt")
-    _sout = sys.stdout
-    _serr = sys.stderr
-    sys.stdout = outlog
-    sys.stderr = outlog
+    outlog = Log(project=project)
+    with outlog.open() as fd, output_to(fd):
+        LOG.log("Redirecting output to {}".format(outlog))
     
-    log("Downloading all " + github + " branches")
-    get(user, project, "master")
-    branches = ["master"] + all_branches(project)
-    for branch in branches:
-        get(user, project, branch)
+        LOG.log("Downloading all " + github + " branches")
+        get(user, project, "master")
+        branches = ["master"] + all_branches(project)
+        for branch in branches:
+            get(user, project, branch)
 
-    log("Filtering " + github + " branches " + " ".join(branches))
-    branches = filter_branches(project, branches)
+        LOG.log("Filtering " + github + " branches " + " ".join(branches))
+        branches = filter_branches(project, branches)
 
-    log("Running " + github + " branches " + " ".join(branches))
-    for branch in branches:
-        log("Running tests on " + github + " branch " + branch)
-        run(project, branch)
+        LOG.log("Running " + github + " branches " + " ".join(branches))
+        for branch in branches:
+            LOG.log("Running tests on " + github + " branch " + branch)
+            branchlog = Log(project=project, branch=branch)
+            with branchlog.open() as fd, output_to(fd):
+                run(project, branch)
 
-    log("Finished nightly run for " + github)
-
-    sys.stdout = _sout
-    sys.stderr = _serr
-    outlog.close()
+        LOG.log("Finished nightly run for " + github)
