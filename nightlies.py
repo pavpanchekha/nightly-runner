@@ -94,6 +94,7 @@ def output_to(fd):
 
 LOG = Log()
 LOG.log("Nightly script starting up at " + time.ctime(time.time()))
+LOG.log("Running nightlies for " + ", ".join(sys.argv[1:]))
 
 for github in sys.argv[1:]:
     LOG.log("Beginning nightly run for " + github)
