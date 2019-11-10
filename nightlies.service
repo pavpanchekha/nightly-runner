@@ -1,0 +1,12 @@
+[Unit]
+Description=Runs nightly scripts
+Wants=nightlies.timer
+
+[Service]
+ExecStart=/usr/bin/python3 /data/pavpan/nightlies/nightly.py
+WorkingDirectory=/data/pavpan/nightlies
+User=p92
+Group=p92
+
+[Install]
+WantedBy=multi-user.target
