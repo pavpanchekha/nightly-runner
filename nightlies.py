@@ -96,7 +96,12 @@ LOG = Log()
 LOG.log("Nightly script starting up at " + time.ctime(time.time()))
 LOG.log("Running nightlies for " + ", ".join(sys.argv[1:]))
 
-for github in sys.argv[1:]:
+repos = sys.argv[1:]
+if not repos:
+    with open("repositories.list") as f:
+        repos = f.read().strip().split()
+
+for github in repos:
     LOG.log("Beginning nightly run for " + github)
 
     user, project = github.split("/")
