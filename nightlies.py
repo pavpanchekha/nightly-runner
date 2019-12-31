@@ -11,52 +11,50 @@ import contextlib
 os.chdir("/data/pavpan/nightlies")
 os.putenv("PATH", "/home/p92/bin/:" + os.getenv("PATH"))
 
-def get(user, project, branch):
+def get(user, project, branch, log=sys.stdout):
     pproject = Path(project)
     pproject.mkdir(parents=True, exist_ok=True)
     if not (pproject / branch).is_dir():
-        subprocess.run(["git", "clone", "https://github.com/" + user + "/" + project + ".git", project + "/" + branch], stdout=sys.stdout, stderr=sys.stderr)
-    subprocess.run(["git", "-C", project + "/" + branch, "fetch", "origin", "--prune"], stdout=sys.stdout, stderr=sys.stderr)
-    subprocess.run(["git", "-C", project + "/" + branch, "fetch", "origin", branch], stdout=sys.stdout, stderr=sys.stderr)
-    subprocess.run(["git", "-C", project + "/" + branch, "checkout", branch], stdout=sys.stdout, stderr=sys.stderr)
-    subprocess.run(["git", "-C", project + "/" + branch, "reset", "--hard", "origin/" + branch], stdout=sys.stdout, stderr=sys.stderr)
+        subprocess.run(["git", "clone", "https://github.com/" + user + "/" + project + ".git", project + "/" + branch], stdout=fd, stderr=fd)
+    subprocess.run(["git", "-C", project + "/" + branch, "fetch", "origin", "--prune"], stdout=fd, stderr=fd)
+    subprocess.run(["git", "-C", project + "/" + branch, "fetch", "origin", branch], stdout=fd, stderr=fd)
+    subprocess.run(["git", "-C", project + "/" + branch, "checkout", branch], stdout=fd, stderr=fd)
+    subprocess.run(["git", "-C", project + "/" + branch, "reset", "--hard", "origin/" + branch], stdout=fd, stderr=fd)
 
-def all_branches(project):
+def all_branches(project, log=fd):
     pproject = Path(project)
     if not (pproject / "master").is_dir():
-        sys.stderr.write("Cannot find directory " + project + "/master\n")
-        sys.stderr.flush()
+        fd.write("Cannot find directory " + project + "/master\n")
+        fd.flush()
     
-    branches = subprocess.run(["git", "-C", project + "/master", "branch", "-r"], stdout=subprocess.PIPE, stderr=sys.stderr).stdout.decode("utf8").strip().split("\n")
+    branches = subprocess.run(["git", "-C", project + "/master", "branch", "-r"], stdout=subprocess.PIPE, stderr=fd).stdout.decode("utf8").strip().split("\n")
     branches = [branch.split("/")[1] for branch in branches]
     return [branch for branch in branches if not branch.startswith("HEAD") and branch != "master"]
 
 
-def check_branch(project, branch):
+def check_branch(project, branch, log=sys.stderr):
     dir = Path(project) / branch
     last_commit = Path(project) / (branch + ".last-commit")
     if last_commit.is_file():
         last = last_commit.open("rb").read()
-        current = subprocess.run(["git", "-C", project + "/" + branch, "rev-parse", "origin/" + branch], stdout=subprocess.PIPE, stderr=sys.stderr).stdout
+        current = subprocess.run(["git", "-C", project + "/" + branch, "rev-parse", "origin/" + branch], stdout=subprocess.PIPE, stderr=fd).stdout
         if last == current:
-            sys.stderr.write("Branch " + branch + " has not changed since last run; skipping\n")
-            sys.stderr.flush()
+            fd.write("Branch " + branch + " has not changed since last run; skipping\n")
+            fd.flush()
             return False
     if subprocess.run(["make", "-C", project + "/" + branch, "-n", "nightly"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
-        sys.stderr.write("Branch " + branch + " does not have nightly rule; skipping\n")
-        sys.stderr.flush()
+        fd.write("Branch " + branch + " does not have nightly rule; skipping\n")
+        fd.flush()
         return False
     return True
 
-def filter_branches(project, branches):
-    return [branch for branch in branches if check_branch(project, branch)]
-
-def run(project, branch):
-    if subprocess.run(["nice", "make", "-C", project + "/" + branch, "nightly" ], stdout=sys.stdout, stderr=sys.stderr).returncode:
-        sys.stderr.write("Running " + project + " on branch " + branch + " failed\n")
-        sys.stderr.flush()
-    current = subprocess.run(["git", "-C", project + "/" + branch, "rev-parse", "origin/" + branch], stdout=subprocess.PIPE, stderr=sys.stderr).stdout
-    (Path(project) / (branch + ".last-commit")).open("wb").write(current)
+def run(project, branch, log=sys.stderr):
+    if subprocess.run(["nice", "make", "-C", project + "/" + branch, "nightly" ], stdout=fd, stderr=fd).returncode:
+        fd.write("Running " + project + " on branch " + branch + " failed\n")
+        fd.flush()
+    current = subprocess.run(["git", "-C", project + "/" + branch, "rev-parse", "origin/" + branch], stdout=subprocess.PIPE, stderr=fd).stdout
+    with (Path(project) / (branch + ".last-commit")).open("wb") as fd:
+        fd.write(current)
 
 START = time.time()
 
@@ -83,23 +81,16 @@ class Log:
         finally:
             fd.close()
 
-@contextlib.contextmanager
-def output_to(fd):
-    _sout, _serr = sys.stdout, sys.stderr
-    sys.stdout, sys.stderr = fd, fd
-    try:
-        yield
-    finally:
-        sys.stdout, sys.stderr = _sout, _serr
-
 LOG = Log()
 LOG.log("Nightly script starting up at " + time.ctime(time.time()))
-LOG.log("Running nightlies for " + ", ".join(sys.argv[1:]))
 
-repos = sys.argv[1:]
-if not repos:
+if len(sys.argv) > 1:
+    repos = sys.argv[1:]
+else:
     with open("repositories.list") as f:
         repos = f.read().strip().split()
+
+LOG.log("Running nightlies for " + ", ".join(repos))
 
 for github in repos:
     LOG.log("Beginning nightly run for " + github)
@@ -109,23 +100,23 @@ for github in repos:
 
     # Redirect output to log file
     outlog = Log(project=project)
-    with outlog.open() as fd, output_to(fd):
+    with outlog.open() as fd:
         LOG.log("Redirecting output to {}".format(outlog))
     
         LOG.log("Downloading all " + github + " branches")
-        get(user, project, "master")
-        branches = ["master"] + all_branches(project)
+        get(user, project, "master", log=fd)
+        branches = ["master"] + all_branches(project, log=fd)
         for branch in branches:
-            get(user, project, branch)
+            get(user, project, branch, log=fd)
 
         LOG.log("Filtering " + github + " branches " + " ".join(branches))
-        branches = filter_branches(project, branches)
+        branches = [branch for branch in branches if check_branch(project, branch, log=fd)]
 
         LOG.log("Running " + github + " branches " + " ".join(branches))
         for branch in branches:
             LOG.log("Running tests on " + github + " branch " + branch)
             branchlog = Log(project=project, branch=branch)
-            with branchlog.open() as fd, output_to(fd):
-                run(project, branch)
+            with branchlog.open() as fd:
+                run(project, branch, log=fd)
 
         LOG.log("Finished nightly run for " + github)
