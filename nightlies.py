@@ -7,6 +7,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 import contextlib
+import configparser
 
 os.chdir("/data/pavpan/nightlies")
 os.putenv("PATH", "/home/p92/bin/:" + os.getenv("PATH"))
@@ -85,14 +86,14 @@ LOG = Log()
 LOG.log("Nightly script starting up at " + time.ctime(time.time()))
 
 if len(sys.argv) > 1:
-    repos = sys.argv[1:]
+    config = { repo: {} for repo in sys.argv[1:] }
 else:
-    with open("repositories.list") as f:
-        repos = f.read().strip().split()
+    config = configparser.ConfigParser()
+    config.read("nightlies.conf")
 
-LOG.log("Running nightlies for " + ", ".join(repos))
+LOG.log("Running nightlies for " + ", ".join(config.keys()))
 
-for github in repos:
+for github, configuration in config:
     LOG.log("Beginning nightly run for " + github)
 
     user, project = github.split("/")
