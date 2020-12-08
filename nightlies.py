@@ -117,6 +117,7 @@ class NightlyResults:
         with self.cmdfile.open("w") as f:
             f.write(f"#!/bin/bash\necho \"$@\" >> '{self.infofile}'\n")
         self.cmdfile.chmod(0o700)
+        return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         os.chdir(self.cwdir)
