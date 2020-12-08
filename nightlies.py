@@ -10,9 +10,7 @@ import contextlib
 import configparser
 import urllib.request
 import json
-
-os.chdir("/data/pavpan/nightlies")
-os.putenv("PATH", "/home/p92/bin/:" + os.getenv("PATH"))
+import tempfile
 
 def get(user, project, branch, fd=sys.stdout):
     pproject = Path(project)
@@ -66,7 +64,7 @@ def run(project, branch, fd=sys.stderr):
 
 def build_slack_blocks(user, project, runs):
     blocks = []
-    for branch, (success, log) in runs:
+    for branch, info in runs:
         blocks.append({ "text": branch })
     return { "text": "Nightlies for {}".format(project), "blocks": blocks }
 
@@ -105,52 +103,86 @@ class Log:
     def __repr__(self):
         return str(self.path)
 
-LOG = Log()
-LOG.log("Nightly script starting up at " + time.ctime(time.time()))
+class NightlyResults:
+    def __enter__(self):
+        self.dir = tempfile.TemporaryDirectory(prefix="nightly")
+        self.cwdir = os.getcwd()
+        self.oldpath = os.getenv("PATH")
+        self.infofile = Path(self.dir.name, "info")
+        self.cmdfile = Path(self.dir.name, "nightly-results")
 
-if len(sys.argv) > 1:
-    config = { repo: {} for repo in sys.argv[1:] }
-else:
-    config = configparser.ConfigParser()
-    config.read("nightlies.conf")
+        os.chdir("/data/pavpan/nightlies")
+        os.putenv("PATH", self.dir.name + ":/home/p92/bin/:" + self.oldpath)
+        self.infofile.touch()
+        with self.cmdfile.open("w") as f:
+            f.write(f"#!/bin/bash\necho \"$@\" >> '{self.infofile}'\n")
+        self.cmdfile.chmod(0o700)
 
-LOG.log("Running nightlies for " + ", ".join(config.keys()))
+    def __exit__(self):
+        os.chdir(self.cwdir)
+        os.putenv("PATH", self.oldpath)
 
-for github, configuration in config.items():
-    if github == "DEFAULT": continue
-    LOG.log("Beginning nightly run for " + github)
+    def info(self):
+        out = {}
+        with self.infofile.open() as f:
+            for line in f:
+                key, value = line.split(" ", 1)
+                out[key] = value
+        return out
 
-    user, project = github.split("/")
-    Path(project).mkdir(parents=True, exist_ok=True)
+    def reset(self):
+        with self.infofile.open("w") as f:
+            pass
 
-    # Redirect output to log file
-    outlog = Log(project=project)
-    runs = {}
-    with outlog.open() as fd:
-        LOG.log("Redirecting output to {}".format(outlog))
+with NightlyResults() as NR:
+    LOG = Log()
+    LOG.log("Nightly script starting up at " + time.ctime(time.time()))
     
-        LOG.log("Downloading all " + github + " branches")
-        get(user, project, "master", fd=fd)
-        branches = ["master"] + all_branches(project, fd=fd)
-        for branch in branches:
-            get(user, project, branch, fd=fd)
-
-        LOG.log("Filtering " + github + " branches " + " ".join(branches))
-        branches = [branch for branch in branches if check_branch(project, branch, fd=fd)]
-
-        LOG.log("Running " + github + " branches " + " ".join(branches))
-        for branch in branches:
-            LOG.log("Running tests on " + github + " branch " + branch)
-            branchlog = Log(project=project, branch=branch)
-            with branchlog.open() as fd:
-                success = run(project, branch, fd=fd)
-                runs[branch] = (success, branchlog)
-
-        if "slack" in configuration:
-            url = configuration["slack"]
-            data = build_slack_blocks(user, project, runs)
-            if data:
-                LOG.log("Posting results of run to slack!")
-                post_to_slack(data, url, fd=LOG)
-
-        LOG.log("Finished nightly run for " + github)
+    if len(sys.argv) > 1:
+        config = { repo: {} for repo in sys.argv[1:] }
+    else:
+        config = configparser.ConfigParser()
+        config.read("nightlies.conf")
+    
+    LOG.log("Running nightlies for " + ", ".join(config.keys()))
+    for github, configuration in config.items():
+        if github == "DEFAULT": continue
+        LOG.log("Beginning nightly run for " + github)
+    
+        user, project = github.split("/")
+        Path(project).mkdir(parents=True, exist_ok=True)
+    
+        # Redirect output to log file
+        outlog = Log(project=project)
+        runs = {}
+        with outlog.open() as fd:
+            LOG.log("Redirecting output to {}".format(outlog))
+        
+            LOG.log("Downloading all " + github + " branches")
+            get(user, project, "master", fd=fd)
+            branches = ["master"] + all_branches(project, fd=fd)
+            for branch in branches:
+                get(user, project, branch, fd=fd)
+    
+            LOG.log("Filtering " + github + " branches " + " ".join(branches))
+            branches = [branch for branch in branches if check_branch(project, branch, fd=fd)]
+    
+            LOG.log("Running " + github + " branches " + " ".join(branches))
+            for branch in branches:
+                LOG.log("Running tests on " + github + " branch " + branch)
+                branchlog = Log(project=project, branch=branch)
+                with branchlog.open() as fd:
+                    success = run(project, branch, fd=fd)
+                    info = NR.info()
+                    info["result"] = "success" if success else "failure"
+                    runs[branch] = info
+                NR.reset()
+    
+            if "slack" in configuration:
+                url = configuration["slack"]
+                data = build_slack_blocks(user, project, runs)
+                if data:
+                    LOG.log("Posting results of run to slack!")
+                    post_to_slack(data, url, fd=LOG)
+    
+            LOG.log("Finished nightly run for " + github)
