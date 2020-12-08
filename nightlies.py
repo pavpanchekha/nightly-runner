@@ -65,10 +65,38 @@ def run(project, branch, fd=sys.stderr):
 def build_slack_blocks(user, project, runs):
     blocks = []
     for branch, info in runs.items():
-        blocks.append({
+        info = info.copy()
+        text = f"Branch `{branch}` was a {info['result']} in {info['time']}"
+        if "emoji" in info:
+            text += " " + info["emoji"]
+
+        block = {
             "type": "section",
-            "text": { "type": "mrkdwn", "text": branch },
-        })
+            "text": { "type": "mrkdwn", "text": text },
+        }
+        if "url" in info:
+            block["accessory"] = {
+                "type": "button",
+                "text": {
+                    "type": "plain_text",
+                    "text": "View Report",
+                },
+                "url": info["url"]
+            }
+            del info["url"]
+        fields = []
+        for k, v in info.items():
+            if k in ["url", "emoji", "result", "time"]: continue
+            fields.append({
+                "type": "mrkdwn",
+                "text": "*" + k + "*",
+            })
+            fields.append({
+                "type": "mrkdwn",
+            "text": v,
+            })
+        block["fields"] = fields
+        blocks.append(block)
     return { "text": "Nightly data for {}/{}".format(user, project), "blocks": blocks }
 
 def post_to_slack(data, url, fd=sys.stderr):
@@ -177,9 +205,12 @@ with NightlyResults() as NR:
                 LOG.log("Running tests on " + github + " branch " + branch)
                 branchlog = Log(project=project, branch=branch)
                 with branchlog.open() as fd:
+                    t = time.time()
                     success = run(project, branch, fd=fd)
+                    dt = time.time() - t
                     info = NR.info()
-                    info["result"] = "success" if success else "failure"
+                    info["result"] = "success" if success else "*failure*"
+                    info["time"] = f"{dt:.1f}s"
                     runs[branch] = info
                 NR.reset()
     
