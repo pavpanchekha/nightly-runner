@@ -22,7 +22,7 @@ def get(user, project, branch, log=sys.stdout):
     subprocess.run(["git", "-C", project + "/" + branch, "checkout", branch], stdout=fd, stderr=subprocess.STDOUT)
     subprocess.run(["git", "-C", project + "/" + branch, "reset", "--hard", "origin/" + branch], stdout=fd, stderr=subprocess.STDOUT)
 
-def all_branches(project, log=fd):
+def all_branches(project, fd=sys.stdout):
     pproject = Path(project)
     if not (pproject / "master").is_dir():
         fd.write("Cannot find directory " + project + "/master\n")
@@ -33,7 +33,7 @@ def all_branches(project, log=fd):
     return [branch for branch in branches if not branch.startswith("HEAD") and branch != "master"]
 
 
-def check_branch(project, branch, log=sys.stderr):
+def check_branch(project, branch, fd=sys.stderr):
     dir = Path(project) / branch
     last_commit = Path(project) / (branch + ".last-commit")
     if last_commit.is_file():
@@ -49,7 +49,7 @@ def check_branch(project, branch, log=sys.stderr):
         return False
     return True
 
-def run(project, branch, log=sys.stderr):
+def run(project, branch, fd=sys.stderr):
     if subprocess.run(["nice", "make", "-C", project + "/" + branch, "nightly" ], stdout=fd, stderr=subprocess.STDOUT).returncode:
         fd.write("Running " + project + " on branch " + branch + " failed\n")
         fd.flush()
