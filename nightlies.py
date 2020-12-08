@@ -67,7 +67,7 @@ def build_slack_blocks(user, project, runs):
     for branch, info in runs.items():
         result = info["result"]
         time = info["time"]
-        text = "Branch `{branch}` was a {result} in {time}"
+        text = f"Branch `{branch}` was a {result} in {time}"
         if "emoji" in info:
             text += " " + info["emoji"]
 
@@ -97,8 +97,10 @@ def build_slack_blocks(user, project, runs):
             })
         block["fields"] = fields
         blocks.append(block)
-    print(repr(blocks))
-    return { "text": "Nightly data for {}/{}".format(user, project), "blocks": blocks }
+    if blocks:
+        return { "text": "Nightly data for {}/{}".format(user, project), "blocks": blocks }
+    else:
+        return None
 
 def post_to_slack(data, url, fd=sys.stderr):
     req = urllib.request.Request(url, data=json.dumps(data).encode("utf8"), method="POST")
@@ -163,7 +165,7 @@ class NightlyResults:
         with self.infofile.open() as f:
             for line in f:
                 key, value = line.split(" ", 1)
-                out[key] = value
+                out[key] = value[:-1]
         return out
 
     def reset(self):
