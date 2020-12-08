@@ -89,7 +89,7 @@ def build_slack_blocks(user, project, runs):
             if k in ["url", "emoji", "result", "time"]: continue
             fields.append({
                 "type": "mrkdwn",
-                "text": "*" + k + "*",
+                "text": "*" + k.title() + "*",
             })
             fields.append({
                 "type": "mrkdwn",
