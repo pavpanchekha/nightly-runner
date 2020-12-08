@@ -64,8 +64,11 @@ def run(project, branch, fd=sys.stderr):
 
     return success
 
-def build_slack_blocks(runs):
-    return { "text": "Hello, World!" }
+def build_slack_blocks(user, project, runs):
+    blocks = []
+    for branch, (success, log) in runs:
+        blocks.append({ "text": branch })
+    return { "text": "Nightlies for {}".format(project), "blocks": blocks }
 
 def post_to_slack(data, url, fd=sys.stderr):
     req = urllib.request.Request(url, data=json.dumps(data).encode("utf8"), method="POST")
@@ -145,7 +148,7 @@ for github, configuration in config.items():
 
         if "slack" in configuration:
             url = configuration["slack"]
-            data = build_slack_blocks(runs)
+            data = build_slack_blocks(user, project, runs)
             if data:
                 LOG.log("Posting results of run to slack!")
                 post_to_slack(data, url, fd=LOG)
