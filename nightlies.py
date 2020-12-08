@@ -93,7 +93,7 @@ else:
 
 LOG.log("Running nightlies for " + ", ".join(config.keys()))
 
-for github, configuration in config:
+for github, configuration in config.items():
     LOG.log("Beginning nightly run for " + github)
 
     user, project = github.split("/")
