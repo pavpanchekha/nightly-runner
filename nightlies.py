@@ -146,6 +146,8 @@ for github, configuration in config.items():
         if "slack" in configuration:
             url = configuration["slack"]
             data = build_slack_blocks(runs)
-            post_to_slack(data, url, fd=LOG)
+            if data:
+                LOG.log("Posting results of run to slack!")
+                post_to_slack(data, url, fd=LOG)
 
         LOG.log("Finished nightly run for " + github)
