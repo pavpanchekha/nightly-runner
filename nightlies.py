@@ -68,8 +68,8 @@ def build_slack_blocks(runs):
     return { "text": "Hello, World!" }
 
 def post_to_slack(data, url, fd=sys.stderr):
-    req = urllib.request.Request(url, data=json.dumps(data), method="POST")
-    req.add_header("Content-Type", "application/json")
+    req = urllib.request.Request(url, data=json.dumps(data).encode("utf8"), method="POST")
+    req.add_header("Content-Type", "application/json; charset=utf8")
     with urllib.request.urlopen(req, timeout=10) as response:
         if response.status != 200:
             fd.log("Slack returned response " + str(response.status) + ": " + response.reason)
