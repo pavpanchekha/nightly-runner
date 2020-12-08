@@ -65,8 +65,11 @@ def run(project, branch, fd=sys.stderr):
 def build_slack_blocks(user, project, runs):
     blocks = []
     for branch, info in runs.items():
-        blocks.append({ "text": branch })
-    return { "text": "Nightlies for {}".format(project), "blocks": blocks }
+        blocks.append({
+            "type": "section",
+            "text": { "type": "mrkdwn", "text": branch },
+        })
+    return { "text": "Nightly data for {}/{}".format(user, project), "blocks": blocks }
 
 def post_to_slack(data, url, fd=sys.stderr):
     req = urllib.request.Request(url, data=json.dumps(data).encode("utf8"), method="POST")
