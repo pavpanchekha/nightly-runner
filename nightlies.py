@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 import contextlib
 import configparser
+import urllib.request
+import json
 
 os.chdir("/data/pavpan/nightlies")
 os.putenv("PATH", "/home/p92/bin/:" + os.getenv("PATH"))
@@ -50,12 +52,27 @@ def check_branch(project, branch, fd=sys.stderr):
     return True
 
 def run(project, branch, fd=sys.stderr):
+    success = True
     if subprocess.run(["nice", "make", "-C", project + "/" + branch, "nightly" ], stdout=fd, stderr=subprocess.STDOUT).returncode:
         fd.write("Running " + project + " on branch " + branch + " failed\n")
         fd.flush()
+        success = False
+
     current = subprocess.run(["git", "-C", project + "/" + branch, "rev-parse", "origin/" + branch], stdout=subprocess.PIPE, stderr=fd).stdout
     with (Path(project) / (branch + ".last-commit")).open("wb") as fd:
         fd.write(current)
+
+    return success
+
+def build_slack_blocks(runs):
+    return { "text": "Hello, World!" }
+
+def post_to_slack(data, url, fd=sys.stderr):
+    req = urllib.request.Request(url, data=json.dumps(data), method="POST")
+    req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req, timeout=10) as response:
+        if response.status != 200:
+            fd.log("Slack returned response " + str(response.status) + ": " + response.reason)
 
 START = time.time()
 
@@ -105,6 +122,7 @@ for github, configuration in config.items():
 
     # Redirect output to log file
     outlog = Log(project=project)
+    runs = {}
     with outlog.open() as fd:
         LOG.log("Redirecting output to {}".format(outlog))
     
@@ -122,6 +140,12 @@ for github, configuration in config.items():
             LOG.log("Running tests on " + github + " branch " + branch)
             branchlog = Log(project=project, branch=branch)
             with branchlog.open() as fd:
-                run(project, branch, fd=fd)
+                success = run(project, branch, fd=fd)
+                runs[branch] = (success, branchlog)
+
+        if "slack" in configuration:
+            url = configuration["slack"]
+            data = build_slack_blocks(runs)
+            post_to_slack(data, url, fd=LOG)
 
         LOG.log("Finished nightly run for " + github)
