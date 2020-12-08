@@ -12,7 +12,7 @@ import configparser
 os.chdir("/data/pavpan/nightlies")
 os.putenv("PATH", "/home/p92/bin/:" + os.getenv("PATH"))
 
-def get(user, project, branch, log=sys.stdout):
+def get(user, project, branch, fd=sys.stdout):
     pproject = Path(project)
     pproject.mkdir(parents=True, exist_ok=True)
     if not (pproject / branch).is_dir():
@@ -109,19 +109,19 @@ for github, configuration in config.items():
         LOG.log("Redirecting output to {}".format(outlog))
     
         LOG.log("Downloading all " + github + " branches")
-        get(user, project, "master", log=fd)
-        branches = ["master"] + all_branches(project, log=fd)
+        get(user, project, "master", fd=fd)
+        branches = ["master"] + all_branches(project, fd=fd)
         for branch in branches:
-            get(user, project, branch, log=fd)
+            get(user, project, branch, fd=fd)
 
         LOG.log("Filtering " + github + " branches " + " ".join(branches))
-        branches = [branch for branch in branches if check_branch(project, branch, log=fd)]
+        branches = [branch for branch in branches if check_branch(project, branch, fd=fd)]
 
         LOG.log("Running " + github + " branches " + " ".join(branches))
         for branch in branches:
             LOG.log("Running tests on " + github + " branch " + branch)
             branchlog = Log(project=project, branch=branch)
             with branchlog.open() as fd:
-                run(project, branch, log=fd)
+                run(project, branch, fd=fd)
 
         LOG.log("Finished nightly run for " + github)
