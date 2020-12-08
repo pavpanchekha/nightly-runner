@@ -65,8 +65,9 @@ def run(project, branch, fd=sys.stderr):
 def build_slack_blocks(user, project, runs):
     blocks = []
     for branch, info in runs.items():
-        info = info.copy()
-        text = f"Branch `{branch}` was a {info['result']} in {info['time']}"
+        result = info["result"]
+        time = info["time"]
+        text = "Branch `" + branch + "` was a " + result + " in " + time
         if "emoji" in info:
             text += " " + info["emoji"]
 
@@ -83,7 +84,6 @@ def build_slack_blocks(user, project, runs):
                 },
                 "url": info["url"]
             }
-            del info["url"]
         fields = []
         for k, v in info.items():
             if k in ["url", "emoji", "result", "time"]: continue
