@@ -64,7 +64,7 @@ def run(project, branch, fd=sys.stderr):
 
 def build_slack_blocks(user, project, runs):
     blocks = []
-    for branch, info in runs:
+    for branch, info in runs.values():
         blocks.append({ "text": branch })
     return { "text": "Nightlies for {}".format(project), "blocks": blocks }
 
