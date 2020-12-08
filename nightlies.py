@@ -67,7 +67,7 @@ def build_slack_blocks(user, project, runs):
     for branch, info in runs.items():
         result = info["result"]
         time = info["time"]
-        text = "Branch `" + branch + "` was a " + result + " in " + time
+        text = "Branch `{branch}` was a {result} in {time}"
         if "emoji" in info:
             text += " " + info["emoji"]
 
@@ -104,9 +104,9 @@ def post_to_slack(data, url, fd=sys.stderr):
     req.add_header("Content-Type", "application/json; charset=utf8")
     try:
         with urllib.request.urlopen(req, timeout=10) as response:
-            fd.log("Slack returned response " + str(response.status) + ": " + response.reason)
+            fd.log(f"Slack returned response {response.status} {response.reason}")
     except urllib.error.HTTPError as exc:
-        fd.log("Slack error: {exc.code} {exc.reason}, because {exc.read()}")
+        fd.log(f"Slack error: {exc.code} {exc.reason}, because {exc.read()}")
 
 START = time.time()
 
