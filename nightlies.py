@@ -97,6 +97,7 @@ def build_slack_blocks(user, project, runs):
             })
         block["fields"] = fields
         blocks.append(block)
+    print(repr(blocks))
     return { "text": "Nightly data for {}/{}".format(user, project), "blocks": blocks }
 
 def post_to_slack(data, url, fd=sys.stderr):
