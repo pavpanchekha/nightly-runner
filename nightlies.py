@@ -118,9 +118,10 @@ class NightlyResults:
             f.write(f"#!/bin/bash\necho \"$@\" >> '{self.infofile}'\n")
         self.cmdfile.chmod(0o700)
 
-    def __exit__(self):
+    def __exit__(self, exc_type, exc_value, traceback):
         os.chdir(self.cwdir)
         os.putenv("PATH", self.oldpath)
+        self.dir.cleanup()
 
     def info(self):
         out = {}
