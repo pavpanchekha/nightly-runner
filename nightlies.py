@@ -82,6 +82,9 @@ class Log:
         finally:
             fd.close()
 
+    def __repr__(self):
+        return str(self.path)
+
 LOG = Log()
 LOG.log("Nightly script starting up at " + time.ctime(time.time()))
 
