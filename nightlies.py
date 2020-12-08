@@ -107,7 +107,7 @@ def post_to_slack(data, url, fd=sys.stderr):
     req.add_header("Content-Type", "application/json; charset=utf8")
     try:
         with urllib.request.urlopen(req, timeout=10) as response:
-            fd.log(f"Slack returned response {response.status} {response.reason}")
+            fd.log(f"Slack returned response {response.status} {response.reason}, because {response.read()}")
     except urllib.error.HTTPError as exc:
         fd.log(f"Slack error: {exc.code} {exc.reason}, because {exc.read()}")
 
