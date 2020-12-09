@@ -156,7 +156,14 @@ class NightlyResults:
         os.putenv("PATH", self.dir.name + ":/home/p92/bin/:" + self.oldpath)
         self.infofile.touch()
         with self.cmdfile.open("w") as f:
-            f.write(f"#!/bin/bash\necho \"$@\" >> '{self.infofile}'\n")
+            f.write(f"""#!/bin/bash
+if [[ "$1" == "url" && ! "$2" == "*://*" ]]; then
+    printf "Invalid URL: '%s'\n" "$2"
+    exit 1
+else
+    echo "$1" "$@" >> "{self.infofile}"
+fi
+""")
         self.cmdfile.chmod(0o700)
         return self
 
