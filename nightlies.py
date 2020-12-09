@@ -12,6 +12,8 @@ import urllib.request, urllib.error
 import json
 import tempfile
 
+BASEURL = "http://warfa.cs.washington.edu/nightlies/"
+
 def get(user, project, branch, fd=sys.stdout):
     pproject = Path(project)
     pproject.mkdir(parents=True, exist_ok=True)
@@ -75,14 +77,15 @@ def build_slack_blocks(user, project, runs):
             "type": "section",
             "text": { "type": "mrkdwn", "text": text },
         }
-        if "url" in info:
+        if "url" in info or "failure" in result:
+            default_url = f"{BASEURL}{datetime.now():%Y-%m-%d}-{project}-{branch}.log"
             block["accessory"] = {
                 "type": "button",
                 "text": {
                     "type": "plain_text",
                     "text": "View Report",
                 },
-                "url": info["url"]
+                "url": info.get("url", default_url)
             }
         fields = []
         for k, v in info.items():
@@ -110,6 +113,7 @@ def post_to_slack(data, url, fd=sys.stderr):
             fd.log(f"Slack returned response {response.status} {response.reason}, because {response.read()}")
     except urllib.error.HTTPError as exc:
         fd.log(f"Slack error: {exc.code} {exc.reason}, because {exc.read()}")
+        fd.log(f(json.jumps(data)))
 
 START = time.time()
 
