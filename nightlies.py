@@ -106,14 +106,15 @@ def build_slack_blocks(user, project, runs):
         return None
 
 def post_to_slack(data, url, fd=sys.stderr):
-    req = urllib.request.Request(url, data=json.dumps(data).encode("utf8"), method="POST")
+    payload = json.dumps(data)
+    req = urllib.request.Request(url, data=payload.encode("utf8"), method="POST")
     req.add_header("Content-Type", "application/json; charset=utf8")
     try:
         with urllib.request.urlopen(req, timeout=10) as response:
             fd.log(f"Slack returned response {response.status} {response.reason}, because {response.read()}")
     except urllib.error.HTTPError as exc:
         fd.log(f"Slack error: {exc.code} {exc.reason}, because {exc.read()}")
-        fd.log(json.jumps(data))
+        fd.log(payload)
 
 START = time.time()
 
