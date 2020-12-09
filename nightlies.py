@@ -113,7 +113,7 @@ def post_to_slack(data, url, fd=sys.stderr):
             fd.log(f"Slack returned response {response.status} {response.reason}, because {response.read()}")
     except urllib.error.HTTPError as exc:
         fd.log(f"Slack error: {exc.code} {exc.reason}, because {exc.read()}")
-        fd.log(f(json.jumps(data)))
+        fd.log(json.jumps(data))
 
 START = time.time()
 
