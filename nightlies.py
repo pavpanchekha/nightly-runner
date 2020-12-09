@@ -64,11 +64,20 @@ def run(project, branch, fd=sys.stderr):
 
     return success
 
+def format_time(ts):
+    t = float(t)
+    if t < 120:
+        return f"{t:.1f}s"
+    elif t < 120*60:
+        return f"{t/60:.1f}m"
+    else:
+        return f"{t/60/60:.1f}h"
+
 def build_slack_blocks(user, project, runs):
     blocks = []
     for branch, info in runs.items():
         result = info["result"]
-        time = info["time"]
+        time = format_time(info["time"])
         text = f"Branch `{branch}` was a {result} in {time}"
         if "emoji" in info:
             text += " " + info["emoji"]
@@ -77,18 +86,25 @@ def build_slack_blocks(user, project, runs):
             "type": "section",
             "text": { "type": "mrkdwn", "text": text },
         }
-        if "url" in info or "failure" in result:
-            if "failure" in result:
-                url = f"{BASEURL}{datetime.now():%Y-%m-%d}-{project}-{branch}.log"
-            else:
-                url = info["url"]
+        if "failure" in result:
+            url = f"{BASEURL}{datetime.now():%Y-%m-%d}-{project}-{branch}.log"
             block["accessory"] = {
                 "type": "button",
                 "text": {
                     "type": "plain_text",
                     "text": "View Report",
                 },
-                "url": url
+                "url": url,
+                "style": "primary",
+            }
+        elif "url" in info:
+            block["accessory"] = {
+                "type": "button",
+                "text": {
+                    "type": "plain_text",
+                    "text": "View Report",
+                },
+                "url": info["url"]
             }
         fields = []
         for k, v in info.items():
@@ -230,7 +246,7 @@ with NightlyResults() as NR:
                     dt = time.time() - t
                     info = NR.info()
                     info["result"] = "success" if success else "*failure*"
-                    info["time"] = f"{dt:.1f}s"
+                    info["time"] = str(dt)
                     runs[branch] = info
                 NR.reset()
     
