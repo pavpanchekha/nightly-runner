@@ -78,14 +78,17 @@ def build_slack_blocks(user, project, runs):
             "text": { "type": "mrkdwn", "text": text },
         }
         if "url" in info or "failure" in result:
-            default_url = f"{BASEURL}{datetime.now():%Y-%m-%d}-{project}-{branch}.log"
+            if "failure" in result:
+                url = f"{BASEURL}{datetime.now():%Y-%m-%d}-{project}-{branch}.log"
+            else:
+                url = info["url"]
             block["accessory"] = {
                 "type": "button",
                 "text": {
                     "type": "plain_text",
                     "text": "View Report",
                 },
-                "url": info.get("url", default_url)
+                "url": url
             }
         fields = []
         for k, v in info.items():
@@ -157,11 +160,11 @@ class NightlyResults:
         self.infofile.touch()
         with self.cmdfile.open("w") as f:
             f.write(f"""#!/bin/bash
-if [[ "$1" == "url" && ! "$2" == "*://*" ]]; then
+if [[ "$1" == "url" && ! "$2" == *://* ]]; then
     printf "Invalid URL: '%s'\n" "$2"
     exit 1
 else
-    echo "$1" "$@" >> "{self.infofile}"
+    echo "$@" >> "{self.infofile}"
 fi
 """)
         self.cmdfile.chmod(0o700)
