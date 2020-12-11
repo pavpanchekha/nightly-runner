@@ -117,7 +117,8 @@ def build_slack_blocks(user, project, runs):
                 "type": "mrkdwn",
             "text": v,
             })
-        block["fields"] = fields
+        if fields:
+            block["fields"] = fields
         blocks.append(block)
     if blocks:
         return { "text": "Nightly data for {}/{}".format(user, project), "blocks": blocks }
