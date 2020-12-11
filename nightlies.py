@@ -65,7 +65,7 @@ def run(project, branch, fd=sys.stderr):
     return success
 
 def format_time(ts):
-    t = float(t)
+    t = float(ts)
     if t < 120:
         return f"{t:.1f}s"
     elif t < 120*60:
