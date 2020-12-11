@@ -108,7 +108,7 @@ def build_slack_blocks(user, project, runs):
             }
         fields = []
         for k, v in info.items():
-            if k in ["url", "emoji", "result", "time"]: continue
+            if k in ["url", "emoji", "result", "time", "img"]: continue
             fields.append({
                 "type": "mrkdwn",
                 "text": "*" + k.title() + "*",
@@ -120,6 +120,13 @@ def build_slack_blocks(user, project, runs):
         if fields:
             block["fields"] = fields
         blocks.append(block)
+        if "img" in fields:
+            url, *alttext = fields.split(" ")
+            blocks.append({
+                "type": "image",
+                "image_url": url,
+                "alt_text": " ".join(alttext) or f"Image for {user}/{project} branch {branch}",
+            })
     if blocks:
         return { "text": "Nightly data for {}/{}".format(user, project), "blocks": blocks }
     else:
