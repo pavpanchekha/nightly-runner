@@ -243,6 +243,8 @@ with NightlyResults() as NR:
     
             LOG.log("Filtering " + github + " branches " + " ".join(branches))
             branches = [branch for branch in branches if check_branch(project, branch, fd=fd)]
+            if "baseline" in configuration:
+                branches.append(configuration["baseline"])
     
             LOG.log("Running " + github + " branches " + " ".join(branches))
             for branch in branches:
