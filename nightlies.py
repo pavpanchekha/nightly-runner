@@ -51,14 +51,21 @@ def check_branch(project, branch, fd=sys.stderr):
         return False
     return True
 
-def run(project, branch, fd=sys.stderr):
-    success = True
-    if subprocess.run(["nice", "make", "-C", project + "/" + branch, "nightly" ], stdout=fd, stderr=subprocess.STDOUT).returncode:
-        fd.write("Running " + project + " on branch " + branch + " failed\n")
+def run(project, branch, fd=sys.stderr, timeout=None):
+    success = False
+    try:
+        result = subprocess.run(["nice", "make", "-C", project + "/" + branch, "nightly" ], stdout=fd, stderr=subprocess.STDOUT, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        fd.write(f"Running {project} on branch {branch} timed out after {format_time(timeout)}\n")
         fd.flush()
-        success = False
+        success = "timeout"
+    else:
+        if result.returncode:
+            fd.write("Running " + project + " on branch " + branch + " failed\n")
+            fd.flush()
+            success = "failure"
 
-    current = subprocess.run(["git", "-C", project + "/" + branch, "rev-parse", "origin/" + branch], stdout=subprocess.PIPE, stderr=fd).stdout
+    current = subprocess.run(["git", "-C", f"{project}/{branch}", "rev-parse", f"origin/{branch}"], stdout=subprocess.PIPE, stderr=fd).stdout
     with (Path(project) / (branch + ".last-commit")).open("wb") as fd:
         fd.write(current)
 
@@ -86,7 +93,7 @@ def build_slack_blocks(user, project, runs):
             "type": "section",
             "text": { "type": "mrkdwn", "text": text },
         }
-        if "failure" in result:
+        if "success" != result:
             url = f"{BASEURL}{datetime.now():%Y-%m-%d}-{project}-{branch}.log"
             block["accessory"] = {
                 "type": "button",
@@ -211,6 +218,18 @@ fi
         with self.infofile.open("w") as f:
             pass
 
+def parse_timeout(to):
+    if not to: return to
+    units = {
+        "hr": 3600, "h": 3600,
+        "min": 60 "m": 60,
+        "sec": 1, "s", 1,
+    }
+    for unit, multiplier in units.items():
+        if to.endswith(unit):
+            return float(to[:-len(unit)]) * multiplier
+    return float(to)
+
 with NightlyResults() as NR:
     LOG = Log()
     LOG.log("Nightly script starting up at " + time.ctime(time.time()))
@@ -245,7 +264,7 @@ with NightlyResults() as NR:
             branches = [branch for branch in branches if check_branch(project, branch, fd=fd)]
             if "baseline" in configuration:
                 baseline = configuration["baseline"]
-                if baseline not in branches: branches.append(baseline)
+                if baseline not in branches: branches.append()
     
             LOG.log("Running " + github + " branches " + " ".join(branches))
             for branch in branches:
@@ -253,10 +272,11 @@ with NightlyResults() as NR:
                 branchlog = Log(project=project, branch=branch)
                 with branchlog.open() as fd:
                     t = time.time()
-                    success = run(project, branch, fd=fd)
+                    to = parse_timeout(configuration.get("timeout"))
+                    success = run(project, branch, fd=fd, timeout=to)
                     dt = time.time() - t
                     info = NR.info()
-                    info["result"] = "success" if success else "*failure*"
+                    info["result"] = f"*{success}*" if success else "success"
                     info["time"] = str(dt)
                     runs[branch] = info
                 NR.reset()
