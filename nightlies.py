@@ -80,6 +80,19 @@ def format_time(ts):
     else:
         return f"{t/60/60:.1f}h"
 
+def parse_time(to):
+    if not to: return to
+    units = {
+        "hr": 3600, "h": 3600,
+        "min": 60, "m": 60,
+        "sec": 1, "s": 1,
+    }
+    for unit, multiplier in units.items():
+        if to.endswith(unit):
+            return float(to[:-len(unit)]) * multiplier
+    return float(to)
+
+
 def build_slack_blocks(user, project, runs):
     blocks = []
     for branch, info in runs.items():
@@ -218,18 +231,6 @@ fi
         with self.infofile.open("w") as f:
             pass
 
-def parse_timeout(to):
-    if not to: return to
-    units = {
-        "hr": 3600, "h": 3600,
-        "min": 60 "m": 60,
-        "sec": 1, "s", 1,
-    }
-    for unit, multiplier in units.items():
-        if to.endswith(unit):
-            return float(to[:-len(unit)]) * multiplier
-    return float(to)
-
 with NightlyResults() as NR:
     LOG = Log()
     LOG.log("Nightly script starting up at " + time.ctime(time.time()))
@@ -272,7 +273,7 @@ with NightlyResults() as NR:
                 branchlog = Log(project=project, branch=branch)
                 with branchlog.open() as fd:
                     t = time.time()
-                    to = parse_timeout(configuration.get("timeout"))
+                    to = parse_time(configuration.get("timeout"))
                     success = run(project, branch, fd=fd, timeout=to)
                     dt = time.time() - t
                     info = NR.info()
