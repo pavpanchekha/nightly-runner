@@ -265,7 +265,7 @@ with NightlyResults() as NR:
             branches = [branch for branch in branches if check_branch(project, branch, fd=fd)]
             if "baseline" in configuration:
                 baseline = configuration["baseline"]
-                if baseline not in branches: branches.append(baseline)
+                if set(branches) - set([baseline]): branches.append(baseline)
     
             LOG.log("Running " + github + " branches " + " ".join(branches))
             for branch in branches:
