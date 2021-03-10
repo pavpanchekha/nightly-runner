@@ -256,8 +256,9 @@ with NightlyResults() as NR:
             LOG.log("Redirecting output to {}".format(outlog))
         
             LOG.log("Downloading all " + github + " branches")
-            get(user, project, "master", fd=fd)
-            branches = ["master"] + all_branches(project, fd=fd)
+            default = configuration.get("master", "master")
+            get(user, project, default, fd=fd)
+            branches = [default] + all_branches(project, fd=fd)
             for branch in branches:
                 get(user, project, branch, fd=fd)
     
