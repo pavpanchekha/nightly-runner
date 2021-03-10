@@ -31,7 +31,11 @@ def all_branches(project, fd=sys.stdout):
         fd.flush()
     
     branches = subprocess.run(["git", "-C", project + "/master", "branch", "-r"], stdout=subprocess.PIPE, stderr=fd).stdout.decode("utf8").strip().split("\n")
-    branches = [branch.split("/")[1] for branch in branches]
+    try:
+        branches = [branch.split("/")[1] for branch in branches]
+    except Exception as e:
+        print(f"Error in branch-splitting logic for project {project} and branches {branches}")
+        raise e
     return [branch for branch in branches if not branch.startswith("HEAD") and branch != "master"]
 
 
