@@ -18,7 +18,7 @@ def get(user, project, branch, fd=sys.stdout):
     pproject = Path(project)
     pproject.mkdir(parents=True, exist_ok=True)
     if not (pproject / branch).is_dir():
-        subprocess.run(["git", "clone", "https://github.com/" + user + "/" + project + ".git", project + "/" + branch], stdout=fd, stderr=subprocess.STDOUT, check=True)
+        subprocess.run(["git", "clone", "git@github.com:" + user + "/" + project + ".git", project + "/" + branch], stdout=fd, stderr=subprocess.STDOUT, check=True)
     subprocess.run(["git", "-C", project + "/" + branch, "fetch", "origin", "--prune"], stdout=fd, stderr=subprocess.STDOUT, check=True)
     subprocess.run(["git", "-C", project + "/" + branch, "fetch", "origin", branch], stdout=fd, stderr=subprocess.STDOUT, check=True)
     subprocess.run(["git", "-C", project + "/" + branch, "checkout", branch], stdout=fd, stderr=subprocess.STDOUT, check=True)
