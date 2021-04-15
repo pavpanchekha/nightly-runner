@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from typing import List, Dict, Optional
 import subprocess
 import os
 import sys
@@ -14,7 +15,7 @@ import tempfile
 
 BASEURL = "http://warfa.cs.washington.edu/nightlies/"
 
-def get(user, project, branch, fd=sys.stdout):
+def get(user : str, project : str, branch : str, fd=sys.stdout):
     pproject = Path(project)
     pproject.mkdir(parents=True, exist_ok=True)
     if not (pproject / branch).is_dir():
@@ -24,7 +25,7 @@ def get(user, project, branch, fd=sys.stdout):
     subprocess.run(["git", "-C", project + "/" + branch, "checkout", branch], stdout=fd, stderr=subprocess.STDOUT, check=True)
     subprocess.run(["git", "-C", project + "/" + branch, "reset", "--hard", "origin/" + branch], stdout=fd, stderr=subprocess.STDOUT, check=True)
 
-def all_branches(project, fd=sys.stdout):
+def all_branches(project : str, fd=sys.stdout):
     pproject = Path(project)
     if not (pproject / "master").is_dir():
         fd.write("Cannot find directory " + project + "/master\n")
@@ -39,7 +40,7 @@ def all_branches(project, fd=sys.stdout):
     return [branch for branch in branches if not branch.startswith("HEAD") and branch != "master"]
 
 
-def check_branch(project, branch, fd=sys.stderr):
+def check_branch(project : str, branch : str, fd=sys.stderr):
     dir = Path(project) / branch
     last_commit = Path(project) / (branch + ".last-commit")
     if last_commit.is_file():
@@ -55,11 +56,12 @@ def check_branch(project, branch, fd=sys.stderr):
         return False
     return True
 
-def run(project, branch, fd=sys.stderr, timeout=None):
-    success = False
+def run(project : str, branch : str, fd=sys.stderr, timeout : Optional[float]=None):
+    success = ""
     try:
         result = subprocess.run(["nice", "make", "-C", project + "/" + branch, "nightly"], check=True, stdout=fd, stderr=subprocess.STDOUT, timeout=timeout)
     except subprocess.TimeoutExpired:
+        assert timeout, "If timeout happened it must have been set"
         fd.write(f"Running {project} on branch {branch} timed out after {format_time(timeout)}\n")
         fd.flush()
         success = "timeout"
@@ -74,7 +76,7 @@ def run(project, branch, fd=sys.stderr, timeout=None):
 
     return success
 
-def format_time(ts):
+def format_time(ts : float):
     t = float(ts)
     if t < 120:
         return f"{t:.1f}s"
@@ -83,7 +85,7 @@ def format_time(ts):
     else:
         return f"{t/60/60:.1f}h"
 
-def parse_time(to):
+def parse_time(to : str):
     if not to: return to
     units = {
         "hr": 3600, "h": 3600,
@@ -155,7 +157,7 @@ def build_slack_blocks(user, project, runs):
     else:
         return None
 
-def post_to_slack(data, url, fd=sys.stderr):
+def post_to_slack(data, url : str, fd=sys.stderr):
     payload = json.dumps(data)
     req = urllib.request.Request(url, data=payload.encode("utf8"), method="POST")
     req.add_header("Content-Type", "application/json; charset=utf8")
@@ -163,7 +165,8 @@ def post_to_slack(data, url, fd=sys.stderr):
         with urllib.request.urlopen(req, timeout=10) as response:
             fd.log(f"Slack returned response {response.status} {response.reason}, because {response.read()}")
     except urllib.error.HTTPError as exc:
-        fd.log(f"Slack error: {exc.code} {exc.reason}, because {exc.read()}")
+        reason = exc.read().decode('utf-8')
+        fd.log(f"Slack error: {exc.code} {exc.reason}, because {reason}")
         fd.log(payload)
 
 START = time.time()
@@ -172,14 +175,14 @@ class Log:
     dir = Path("logs/").resolve()
     if not dir.is_dir(): dir.mkdir()
 
-    def __init__(self, project=None, branch=None):
+    def __init__(self, project : str = None, branch : str = None):
         name = "{date:%Y-%m-%d}{project}{branch}.log".format(
             date=datetime.now(),
             project=("-" + project) if project is not None else "",
             branch=("-" + branch) if branch is not None else "")
         self.path = self.dir / name
 
-    def log(self, s):
+    def log(self, s : str):
         with self.path.open("at") as f:
             f.write("{:.0f}\t{}\n".format(time.time() - START, s))
 
@@ -238,10 +241,11 @@ with NightlyResults() as NR:
     LOG = Log()
     LOG.log("Nightly script starting up at " + time.ctime(time.time()))
     
+    config = configparser.ConfigParser()
     if len(sys.argv) > 1:
-        config = { repo: {} for repo in sys.argv[1:] }
+        for repo in sys.argv[1:]:
+            config[repo] = {}
     else:
-        config = configparser.ConfigParser()
         config.read("nightlies.conf")
     
     LOG.log("Running nightlies for " + ", ".join(config.keys()))
@@ -293,7 +297,7 @@ with NightlyResults() as NR:
                     if data:
                         LOG.log("Posting results of run to slack!")
                         post_to_slack(data, url, fd=LOG)
-        except CalledProcessError as e :
+        except subprocess.CalledProcessError as e :
             LOG.log("Process " + str(e.cmd) + " returned error code " + str(e.returncode))
         finally:
             LOG.log("Finished nightly run for " + github)
