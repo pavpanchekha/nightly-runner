@@ -19,7 +19,7 @@ def get(user : str, project : str, branch : str, fd=sys.stdout):
     pproject = Path(project)
     pproject.mkdir(parents=True, exist_ok=True)
     if not (pproject / branch).is_dir():
-        subprocess.run(["git", "clone", "git@github.com:" + user + "/" + project + ".git", project + "/" + branch], stdout=fd, stderr=subprocess.STDOUT, check=True)
+        subprocess.run(["git", "clone", "--recursive", "git@github.com:" + user + "/" + project + ".git", project + "/" + branch], stdout=fd, stderr=subprocess.STDOUT, check=True)
     subprocess.run(["git", "-C", project + "/" + branch, "fetch", "origin", "--prune"], stdout=fd, stderr=subprocess.STDOUT, check=True)
     subprocess.run(["git", "-C", project + "/" + branch, "fetch", "origin", branch], stdout=fd, stderr=subprocess.STDOUT, check=True)
     subprocess.run(["git", "-C", project + "/" + branch, "checkout", branch], stdout=fd, stderr=subprocess.STDOUT, check=True)
@@ -145,8 +145,8 @@ def build_slack_blocks(user, project, runs):
         if fields:
             block["fields"] = fields
         blocks.append(block)
-        if "img" in fields:
-            url, *alttext = fields.split(" ")
+        if "img" in info:
+            url, *alttext = info["img"].split(" ")
             blocks.append({
                 "type": "image",
                 "image_url": url,
