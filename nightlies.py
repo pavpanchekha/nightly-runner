@@ -117,7 +117,7 @@ def build_slack_blocks(user, project, runs):
                 "type": "button",
                 "text": {
                     "type": "plain_text",
-                    "text": "View Report",
+                    "text": "Error Log",
                 },
                 "url": url,
                 "style": "primary",
