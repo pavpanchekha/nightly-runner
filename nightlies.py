@@ -12,6 +12,7 @@ import configparser
 import urllib.request, urllib.error
 import json
 import tempfile
+import shlex
 
 BASEURL = "http://warfa.cs.washington.edu/nightlies/"
 
@@ -214,7 +215,10 @@ if [[ "$1" == "url" && ! "$2" == *://* ]]; then
     printf "Invalid URL: '%s'\n" "$2"
     exit 1
 else
-    echo "$@" >> "{self.infofile}"
+    while [[ "$#" == "0" ]]; do
+        printf '"%s" ' $1" >> "{self.infofile}"
+    done
+    printf "\n" >> "{self.infofile}"
 fi
 """)
         self.cmdfile.chmod(0o700)
@@ -229,8 +233,8 @@ fi
         out = {}
         with self.infofile.open() as f:
             for line in f:
-                key, value = line.split(" ", 1)
-                out[key] = value[:-1]
+                key, *values = shlex.split(line)
+                out[key] = " ".join(values)
         return out
 
     def reset(self):
