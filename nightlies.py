@@ -212,13 +212,13 @@ class NightlyResults:
         with self.cmdfile.open("w") as f:
             f.write(f"""#!/bin/bash
 if [[ "$1" == "url" && ! "$2" == *://* ]]; then
-    printf "Invalid URL: '%s'\n" "$2"
+    printf "Invalid URL: '%s'\\n" "$2"
     exit 1
 else
     while [[ "$#" == "0" ]]; do
         printf '"%s" ' $1" >> "{self.infofile}"
     done
-    printf "\n" >> "{self.infofile}"
+    printf "\\n" >> "{self.infofile}"
 fi
 """)
         self.cmdfile.chmod(0o700)
