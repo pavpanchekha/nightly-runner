@@ -216,7 +216,7 @@ if [[ "$1" == "url" && ! "$2" == *://* ]]; then
     exit 1
 else
     while [[ "$#" == "0" ]]; do
-        printf '"%s" ' $1" >> "{self.infofile}"
+        printf '"%s" ' "$1" >> "{self.infofile}"
     done
     printf "\\n" >> "{self.infofile}"
 fi
