@@ -210,15 +210,16 @@ class NightlyResults:
         os.putenv("PATH", self.dir.name + ":/home/p92/bin/:" + self.oldpath)
         self.infofile.touch()
         with self.cmdfile.open("w") as f:
-            f.write(f"""#!/bin/bash
+            f.write(rf"""#!/bin/bash
 if [[ "$1" == "url" && ! "$2" == *://* ]]; then
-    printf "Invalid URL: '%s'\\n" "$2"
+    printf "Invalid URL: '%s'\n" "$2"
     exit 1
 else
-    while [[ "$#" == "0" ]]; do
+    while [[ "$#" != "0" ]]; do
         printf '"%s" ' "$1" >> "{self.infofile}"
+        shift
     done
-    printf "\\n" >> "{self.infofile}"
+    printf "\n" >> "{self.infofile}"
 fi
 """)
         self.cmdfile.chmod(0o700)
@@ -233,6 +234,7 @@ fi
         out = {}
         with self.infofile.open() as f:
             for line in f:
+                if not line.strip(): continue
                 key, *values = shlex.split(line)
                 out[key] = " ".join(values)
         return out
