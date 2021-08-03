@@ -10,7 +10,31 @@ import json
 import tempfile
 import shlex
 
-BASEURL = "http://warfa.cs.washington.edu/nightlies/"
+class Log:
+    dir = Path("logs/").resolve()
+    if not dir.is_dir(): dir.mkdir()
+
+    def __init__(self):
+        self.start = datetime.now()
+        name = f"{date:%Y-%m-%d}-{date:%H%M%S}.log"
+        self.path = self.dir / name
+
+    def log(self, level : int, s : str):
+        with self.path.open("at") as f:
+            f.write("{}\t{}{}\n".format(datetime.now() - self.start, "    " * level, s))
+
+    def run(self, level : int, cmd : list[str]):
+        self.log(level, f"Executing {shlex.join(cmd)}...")
+        return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
+            
+    def create_sublog(self, name : str, branch : str):
+        date = datetime.now()
+        name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{name}-{branch}.log"
+        return (self.dir / name).open("wt")
+
+    def __repr__(self):
+        return str(self.path)
+
 
 def get(name : str, url : str, branch : str, logger : Log):
     dir = Path(name)
@@ -91,8 +115,9 @@ def parse_time(to : str):
             return float(to[:-len(unit)]) * multiplier
     return float(to)
 
+def build_slack_blocks(name : str, runs : dict[str, dict[str, Any]], baseurl : str):
+    if not baseurl.endswith("/"): baseurl = baseurl + "/"
 
-def build_slack_blocks(name : str, runs : dict[str, dict[str, Any]]):
     blocks = []
     for branch, info in runs.items():
         result = info["result"]
@@ -106,7 +131,7 @@ def build_slack_blocks(name : str, runs : dict[str, dict[str, Any]]):
             "text": { "type": "mrkdwn", "text": text },
         }
         if "success" != result:
-            url = f"{BASEURL}{datetime.now():%Y-%m-%d}-{name}-{branch}.log"
+            url = f"{baseurl}{datetime.now():%Y-%m-%d}-{name}-{branch}.log"
             block["accessory"] = {
                 "type": "button",
                 "text": {
@@ -162,31 +187,6 @@ def post_to_slack(data : Any, url : str, logger : Log):
         reason = exc.read().decode('utf-8')
         logger.log(2, f"Slack error: {exc.code} {exc.reason}, because {reason}")
         logger.log(2, payload)
-
-class Log:
-    dir = Path("logs/").resolve()
-    if not dir.is_dir(): dir.mkdir()
-
-    def __init__(self):
-        self.start = datetime.now()
-        name = f"{date:%Y-%m-%d}-{date:%H%M%S}.log"
-        self.path = self.dir / name
-
-    def log(self, level : int, s : str):
-        with self.path.open("at") as f:
-            f.write("{}\t{}{}\n".format(datetime.now() - self.start, "    " * level, s))
-
-    def run(self, level : int, cmd : list[str]):
-        self.log(level, f"Executing {shlex.join(cmd)}...")
-        return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
-            
-    def create_sublog(self, name : str, branch : str):
-        date = datetime.now()
-        name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{name}-{branch}.log"
-        return (self.dir / name).open("wt")
-
-    def __repr__(self):
-        return str(self.path)
 
 class NightlyResults:
     def __enter__(self):
@@ -289,8 +289,9 @@ with NightlyResults() as NR:
                     runs[branch] = info
                 NR.reset()
         
-            if "slack" in configuration:
+            if "slack" in configuration and baseurl in config["DEFAULT"]:
                 url = configuration["slack"]
+                baseurl = config["DEFAULT"]["baseurl"]
                 data = build_slack_blocks(name, runs)
                 if data:
                     LOG.log(2, f"Posting results of {name} run to slack!")
