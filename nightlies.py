@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
 
-from typing import List, Dict, Optional
-import subprocess
-import os
-import sys
-import time
+from typing import Optional, Any
+import os, sys, subprocess
 from datetime import datetime
 from pathlib import Path
-import contextlib
-import configparser
 import urllib.request, urllib.error
+import configparser
 import json
 import tempfile
 import shlex
@@ -17,9 +13,9 @@ import shlex
 BASEURL = "http://warfa.cs.washington.edu/nightlies/"
 
 def get(name : str, url : str, branch : str, logger : Log):
-    pproject = Path(name)
-    pproject.mkdir(parents=True, exist_ok=True)
-    if not (pproject / branch).is_dir():
+    dir = Path(name)
+    dir.mkdir(parents=True, exist_ok=True)
+    if not (dir / branch).is_dir():
         logger.run(1, ["git", "clone", "--recursive", url, f"{name}/{branch}"])
     logger.run(1, ["git", "-C", f"{name}/{branch}", "fetch", "origin", "--prune"])
     logger.run(1, ["git", "-C", f"{name}/{branch}", "fetch", "origin", branch])
@@ -27,8 +23,8 @@ def get(name : str, url : str, branch : str, logger : Log):
     logger.run(1, ["git", "-C", f"{name}/{branch}", "reset", "--hard", "origin/" + branch])
 
 def all_branches(name : str, branch : str, logger : Log):
-    pproject = Path(name)
-    if not (pproject / branch).is_dir():
+    dir = Path(name)
+    if not (dir / branch).is_dir():
         logger.log(1, f"Cannot find directory {name}/{branch}")
         return []
     
@@ -96,7 +92,7 @@ def parse_time(to : str):
     return float(to)
 
 
-def build_slack_blocks(name, runs):
+def build_slack_blocks(name : str, runs : dict[str, dict[str, Any]]):
     blocks = []
     for branch, info in runs.items():
         result = info["result"]
@@ -105,12 +101,12 @@ def build_slack_blocks(name, runs):
         if "emoji" in info:
             text += " " + info["emoji"]
 
-        block = {
+        block : dict[str, Any] = {
             "type": "section",
             "text": { "type": "mrkdwn", "text": text },
         }
         if "success" != result:
-            url = f"{BASEURL}{datetime.now():%Y-%m-%d}-{project}-{branch}.log"
+            url = f"{BASEURL}{datetime.now():%Y-%m-%d}-{name}-{branch}.log"
             block["accessory"] = {
                 "type": "button",
                 "text": {
@@ -155,7 +151,7 @@ def build_slack_blocks(name, runs):
     else:
         return None
 
-def post_to_slack(data, url : str, logger : Log):
+def post_to_slack(data : Any, url : str, logger : Log):
     payload = json.dumps(data)
     req = urllib.request.Request(url, data=payload.encode("utf8"), method="POST")
     req.add_header("Content-Type", "application/json; charset=utf8")
@@ -167,28 +163,26 @@ def post_to_slack(data, url : str, logger : Log):
         logger.log(2, f"Slack error: {exc.code} {exc.reason}, because {reason}")
         logger.log(2, payload)
 
-START = time.time()
-
 class Log:
     dir = Path("logs/").resolve()
     if not dir.is_dir(): dir.mkdir()
 
     def __init__(self):
-        date = datetime.now()
+        self.start = datetime.now()
         name = f"{date:%Y-%m-%d}-{date:%H%M%S}.log"
         self.path = self.dir / name
 
     def log(self, level : int, s : str):
         with self.path.open("at") as f:
-            f.write("{:.0f}\t{}{}\n".format(time.time() - START, "    " * level, s))
+            f.write("{}\t{}{}\n".format(datetime.now() - self.start, "    " * level, s))
 
     def run(self, level : int, cmd : list[str]):
         self.log(level, f"Executing {shlex.join(cmd)}...")
         return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
             
-    def create_sublog(self, project, branch):
+    def create_sublog(self, name : str, branch : str):
         date = datetime.now()
-        name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{project}-{branch}.log"
+        name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{name}-{branch}.log"
         return (self.dir / name).open("wt")
 
     def __repr__(self):
@@ -241,16 +235,12 @@ fi
 
 with NightlyResults() as NR:
     LOG = Log()
-    LOG.log(0, "Nightly script starting up at " + time.ctime(time.time()))
+    LOG.log(0, f"Nightly script starting up on {datetime.now():%Y-%m-%d at %H:%M:%S}")
     
     config = configparser.ConfigParser()
-    if len(sys.argv) > 1:
-        for repo in sys.argv[1:]:
-            config[repo] = {}
-    else:
-        config.read("nightlies.conf")
-    
-    LOG.log(0, "Running nightlies for " + ", ".join(config.keys()))
+    config.read("nightlies.conf")
+    LOG.log(0, "Loaded configuration for " + ", ".join(config.keys()))
+
     for name, configuration in config.items():
         if name == "DEFAULT": continue
 
@@ -289,10 +279,10 @@ with NightlyResults() as NR:
             for branch in branches:
                 LOG.log(2, "Running tests on " + name + " branch " + branch)
                 with LOG.create_sublog(name, branch) as fd:
-                    t = time.time()
+                    t = datetime.now()
                     to = parse_time(configuration.get("timeout"))
                     success = run(name, branch, logger=LOG, fd=fd, timeout=to)
-                    dt = time.time() - t
+                    dt = datetime.now() - t
                     info = NR.info()
                     info["result"] = f"*{success}*" if success else "success"
                     info["time"] = str(dt)
