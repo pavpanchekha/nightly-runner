@@ -17,7 +17,7 @@ import shlex
 BASEURL = "http://warfa.cs.washington.edu/nightlies/"
 
 def get(name : str, url : str, branch : str, logger : Log):
-    pproject = Path(project)
+    pproject = Path(name)
     pproject.mkdir(parents=True, exist_ok=True)
     if not (pproject / branch).is_dir():
         logger.run(1, ["git", "clone", "--recursive", url, f"{name}/{branch}"])
@@ -26,51 +26,51 @@ def get(name : str, url : str, branch : str, logger : Log):
     logger.run(1, ["git", "-C", f"{name}/{branch}", "checkout", branch])
     logger.run(1, ["git", "-C", f"{name}/{branch}", "reset", "--hard", "origin/" + branch])
 
-def all_branches(project : str, branch : str, logger : Log):
-    pproject = Path(project)
+def all_branches(name : str, branch : str, logger : Log):
+    pproject = Path(name)
     if not (pproject / branch).is_dir():
-        logger.log(1, f"Cannot find directory {project}/{branch}")
+        logger.log(1, f"Cannot find directory {name}/{branch}")
         return []
     
-    out = logger.run(1, ["git", "-C", f"{project}/{master}", "branch", "-r"])
+    out = logger.run(1, ["git", "-C", f"{name}/{branch}", "branch", "-r"])
     branches = out.stdout.decode("utf8").strip().split("\n")
     branches = [branch.split("/")[1] for branch in branches]
     return [branch for branch in branches if not branch.startswith("HEAD") and branch != branch]
 
-def check_branch(project : str, branch : str, logger : Log):
-    dir = Path(project) / branch
-    last_commit = Path(project) / (branch + ".last-commit")
+def check_branch(name : str, branch : str, logger : Log):
+    dir = Path(name) / branch
+    last_commit = Path(name) / (branch + ".last-commit")
     if last_commit.is_file():
         last = last_commit.open("rb").read()
-        current = logger.run(1, ["git", "-C", project + "/" + branch, "rev-parse", "origin/" + branch]).stdout
+        current = logger.run(1, ["git", "-C", name + "/" + branch, "rev-parse", "origin/" + branch]).stdout
         if last == current:
             logger.log(1, "Branch " + branch + " has not changed since last run; skipping")
             return False
     try:
-        logger.run(1, ["make", "-C", project + "/" + branch, "-n", "nightly"])
+        logger.run(1, ["make", "-C", name + "/" + branch, "-n", "nightly"])
         return True
     except subprocess.CalledProcessError:
         logger.log(1, "Branch " + branch + " does not have nightly rule; skipping")
         return False
 
-def run(project : str, branch : str, logger : Log, fd=sys.stderr, timeout : Optional[float]=None):
+def run(name : str, branch : str, logger : Log, fd=sys.stderr, timeout : Optional[float]=None):
     success = ""
-    logger.write(2, f"Running branch {branch}\n")
+    logger.log(2, f"Running branch {branch}\n")
     try:
-        result = subprocess.run(["nice", "make", "-C", project + "/" + branch, "nightly"], check=True, stdout=fd, stderr=subprocess.STDOUT, timeout=timeout)
+        result = subprocess.run(["nice", "make", "-C", name + "/" + branch, "nightly"], check=True, stdout=fd, stderr=subprocess.STDOUT, timeout=timeout)
     except subprocess.TimeoutExpired:
         assert timeout, "If timeout happened it must have been set"
-        logger.write(2, f"Run on branch {branch} timed out after {format_time(timeout)}\n")
+        logger.log(2, f"Run on branch {branch} timed out after {format_time(timeout)}\n")
         success = "timeout"
     except subprocess.CalledProcessError:
-        logger.write(2, f"Run on branch {branch} failed\n")
+        logger.log(2, f"Run on branch {branch} failed\n")
         success = "failure"
     else:
-        logger.write(2, "Successfully ran " + project + " on branch " + branch + "\n")
+        logger.log(2, "Successfully ran " + name + " on branch " + branch + "\n")
 
-    out = logger.run(2, ["git", "-C", f"{project}/{branch}", "rev-parse", f"origin/{branch}"]).stdout
-    with (Path(project) / (branch + ".last-commit")).open("wb") as last_commit_fd:
-        last_commit_fd.write(current)
+    out = logger.run(2, ["git", "-C", f"{name}/{branch}", "rev-parse", f"origin/{branch}"])
+    with (Path(name) / (branch + ".last-commit")).open("wb") as last_commit_fd:
+        last_commit_fd.write(out.stdout)
 
     return success
 
@@ -186,7 +186,7 @@ class Log:
         self.log(level, f"Executing {shlex.join(cmd)}...")
         return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
             
-    def create_sublog(project, branch):
+    def create_sublog(self, project, branch):
         date = datetime.now()
         name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{project}-{branch}.log"
         return (self.dir / name).open("wt")
@@ -257,7 +257,7 @@ with NightlyResults() as NR:
         LOG.log(1, "Beginning nightly run for " + name)
         if "url" in configuration:
             url = configuration["url"]
-        elif "github" in configuration
+        elif "github" in configuration:
             url = "git@github.com:" + configuration["github"] + ".git"
         else:
             user, name = name.split("/")
@@ -270,13 +270,13 @@ with NightlyResults() as NR:
             LOG.log(1, "Downloading all " + name + " branches")
             default = configuration.get("master", "master")
             get(name, url, default, logger=LOG)
-            branches = all_branches(project, default, logger=LOG)
+            branches = all_branches(name, default, logger=LOG)
             for branch in branches:
                 get(name, url, branch, logger=LOG)
             branches.append(default)
         
             LOG.log(1, "Filtering branches " + ", ".join(branches))
-            branches = [branch for branch in branches if check_branch(project, branch, logger=LOG)]
+            branches = [branch for branch in branches if check_branch(name, branch, logger=LOG)]
             if "baseline" in configuration:
                 baseline = configuration["baseline"]
                 if set(branches) - set([baseline]):
@@ -288,11 +288,10 @@ with NightlyResults() as NR:
             LOG.log(1, "Running branches " + " ".join(branches))
             for branch in branches:
                 LOG.log(2, "Running tests on " + name + " branch " + branch)
-                branchlog = Log(project=project, branch=branch)
-                with LOG.create_sublog() as fd:
+                with LOG.create_sublog(name, branch) as fd:
                     t = time.time()
                     to = parse_time(configuration.get("timeout"))
-                    success = run(name, branch, fd=fd, timeout=to)
+                    success = run(name, branch, logger=LOG, fd=fd, timeout=to)
                     dt = time.time() - t
                     info = NR.info()
                     info["result"] = f"*{success}*" if success else "success"
