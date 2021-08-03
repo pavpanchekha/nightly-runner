@@ -16,7 +16,7 @@ class Log:
 
     def __init__(self):
         self.start = datetime.now()
-        name = f"{date:%Y-%m-%d}-{date:%H%M%S}.log"
+        name = f"{self.start:%Y-%m-%d}-{self.start:%H%M%S}.log"
         self.path = self.dir / name
 
     def log(self, level : int, s : str):
@@ -291,8 +291,8 @@ with NightlyResults() as NR:
         
             if "slack" in configuration and baseurl in config["DEFAULT"]:
                 url = configuration["slack"]
-                baseurl = config["DEFAULT"]["baseurl"]
-                data = build_slack_blocks(name, runs)
+                baseurl : str = config["DEFAULT"]["baseurl"]
+                data = build_slack_blocks(name, runs, baseurl)
                 if data:
                     LOG.log(2, f"Posting results of {name} run to slack!")
                     post_to_slack(data, url, logger=LOG)
