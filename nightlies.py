@@ -75,18 +75,18 @@ def check_branch(name : str, branch : str, logger : Log):
 
 def run(name : str, branch : str, logger : Log, fd=sys.stderr, timeout : Optional[float]=None):
     success = ""
-    logger.log(2, f"Running branch {branch}\n")
+    logger.log(2, f"Running branch {branch}")
     try:
         result = subprocess.run(["nice", "make", "-C", name + "/" + branch, "nightly"], check=True, stdout=fd, stderr=subprocess.STDOUT, timeout=timeout)
     except subprocess.TimeoutExpired:
         assert timeout, "If timeout happened it must have been set"
-        logger.log(2, f"Run on branch {branch} timed out after {format_time(timeout)}\n")
+        logger.log(2, f"Run on branch {branch} timed out after {format_time(timeout)}")
         success = "timeout"
     except subprocess.CalledProcessError:
-        logger.log(2, f"Run on branch {branch} failed\n")
+        logger.log(2, f"Run on branch {branch} failed")
         success = "failure"
     else:
-        logger.log(2, "Successfully ran " + name + " on branch " + branch + "\n")
+        logger.log(2, "Successfully ran " + name + " on branch " + branch)
 
     out = logger.run(2, ["git", "-C", f"{name}/{branch}", "rev-parse", f"origin/{branch}"])
     with (Path(name) / (branch + ".last-commit")).open("wb") as last_commit_fd:
@@ -239,7 +239,7 @@ with NightlyResults() as NR:
     
     config = configparser.ConfigParser()
     config.read("nightlies.conf")
-    LOG.log(0, "Loaded configuration for " + ", ".join(config.keys()))
+    LOG.log(0, "Loaded configuration for " + ", ".join(set(config.keys()) - set(["DEFAULT"])))
 
     for name, configuration in config.items():
         if name == "DEFAULT": continue
@@ -300,3 +300,5 @@ with NightlyResults() as NR:
             LOG.log(1, "Process " + str(e.cmd) + " returned error code " + str(e.returncode))
         finally:
             LOG.log(1, "Finished nightly run for " + name)
+
+    LOG.log(0, "Finished nightly run for today")
