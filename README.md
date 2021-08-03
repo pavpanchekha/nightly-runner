@@ -35,18 +35,22 @@ take up time running nightlies you don't care about.
 Clone the repository somewhere and create a file named
 `nightlies.conf`. It should be formatted like this:
 
-    [user1/repo1]
-    
-    [user2/repo2]
+    [pavpanchekha/nightly-test]
+    slack = https://hooks.slack.com/services/xxx/yyy/zzz
+    master = main
 
-    ...
+Each heading corresponds to one repository to test. Under each heading
+are key-value pairs in INI format. The supported configuration options
+are:
 
-Under each heading you can also write key-value pairs in INI format.
-The supported configuration options are:
-
++ `url`: the URL of the git repository. This overrides the section
+  name and the `github` key.
++ `github`: the Github repository name, in `user/repo` format. This
+  overrides the section name.
 + `master`: change default branch, for example to `main`
 + `slack`: a webhook URL for posting to Slack after nightly runs
 + `baseline`: a branch to always run if any others are being run
++ `run`: When to run a branch. One of `baseline`, `always`, or `commit`
 
 Once things are configured, run:
 
