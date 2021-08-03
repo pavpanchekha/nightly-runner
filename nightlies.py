@@ -24,7 +24,7 @@ class Log:
             f.write("{}\t{}{}\n".format(datetime.now() - self.start, "    " * level, s))
 
     def run(self, level : int, cmd : List[str]):
-        self.log(level, f"Executing {shlex.join(cmd)}...")
+        self.log(level, "Executing " + " ".join([shlex.quote(arg) for arg in cmd]))
         return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
             
     def create_sublog(self, name : str, branch : str):
