@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Optional, Any
+from typing import List, Dict, Optional, Any
 import os, sys, subprocess
 from datetime import datetime
 from pathlib import Path
@@ -23,7 +23,7 @@ class Log:
         with self.path.open("at") as f:
             f.write("{}\t{}{}\n".format(datetime.now() - self.start, "    " * level, s))
 
-    def run(self, level : int, cmd : list[str]):
+    def run(self, level : int, cmd : List[str]):
         self.log(level, f"Executing {shlex.join(cmd)}...")
         return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
             
@@ -115,7 +115,7 @@ def parse_time(to : str):
             return float(to[:-len(unit)]) * multiplier
     return float(to)
 
-def build_slack_blocks(name : str, runs : dict[str, dict[str, Any]], baseurl : str):
+def build_slack_blocks(name : str, runs : Dict[str, Dict[str, Any]], baseurl : str):
     if not baseurl.endswith("/"): baseurl = baseurl + "/"
 
     blocks = []
@@ -126,7 +126,7 @@ def build_slack_blocks(name : str, runs : dict[str, dict[str, Any]], baseurl : s
         if "emoji" in info:
             text += " " + info["emoji"]
 
-        block : dict[str, Any] = {
+        block : Dict[str, Any] = {
             "type": "section",
             "text": { "type": "mrkdwn", "text": text },
         }
