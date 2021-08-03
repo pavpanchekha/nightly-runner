@@ -289,7 +289,7 @@ with NightlyResults() as NR:
                     runs[branch] = info
                 NR.reset()
         
-            if "slack" in configuration and baseurl in config["DEFAULT"]:
+            if "slack" in configuration and "baseurl" in config["DEFAULT"]:
                 url = configuration["slack"]
                 baseurl : str = config["DEFAULT"]["baseurl"]
                 data = build_slack_blocks(name, runs, baseurl)
