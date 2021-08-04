@@ -2,7 +2,7 @@
 
 from typing import List, Dict, Optional, Any
 import os, sys, subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 import urllib.request, urllib.error
 import configparser
@@ -80,7 +80,7 @@ def run(name : str, branch : str, logger : Log, fd=sys.stderr, timeout : Optiona
         result = subprocess.run(["nice", "make", "-C", name + "/" + branch, "nightly"], check=True, stdout=fd, stderr=subprocess.STDOUT, timeout=timeout)
     except subprocess.TimeoutExpired:
         assert timeout, "If timeout happened it must have been set"
-        logger.log(2, f"Run on branch {branch} timed out after {format_time(timeout)}")
+        logger.log(2, f"Run on branch {branch} timed out after {timedelta(seconds=timeout)}")
         success = "timeout"
     except subprocess.CalledProcessError:
         logger.log(2, f"Run on branch {branch} failed")
@@ -121,7 +121,7 @@ def build_slack_blocks(name : str, runs : Dict[str, Dict[str, Any]], baseurl : s
     blocks = []
     for branch, info in runs.items():
         result = info["result"]
-        time = format_time(info["time"])
+        time = info["time"]
         text = f"Branch `{branch}` was a {result} in {time}"
         if "emoji" in info:
             text += " " + info["emoji"]
@@ -282,10 +282,9 @@ with NightlyResults() as NR:
                     t = datetime.now()
                     to = parse_time(configuration.get("timeout"))
                     success = run(name, branch, logger=LOG, fd=fd, timeout=to)
-                    dt = datetime.now() - t
                     info = NR.info()
                     info["result"] = f"*{success}*" if success else "success"
-                    info["time"] = str(dt)
+                    info["time"] = str(datetime.now() - t)
                     runs[branch] = info
                 NR.reset()
         
