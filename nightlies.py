@@ -152,7 +152,7 @@ def build_slack_blocks(name : str, runs : Dict[str, Dict[str, Any]], baseurl : s
             }
         fields = []
         for k, v in info.items():
-            if k in ["url", "emoji", "result", "time", "img"]: continue
+            if k in ["url", "emoji", "result", "time", "img", "file"]: continue
             fields.append({
                 "type": "mrkdwn",
                 "text": "*" + k.title() + "*",
