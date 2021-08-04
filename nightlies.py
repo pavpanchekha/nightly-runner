@@ -131,14 +131,14 @@ def build_slack_blocks(name : str, runs : Dict[str, Dict[str, Any]], baseurl : s
             "text": { "type": "mrkdwn", "text": text },
         }
         if "success" != result:
-            url = f"{baseurl}{datetime.now():%Y-%m-%d}-{name}-{branch}.log"
+            file = os.path.basename(info["file"])
             block["accessory"] = {
                 "type": "button",
                 "text": {
                     "type": "plain_text",
                     "text": "Error Log",
                 },
-                "url": url,
+                "url": baseurl + file,
                 "style": "primary",
             }
         elif "url" in info:
@@ -285,6 +285,7 @@ with NightlyResults() as NR:
                     info = NR.info()
                     info["result"] = f"*{success}*" if success else "success"
                     info["time"] = str(datetime.now() - t)
+                    info["file"] = fd.name
                     runs[branch] = info
                 NR.reset()
         
