@@ -55,7 +55,7 @@ def all_branches(name : str, branch : str, logger : Log):
     out = logger.run(1, ["git", "-C", f"{name}/{branch}", "branch", "-r"])
     branches = out.stdout.decode("utf8").strip().split("\n")
     branches = [branch.split("/")[1] for branch in branches]
-    return [branch for branch in branches if not branch.startswith("HEAD") and branch != branch]
+    return [b for b in branches if not b.startswith("HEAD") and b != branch]
 
 def check_branch(name : str, branch : str, logger : Log):
     dir = Path(name) / branch
