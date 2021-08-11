@@ -244,7 +244,7 @@ with NightlyResults() as NR:
     for name, configuration in config.items():
         if name == "DEFAULT": continue
 
-        LOG.log(1, "Beginning nightly run for " + name)
+        LOG.log(0, "Beginning nightly run for " + name)
         if "url" in configuration:
             url = configuration["url"]
         elif "github" in configuration:
@@ -297,8 +297,8 @@ with NightlyResults() as NR:
                     LOG.log(2, f"Posting results of {name} run to slack!")
                     post_to_slack(data, url, logger=LOG)
         except subprocess.CalledProcessError as e :
-            LOG.log(1, "Process " + str(e.cmd) + " returned error code " + str(e.returncode))
+            LOG.log(0, "Process " + str(e.cmd) + " returned error code " + str(e.returncode))
         finally:
-            LOG.log(1, "Finished nightly run for " + name)
+            LOG.log(0, "Finished nightly run for " + name)
 
     LOG.log(0, "Finished nightly run for today")
