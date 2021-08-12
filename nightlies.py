@@ -40,11 +40,11 @@ def get(name : str, url : str, branch : str, logger : Log):
     dir = Path(name)
     dir.mkdir(parents=True, exist_ok=True)
     if not (dir / branch).is_dir():
-        logger.run(1, ["git", "clone", "--recursive", url, f"{name}/{branch}"])
-    logger.run(1, ["git", "-C", f"{name}/{branch}", "fetch", "origin", "--prune"])
-    logger.run(1, ["git", "-C", f"{name}/{branch}", "fetch", "origin", branch])
-    logger.run(1, ["git", "-C", f"{name}/{branch}", "checkout", branch])
-    logger.run(1, ["git", "-C", f"{name}/{branch}", "reset", "--hard", "origin/" + branch])
+        logger.run(2, ["git", "clone", "--recursive", url, f"{name}/{branch}"])
+    logger.run(2, ["git", "-C", f"{name}/{branch}", "fetch", "origin", "--prune"])
+    logger.run(2, ["git", "-C", f"{name}/{branch}", "fetch", "origin", branch])
+    logger.run(2, ["git", "-C", f"{name}/{branch}", "checkout", branch])
+    logger.run(2, ["git", "-C", f"{name}/{branch}", "reset", "--hard", "origin/" + branch])
 
 def all_branches(name : str, branch : str, logger : Log):
     dir = Path(name)
@@ -52,7 +52,7 @@ def all_branches(name : str, branch : str, logger : Log):
         logger.log(1, f"Cannot find directory {name}/{branch}")
         return []
     
-    out = logger.run(1, ["git", "-C", f"{name}/{branch}", "branch", "-r"])
+    out = logger.run(2, ["git", "-C", f"{name}/{branch}", "branch", "-r"])
     branches = out.stdout.decode("utf8").strip().split("\n")
     branches = [branch.split("/")[1] for branch in branches]
     return [b for b in branches if not b.startswith("HEAD") and b != branch]
@@ -62,15 +62,15 @@ def check_branch(name : str, branch : str, logger : Log):
     last_commit = Path(name) / (branch + ".last-commit")
     if last_commit.is_file():
         last = last_commit.open("rb").read()
-        current = logger.run(1, ["git", "-C", name + "/" + branch, "rev-parse", "origin/" + branch]).stdout
+        current = logger.run(2, ["git", "-C", name + "/" + branch, "rev-parse", "origin/" + branch]).stdout
         if last == current:
-            logger.log(1, "Branch " + branch + " has not changed since last run; skipping")
+            logger.log(2, "Branch " + branch + " has not changed since last run; skipping")
             return False
     try:
-        logger.run(1, ["make", "-C", name + "/" + branch, "-n", "nightly"])
+        logger.run(2, ["make", "-C", name + "/" + branch, "-n", "nightly"])
         return True
     except subprocess.CalledProcessError:
-        logger.log(1, "Branch " + branch + " does not have nightly rule; skipping")
+        logger.log(2, "Branch " + branch + " does not have nightly rule; skipping")
         return False
 
 def run(name : str, branch : str, logger : Log, fd=sys.stderr, timeout : Optional[float]=None):
@@ -80,15 +80,15 @@ def run(name : str, branch : str, logger : Log, fd=sys.stderr, timeout : Optiona
         result = subprocess.run(["nice", "make", "-C", name + "/" + branch, "nightly"], check=True, stdout=fd, stderr=subprocess.STDOUT, timeout=timeout)
     except subprocess.TimeoutExpired:
         assert timeout, "If timeout happened it must have been set"
-        logger.log(2, f"Run on branch {branch} timed out after {timedelta(seconds=timeout)}")
+        logger.log(1, f"Run on branch {branch} timed out after {timedelta(seconds=timeout)}")
         success = "timeout"
     except subprocess.CalledProcessError:
-        logger.log(2, f"Run on branch {branch} failed")
+        logger.log(1, f"Run on branch {branch} failed")
         success = "failure"
     else:
-        logger.log(2, "Successfully ran " + name + " on branch " + branch)
+        logger.log(1, "Successfully ran " + name + " on branch " + branch)
 
-    out = logger.run(2, ["git", "-C", f"{name}/{branch}", "rev-parse", f"origin/{branch}"])
+    out = logger.run(1, ["git", "-C", f"{name}/{branch}", "rev-parse", f"origin/{branch}"])
     with (Path(name) / (branch + ".last-commit")).open("wb") as last_commit_fd:
         last_commit_fd.write(out.stdout)
 
@@ -277,7 +277,7 @@ with NightlyResults() as NR:
         
             LOG.log(1, "Running branches " + " ".join(branches))
             for branch in branches:
-                LOG.log(2, "Running tests on " + name + " branch " + branch)
+                LOG.log(1, "Running tests on " + name + " branch " + branch)
                 with LOG.create_sublog(name, branch) as fd:
                     t = datetime.now()
                     to = parse_time(configuration.get("timeout"))
