@@ -122,7 +122,7 @@ def build_slack_blocks(name : str, runs : Dict[str, Dict[str, Any]], baseurl : s
     for branch, info in runs.items():
         result = info["result"]
         time = info["time"]
-        text = f"Branch `{branch}` was a {result} in {time}"
+        text = f"Branch `{branch}` of `{name}` was a {result} in {format_time(time.seconds)}"
         if "emoji" in info:
             text += " " + info["emoji"]
 
