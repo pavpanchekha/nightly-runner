@@ -80,7 +80,7 @@ def run(name : str, branch : str, logger : Log, fd=sys.stderr, timeout : Optiona
         result = subprocess.run(["nice", "make", "-C", name + "/" + branch, "nightly"], check=True, stdout=fd, stderr=subprocess.STDOUT, timeout=timeout)
     except subprocess.TimeoutExpired:
         assert timeout, "If timeout happened it must have been set"
-        logger.log(1, f"Run on branch {branch} timed out after {timedelta(seconds=timeout)}")
+        logger.log(1, f"Run on branch {branch} timed out after {format_time(timeout)}")
         success = "timeout"
     except subprocess.CalledProcessError:
         logger.log(1, f"Run on branch {branch} failed")
@@ -122,7 +122,7 @@ def build_slack_blocks(name : str, runs : Dict[str, Dict[str, Any]], baseurl : s
     for branch, info in runs.items():
         result = info["result"]
         time = info["time"]
-        text = f"Branch `{branch}` of `{name}` was a {result} in {format_time(time.seconds)}"
+        text = f"Branch `{branch}` of `{name}` was a {result} in {time}"
         if "emoji" in info:
             text += " " + info["emoji"]
 
@@ -284,7 +284,7 @@ with NightlyResults() as NR:
                     success = run(name, branch, logger=LOG, fd=fd, timeout=to)
                     info = NR.info()
                     info["result"] = f"*{success}*" if success else "success"
-                    info["time"] = str(datetime.now() - t)
+                    info["time"] = format_time((datetime.now() - t).seconds)
                     info["file"] = fd.name
                     runs[branch] = info
                 NR.reset()
