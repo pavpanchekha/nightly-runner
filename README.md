@@ -20,7 +20,7 @@ There's also Slack integration, so optionally your nightly run can post its resu
 
 ## Features
 
-+ *Logs*: The log directory `log/` has global, per-repository, and
++ *Logs*: The log directory `log/` has per-nightly and
   per-branch logs
 + *Dedup*: A branch's nightly won't be run if no commit has happened
   since the last run.
