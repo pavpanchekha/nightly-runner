@@ -7,7 +7,7 @@ This script runs integration tests nightly.
 
 Start with a Github project, say `$ORG/$PROJ`. The nightly runner will:
 
-+ Download each branch
++ Download each branch with new commits
 + Run `make nightly`
 
 So, to use this nightly runner, you will need to add a `make` rule
@@ -16,8 +16,7 @@ called `nightly` to your project. It should probably:
 + Run your project on all its tests
 + Upload the results somewhere
 
-You might also want to delete your obsolete branches, so they don't
-take up time running nightlies you don't care about.
+There's also Slack integration, so optionally your nightly run can post its results to your Slack channel.
 
 ## Features
 
