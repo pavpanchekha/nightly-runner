@@ -54,30 +54,32 @@ def all_branches(name : str, branch : str, logger : Log):
     
     out = logger.run(2, ["git", "-C", f"{name}/{branch}", "branch", "-r"])
     branches = out.stdout.decode("utf8").strip().split("\n")
-    branches = [branch.split("/")[1] for branch in branches]
+    branches = [branch.split("/", 1)[1] for branch in branches]
     return [b for b in branches if not b.startswith("HEAD") and b != branch]
 
 def check_branch(name : str, branch : str, logger : Log):
-    dir = Path(name) / branch
-    last_commit = Path(name) / (branch + ".last-commit")
+    branch_dir_name = branch.replace("/", ".")
+    dir = Path(name) / branch_dir_name
+    last_commit = Path(name) / (branch_dir_name + ".last-commit")
     if last_commit.is_file():
         last = last_commit.open("rb").read()
-        current = logger.run(2, ["git", "-C", name + "/" + branch, "rev-parse", "origin/" + branch]).stdout
+        current = logger.run(2, ["git", "-C", name + "/" + branch_dir_name, "rev-parse", "origin/" + branch]).stdout
         if last == current:
             logger.log(2, "Branch " + branch + " has not changed since last run; skipping")
             return False
     try:
-        logger.run(2, ["make", "-C", name + "/" + branch, "-n", "nightly"])
+        logger.run(2, ["make", "-C", name + "/" + branch_dir_name, "-n", "nightly"])
         return True
     except subprocess.CalledProcessError:
         logger.log(2, "Branch " + branch + " does not have nightly rule; skipping")
         return False
 
 def run(name : str, branch : str, logger : Log, fd=sys.stderr, timeout : Optional[float]=None):
+    branch_dir_name = name + "/" + branch.replace("/", ".")
     success = ""
     logger.log(2, f"Running branch {branch}")
     try:
-        result = subprocess.run(["nice", "make", "-C", name + "/" + branch, "nightly"], check=True, stdout=fd, stderr=subprocess.STDOUT, timeout=timeout)
+        result = subprocess.run(["nice", "make", "-C", branch_dir_name, "nightly"], check=True, stdout=fd, stderr=subprocess.STDOUT, timeout=timeout)
     except subprocess.TimeoutExpired:
         assert timeout, "If timeout happened it must have been set"
         logger.log(1, f"Run on branch {branch} timed out after {format_time(timeout)}")
@@ -88,8 +90,8 @@ def run(name : str, branch : str, logger : Log, fd=sys.stderr, timeout : Optiona
     else:
         logger.log(1, "Successfully ran " + name + " on branch " + branch)
 
-    out = logger.run(1, ["git", "-C", f"{name}/{branch}", "rev-parse", f"origin/{branch}"])
-    with (Path(name) / (branch + ".last-commit")).open("wb") as last_commit_fd:
+    out = logger.run(1, ["git", "-C", branch_dir_name, "rev-parse", f"origin/{branch}"])
+    with (branch_dir_name + ".last-commit")).open("wb") as last_commit_fd:
         last_commit_fd.write(out.stdout)
 
     return success
