@@ -35,16 +35,16 @@ class Log:
     def __repr__(self):
         return str(self.path)
 
-
 def get(name : str, url : str, branch : str, logger : Log):
+    branch_dir_name = name + "/" + branch.replace("/", ".")
     dir = Path(name)
     dir.mkdir(parents=True, exist_ok=True)
     if not (dir / branch).is_dir():
-        logger.run(2, ["git", "clone", "--recursive", url, f"{name}/{branch}"])
-    logger.run(2, ["git", "-C", f"{name}/{branch}", "fetch", "origin", "--prune"])
-    logger.run(2, ["git", "-C", f"{name}/{branch}", "fetch", "origin", branch])
-    logger.run(2, ["git", "-C", f"{name}/{branch}", "checkout", branch])
-    logger.run(2, ["git", "-C", f"{name}/{branch}", "reset", "--hard", "origin/" + branch])
+        logger.run(2, ["git", "clone", "--recursive", url, branch_dir_name])
+    logger.run(2, ["git", "-C", branch_dir_name, "fetch", "origin", "--prune"])
+    logger.run(2, ["git", "-C", branch_dir_name, "fetch", "origin", branch])
+    logger.run(2, ["git", "-C", branch_dir_name, "checkout", branch])
+    logger.run(2, ["git", "-C", branch_dir_name, "reset", "--hard", "origin/" + branch])
 
 def all_branches(name : str, branch : str, logger : Log):
     dir = Path(name)
