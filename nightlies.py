@@ -91,7 +91,7 @@ def run(name : str, branch : str, logger : Log, fd=sys.stderr, timeout : Optiona
         logger.log(1, "Successfully ran " + name + " on branch " + branch)
 
     out = logger.run(1, ["git", "-C", branch_dir_name, "rev-parse", f"origin/{branch}"])
-    with (branch_dir_name + ".last-commit").open("wb") as last_commit_fd:
+    with open(branch_dir_name + ".last-commit", "wb") as last_commit_fd:
         last_commit_fd.write(out.stdout)
 
     return success
