@@ -29,7 +29,8 @@ class Log:
             
     def create_sublog(self, name : str, branch : str):
         date = datetime.now()
-        name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{name}-{branch}.log"
+        branch_file = branch.replace("/", ".")
+        name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{name}-{branch_file}.log"
         return (self.dir / name).open("wt")
 
     def __repr__(self):
@@ -47,11 +48,12 @@ def get(name : str, url : str, branch : str, logger : Log):
 
 def all_branches(name : str, branch : str, logger : Log):
     dir = Path(name)
-    if not (dir / branch).is_dir():
+    branch_dir_name = dir / branch.replace("/", ".")
+    if not branch_dir_name.is_dir():
         logger.log(1, f"Cannot find directory {name}/{branch}")
         return []
     
-    out = logger.run(2, ["git", "-C", f"{name}/{branch}", "branch", "-r"])
+    out = logger.run(2, ["git", "-C", str(branch_dir_name), "branch", "-r"])
     branches = out.stdout.decode("utf8").strip().split("\n")
     branches = [branch.split("/", 1)[1] for branch in branches]
     return [b for b in branches if not b.startswith("HEAD") and b != branch]
