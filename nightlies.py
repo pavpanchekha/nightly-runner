@@ -36,10 +36,9 @@ class Log:
         return str(self.path)
 
 def get(name : str, url : str, branch : str, logger : Log):
+    Path(name).mkdir(parents=True, exist_ok=True)
     branch_dir_name = name + "/" + branch.replace("/", ".")
-    dir = Path(name)
-    dir.mkdir(parents=True, exist_ok=True)
-    if not (dir / branch).is_dir():
+    if not Path(branch_dir_name).is_dir():
         logger.run(2, ["git", "clone", "--recursive", url, branch_dir_name])
     logger.run(2, ["git", "-C", branch_dir_name, "fetch", "origin", "--prune"])
     logger.run(2, ["git", "-C", branch_dir_name, "fetch", "origin", branch])
