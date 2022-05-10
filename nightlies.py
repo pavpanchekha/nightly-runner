@@ -236,72 +236,76 @@ fi
         with self.infofile.open("w") as f:
             pass
 
-with NightlyResults() as NR:
-    LOG = Log()
-    LOG.log(0, f"Nightly script starting up on {datetime.now():%Y-%m-%d at %H:%M:%S}")
+if __name__ == "__main__":
+    with NightlyResults() as NR:
+        LOG = Log()
+        LOG.log(0, f"Nightly script starting up on {datetime.now():%Y-%m-%d at %H:%M:%S}")
+        
+        config = configparser.ConfigParser()
+        config.read("nightlies.conf")
+        LOG.log(0, "Loaded configuration for " + ", ".join(set(config.keys()) - set(["DEFAULT"])))
     
-    config = configparser.ConfigParser()
-    config.read("nightlies.conf")
-    LOG.log(0, "Loaded configuration for " + ", ".join(set(config.keys()) - set(["DEFAULT"])))
-
-    for name, configuration in config.items():
-        if name == "DEFAULT": continue
-
-        LOG.log(0, "Beginning nightly run for " + name)
-        if "url" in configuration:
-            url = configuration["url"]
-        elif "github" in configuration:
-            url = "git@github.com:" + configuration["github"] + ".git"
-        else:
-            user, name = name.split("/")
-            url = f"git@github.com:{user}/{name}.git"
-
-        Path(name).mkdir(parents=True, exist_ok=True)
+        for name, configuration in config.items():
+            if name == "DEFAULT": continue
     
-        runs = {}
-        try:
-            LOG.log(1, "Downloading all " + name + " branches")
-            default = configuration.get("master", "master")
-            get(name, url, default, logger=LOG)
-            branches = all_branches(name, default, logger=LOG)
-            for branch in branches:
-                get(name, url, branch, logger=LOG)
-            branches.append(default)
+            LOG.log(0, "Beginning nightly run for " + name)
+            if "url" in configuration:
+                url = configuration["url"]
+            elif "github" in configuration:
+                url = "git@github.com:" + configuration["github"] + ".git"
+            else:
+                user, name = name.split("/")
+                url = f"git@github.com:{user}/{name}.git"
+    
+            Path(name).mkdir(parents=True, exist_ok=True)
         
-            LOG.log(1, "Filtering branches " + ", ".join(branches))
-            branches = [branch for branch in branches if check_branch(name, branch, logger=LOG)]
-            if "baseline" in configuration:
-                baseline = configuration["baseline"]
-                if set(branches) - set([baseline]):
-                    branches.append(baseline)
-            elif configuration.get("run", "commit") == "always":
-                if default not in branches:
-                    branches.append(default)
-        
-            LOG.log(1, "Running branches " + " ".join(branches))
-            for branch in branches:
-                LOG.log(1, "Running tests on " + name + " branch " + branch)
-                with LOG.create_sublog(name, branch) as fd:
-                    t = datetime.now()
-                    to = parse_time(configuration.get("timeout"))
-                    success = run(name, branch, logger=LOG, fd=fd, timeout=to)
-                    info = NR.info()
-                    info["result"] = f"*{success}*" if success else "success"
-                    info["time"] = format_time((datetime.now() - t).seconds)
-                    info["file"] = fd.name
-                    runs[branch] = info
-                NR.reset()
-        
-            if "slack" in configuration and "baseurl" in config["DEFAULT"]:
-                url = configuration["slack"]
-                baseurl : str = config["DEFAULT"]["baseurl"]
-                data = build_slack_blocks(name, runs, baseurl)
-                if data:
-                    LOG.log(2, f"Posting results of {name} run to slack!")
-                    post_to_slack(data, url, logger=LOG)
-        except subprocess.CalledProcessError as e :
-            LOG.log(0, "Process " + str(e.cmd) + " returned error code " + str(e.returncode))
-        finally:
-            LOG.log(0, "Finished nightly run for " + name)
-
-    LOG.log(0, "Finished nightly run for today")
+            runs = {}
+            try:
+                LOG.log(1, "Downloading all " + name + " branches")
+                default = configuration.get("master", "master")
+                get(name, url, default, logger=LOG)
+                branches = all_branches(name, default, logger=LOG)
+                for branch in branches:
+                    get(name, url, branch, logger=LOG)
+                branches.append(default)
+            
+                LOG.log(1, "Filtering branches " + ", ".join(branches))
+                branches = [branch for branch in branches if check_branch(name, branch, logger=LOG)]
+                if "baseline" in configuration:
+                    baseline = configuration["baseline"]
+                    if branches and baseline not in branches:
+                        LOG.log(2, f"Adding baseline branch {baseline}")
+                        branches.append(baseline)
+                if "always" in configuration:
+                    branch = configuration["baseline"]
+                    if branch not in branches:
+                        LOG.log(2, f"Adding always run on {branch}")
+                        branches.append(default)
+            
+                LOG.log(1, "Running branches " + " ".join(branches))
+                for branch in branches:
+                    LOG.log(1, "Running tests on " + name + " branch " + branch)
+                    with LOG.create_sublog(name, branch) as fd:
+                        t = datetime.now()
+                        to = parse_time(configuration.get("timeout"))
+                        success = run(name, branch, logger=LOG, fd=fd, timeout=to)
+                        info = NR.info()
+                        info["result"] = f"*{success}*" if success else "success"
+                        info["time"] = format_time((datetime.now() - t).seconds)
+                        info["file"] = fd.name
+                        runs[branch] = info
+                    NR.reset()
+            
+                if "slack" in configuration and "baseurl" in config["DEFAULT"]:
+                    url = configuration["slack"]
+                    baseurl : str = config["DEFAULT"]["baseurl"]
+                    data = build_slack_blocks(name, runs, baseurl)
+                    if data:
+                        LOG.log(2, f"Posting results of {name} run to slack!")
+                        post_to_slack(data, url, logger=LOG)
+            except subprocess.CalledProcessError as e :
+                LOG.log(0, "Process " + str(e.cmd) + " returned error code " + str(e.returncode))
+            finally:
+                LOG.log(0, "Finished nightly run for " + name)
+    
+        LOG.log(0, "Finished nightly run for today")
