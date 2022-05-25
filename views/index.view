@@ -1,0 +1,39 @@
+<!doctype html>
+<title>Nightly runs</title>
+
+<style>
+th { text-align: left; }
+</style>
+
+<h1 id="repositories">Repositories</h1>
+
+%for name, branches in repos.items():
+<h2><kbd>{{name}}</kbd></h2>
+
+<table class="branches">
+  %for branch, data in sorted(branches.items(), key=lambda x: x[1]["when"], reverse=True):
+    <tr>
+      <th>{{branch}}</th>
+      <td><a href="{{data["log"]}}">{{data["when"].strftime("%Y-%m-%d at %H:%M")}}</a></td>
+    </tr>
+  %end 
+</table>
+%end
+
+<h1 id="logs">Logs</h1>
+
+<table id="logs">
+%for date, data in sorted(dates.items(), key=lambda x: x[1]["when"], reverse=True):
+  <thead><tr><th colspan=2><a href="{{data["log"]}}">
+    {{date.strftime("%Y-%m-%d")}}
+  </a></th></tr></thead>
+  <tbody>
+  %for run in sorted(data["runs"], key=lambda x: x["when"], reverse=True):
+    <tr>
+      <td><kbd>{{run["name"]}}</kbd></td>
+      <td><a href="{{data["log"]}}"><kbd>{{run["branch"]}}</kbd></a></td>
+    </tr>
+  %end
+  </tbody>
+%end
+</table>

@@ -33,6 +33,30 @@ class Log:
         name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{name}-{branch_file}.log"
         return (self.dir / name).open("wt")
 
+    @classmethod
+    def parse(cls, fn):
+        if fn.endswith(".gz"): fn = fn[:-len(".gz")]
+        assert fn.endswith(".log")
+        fn = fn[:-len(".log")]
+
+        if fn.count("-") >= 3:
+            y, m, d, hms = fn.split("-", 3)
+            if hms[:6].isdigit():
+                h, mm, s, rest = hms[:2], hms[2:4], hms[4:6], hms[7:]
+            else:
+                rest = hms
+                h, mm, s = 0, 0, 0
+        else:
+            y, m, d = fn.split("-")
+            h, mm, s = 0, 0, 0
+            rest = ""
+        when = datetime(int(y), int(m), int(d), int(h), int(mm), int(s))
+        if "-" in rest:
+            name, branch = rest.split("-", 1)
+            return when, name, branch
+        else:
+            return when,
+
     def __repr__(self):
         return str(self.path)
 
