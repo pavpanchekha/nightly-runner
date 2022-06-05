@@ -27,12 +27,6 @@ class Log:
         self.log(level, "Executing " + " ".join([shlex.quote(arg) for arg in cmd]))
         return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
             
-    def create_sublog(self, name : str, branch : str):
-        date = datetime.now()
-        branch_file = branch.replace("/", ".")
-        name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{name}-{branch_file}.log"
-        return (self.dir / name).open("wt")
-
     @classmethod
     def parse(cls, fn):
         if fn.endswith(".gz"): fn = fn[:-len(".gz")]
@@ -60,67 +54,6 @@ class Log:
     def __repr__(self):
         return str(self.path)
 
-def get(name : str, url : str, branch : str, logger : Log):
-    Path(name).mkdir(parents=True, exist_ok=True)
-    branch_dir_name = name + "/" + branch.replace("/", ".")
-    if not Path(branch_dir_name).is_dir():
-        logger.run(2, ["git", "clone", "--recursive", url, branch_dir_name])
-    logger.run(2, ["git", "-C", branch_dir_name, "fetch", "origin", "--prune"])
-    logger.run(2, ["git", "-C", branch_dir_name, "fetch", "origin", branch])
-    logger.run(2, ["git", "-C", branch_dir_name, "checkout", branch])
-    logger.run(2, ["git", "-C", branch_dir_name, "reset", "--hard", "origin/" + branch])
-
-def all_branches(name : str, branch : str, logger : Log):
-    dir = Path(name)
-    branch_dir_name = dir / branch.replace("/", ".")
-    if not branch_dir_name.is_dir():
-        logger.log(1, f"Cannot find directory {name}/{branch}")
-        return []
-    
-    out = logger.run(2, ["git", "-C", str(branch_dir_name), "branch", "-r"])
-    branches = out.stdout.decode("utf8").strip().split("\n")
-    branches = [branch.split("/", 1)[1] for branch in branches]
-    return [b for b in branches if not b.startswith("HEAD") and b != branch]
-
-def check_branch(name : str, branch : str, logger : Log):
-    branch_dir_name = branch.replace("/", ".")
-    dir = Path(name) / branch_dir_name
-    last_commit = Path(name) / (branch_dir_name + ".last-commit")
-    if last_commit.is_file():
-        last = last_commit.open("rb").read()
-        current = logger.run(2, ["git", "-C", name + "/" + branch_dir_name, "rev-parse", "origin/" + branch]).stdout
-        if last == current:
-            logger.log(2, "Branch " + branch + " has not changed since last run; skipping")
-            return False
-    try:
-        logger.run(2, ["make", "-C", name + "/" + branch_dir_name, "-n", "nightly"])
-        return True
-    except subprocess.CalledProcessError:
-        logger.log(2, "Branch " + branch + " does not have nightly rule; skipping")
-        return False
-
-def run(name : str, branch : str, logger : Log, fd=sys.stderr, timeout : Optional[float]=None):
-    branch_dir_name = name + "/" + branch.replace("/", ".")
-    success = ""
-    logger.log(2, f"Running branch {branch}")
-    try:
-        result = subprocess.run(["nice", "make", "-C", branch_dir_name, "nightly"], check=True, stdout=fd, stderr=subprocess.STDOUT, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        assert timeout, "If timeout happened it must have been set"
-        logger.log(1, f"Run on branch {branch} timed out after {format_time(timeout)}")
-        success = "timeout"
-    except subprocess.CalledProcessError:
-        logger.log(1, f"Run on branch {branch} failed")
-        success = "failure"
-    else:
-        logger.log(1, "Successfully ran " + name + " on branch " + branch)
-
-    out = logger.run(1, ["git", "-C", branch_dir_name, "rev-parse", f"origin/{branch}"])
-    with open(branch_dir_name + ".last-commit", "wb") as last_commit_fd:
-        last_commit_fd.write(out.stdout)
-
-    return success
-
 def format_time(ts : float):
     t = float(ts)
     if t < 120:
@@ -143,8 +76,6 @@ def parse_time(to : str):
     return float(to)
 
 def build_slack_blocks(name : str, runs : Dict[str, Dict[str, Any]], baseurl : str):
-    if not baseurl.endswith("/"): baseurl = baseurl + "/"
-
     blocks = []
     for branch, info in runs.items():
         result = info["result"]
@@ -202,6 +133,14 @@ def build_slack_blocks(name : str, runs : Dict[str, Dict[str, Any]], baseurl : s
         return { "text": f"Nightly data for {name}", "blocks": blocks }
     else:
         return None
+    
+def build_slack_fatal(name : str, text : str, baseurl : str):
+    return {
+        "text": f"Fatal error running nightlies for {name}", "blocks":{
+            "type": "section",
+            "text": { "type": "mrkdwn", "text": text },
+        }
+    }
 
 def post_to_slack(data : Any, url : str, logger : Log):
     payload = json.dumps(data)
@@ -260,76 +199,173 @@ fi
         with self.infofile.open("w") as f:
             pass
 
+class NightlyRunner:
+    def __init__(self, config_file, NR):
+        self.config_file = config_file
+        self.NR = NR
+
+    def load(self):
+        self.config = configparser.ConfigParser()
+        self.config.read(self.config_file)
+        self.repos = []
+
+        for name, configuration in config.items():
+            if name == "DEFAULT":
+                self.slack_url = configuration.get("slack")
+                self.base_url = configuration.get("baseurl")
+                if not self.baseurl.endswith("/"): self.base_url += "/"
+                self.log_dir = Path(configuration.get("logs")).resolve()
+            else:
+                self.repos.append(Repository(self, name, configuration))
+
+        self.log = Log()
+        self.log.log(0, f"Nightly script starting up at {datetime.now():%Y-%m-%d at %H:%M:%S}")
+        self.log.log(0, "Loaded configuration for " + ", ".join([repo.name for repo in self.repos]))
+
+    def run(self):
+        for repo in self.repos:
+            try:
+                repo.load()
+                repo.filter()
+                repo.run()
+            except subprocess.CalledProcessError as e :
+                repo.fatalerror = f"Process {e.cmd} returned error code {e.returncode}"
+                self.log.log(0, repo.fatalerror)
+            finally:
+                self.log.log(0, f"Finished nightly run for {repo.name}")
+            repo.post()
+        self.log.log(0, "Finished nightly run for today")
+
+class Repository:
+    def __init__(self, runner, name, configuration):
+        self.runner = runner
+        self.config = configuration
+
+        if "url" in self.config:
+            self.url = self.config["url"]
+        else:
+            self.url = "git@github.com:" + configuration.get("github", name) + ".git"
+
+        self.name = name.split("/")[-1]
+        self.dir = Path(self.name)
+        self.fatalerror = None
+
+    def load(self):
+        self.runner.log.log(0, "Beginning nightly run for " + self.name)
+        self.dir.mkdir(parents=True, exist_ok=True)
+
+        default_branch = Branch(self, self.config.get("master", "master"))
+        default_branch.load()
+
+        git_branch = self.runner.log.run(2, ["git", "-C", default_branch.dir, "branch", "-r"])
+        all_branches = [
+            branch.split("/", 1) for branch
+            in git_branch.stdout.decode("utf8").strip().split("/")
+        ]
+
+        self.branches = {default_branch.name: default_branch}
+        for branch_name in all_branches:
+            if branch_name.startswith("HEAD"): continue
+            if branch_name == default_branch.name: continue
+            branch = Branch(self, branch_name)
+            branch.load()
+            if branch.check():
+                self.branches[branch_name = branch]
+
+    def filter(self):
+        self.runner.log.log(1, "Filtering branches " + ", ".join(self.branches))
+        self.runnable = [branch for branch in self.branches if branch.check()]
+        if "baseline" in configuration:
+            baseline = repo.branches[self.config["baseline"]]
+            if branches and not baseline.changed:
+                self.runner.log.log(2, f"Adding baseline branch {baseline.name}")
+                self.runnable.append(baseline)
+        if "always" in configuration:
+            branch = repo.branches[self.config["always"]]
+            if branch not in branches:
+                self.runner.log.log(2, f"Adding always run on branch {branch.name}")
+                self.runnable.append(branch)
+
+    def run(self):
+        runner.log.log(1, "Running branches " + " ".join(self.runnable))
+        for branch in self.runnable:
+            branch.run()
+
+    def post(self):
+        if not runner.slack_url or not runner.base_url:
+            self.runner.log.log(2, f"Not posting to slack, slack or baseurl not configured")
+            return
+
+        if self.fatalerror:
+            data = build_slack_fatal(self.name, self.fatalerror, self.runner.base_url)
+        else:
+            runs = { branch.name : branch.info for branch in self.runnable }
+            data = build_slack_blocks(self.name, runs, self.runner.base_url)
+
+        if data:
+            self.runner.log.log(2, f"Posting results of {repo.name} run to slack!")
+            post_to_slack(data, self.runner.slack_url, logger=self.runner.log)
+
+class Branch:
+    def __init__(self, repo, name):
+        self.repo = repo
+        self.name = name
+        self.filename = self.name.replace(":", "::").replace("/", ":")
+        self.dir = self.repo.dir / self.filename
+        self.lastcommit = self.repo.dir / (self.filename + ".last-commit")
+
+    def load(self):
+        if not self.dir.is_dir():
+            self.repo.runner.log.run(2, ["git", "clone", "--recursive", self.repo.url, self.dir])
+        self.repo.runner.log.run(2, ["git", "-C", self.dir, "fetch", "origin", "--prune"])
+        self.repo.runner.log.run(2, ["git", "-C", self.dir, "fetch", "origin", self.name])
+        self.repo.runner.log.run(2, ["git", "-C", self.dir, "checkout", self.name])
+        self.repo.runner.log.run(2, ["git", "-C", self.dir, "reset", "--hard", "origin/" + self.name])
+
+    def check(self):
+        current_commit = self.repo.runner.log.run(2, ["git", "-C", self.dir, "rev-parse", "origin/" + self.name]).stdout
+        if self.lastcommit.is_file():
+            with self.lastcommit.open("rb") as f:
+                last_commit = f.read()
+            self.changed = (last_commit == current_commit)
+        else:
+            self.changed = True
+        if not self.changed:
+            self.runner.log.log(2, "Branch " + self.name + " has not changed since last run; skipping")
+        return self.changed
+
+    def run(self):
+        self.repo.runner.log.log(1, f"Running tests on branch {self.name}")
+        date = datetime.now()
+        log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{self.repo.name}-{self.filename}.log"
+
+        with (self.repo.runner.log_dir / name).open("wt") as fd:
+            t = datetime.now()
+            to = parse_time(self.repo.config.get("timeout"))
+
+            self.repo.runner.log(2, f"running branch {branch}")
+            try:
+                result = subprocess.run(
+                    ["nice", "make", "-c", self.dir, "nightly"],
+                    check=True, stdout=fd, stderr=subprocess.stdout, timeout=to)
+            except subprocess.TimeoutExpired:
+                self.repo.runner.log(1, f"run on branch {self.name} timed out after {format_time(timeout)}")
+                failure = "timeout"
+            except subprocess.CalledProcessError as e:
+                self.repo.runner.log(1, f"run on branch {self.name} failed with error code {e.returncode}")
+                failure = "failure"
+            else:
+                self.repo.runner.log(1, f"successfully ran on branch {self.name}")
+                failure = ""
+
+            self.info = self.repo.runner.NR.info()
+            self.info["result"] = f"*{failure}*" if success else "success"
+            self.info["time"] = format_time((datetime.now() - t).seconds)
+            self.info["file"] = fd.name
+            self.repo.runner.NR.reset()
+
 if __name__ == "__main__":
     with NightlyResults() as NR:
-        LOG = Log()
-        LOG.log(0, f"Nightly script starting up on {datetime.now():%Y-%m-%d at %H:%M:%S}")
-        
-        config = configparser.ConfigParser()
-        config.read("nightlies.conf")
-        LOG.log(0, "Loaded configuration for " + ", ".join(set(config.keys()) - set(["DEFAULT"])))
-    
-        for name, configuration in config.items():
-            if name == "DEFAULT": continue
-    
-            LOG.log(0, "Beginning nightly run for " + name)
-            if "url" in configuration:
-                url = configuration["url"]
-            elif "github" in configuration:
-                url = "git@github.com:" + configuration["github"] + ".git"
-            else:
-                user, name = name.split("/")
-                url = f"git@github.com:{user}/{name}.git"
-    
-            Path(name).mkdir(parents=True, exist_ok=True)
-        
-            runs = {}
-            try:
-                LOG.log(1, "Downloading all " + name + " branches")
-                default = configuration.get("master", "master")
-                get(name, url, default, logger=LOG)
-                branches = all_branches(name, default, logger=LOG)
-                for branch in branches:
-                    get(name, url, branch, logger=LOG)
-                branches.append(default)
-            
-                LOG.log(1, "Filtering branches " + ", ".join(branches))
-                branches = [branch for branch in branches if check_branch(name, branch, logger=LOG)]
-                if "baseline" in configuration:
-                    baseline = configuration["baseline"]
-                    if branches and baseline not in branches:
-                        LOG.log(2, f"Adding baseline branch {baseline}")
-                        branches.append(baseline)
-                if "always" in configuration:
-                    branch = configuration["baseline"]
-                    if branch not in branches:
-                        LOG.log(2, f"Adding always run on {branch}")
-                        branches.append(default)
-            
-                LOG.log(1, "Running branches " + " ".join(branches))
-                for branch in branches:
-                    LOG.log(1, "Running tests on " + name + " branch " + branch)
-                    with LOG.create_sublog(name, branch) as fd:
-                        t = datetime.now()
-                        to = parse_time(configuration.get("timeout"))
-                        success = run(name, branch, logger=LOG, fd=fd, timeout=to)
-                        info = NR.info()
-                        info["result"] = f"*{success}*" if success else "success"
-                        info["time"] = format_time((datetime.now() - t).seconds)
-                        info["file"] = fd.name
-                        runs[branch] = info
-                    NR.reset()
-            
-                if "slack" in configuration and "baseurl" in config["DEFAULT"]:
-                    url = configuration["slack"]
-                    baseurl : str = config["DEFAULT"]["baseurl"]
-                    data = build_slack_blocks(name, runs, baseurl)
-                    if data:
-                        LOG.log(2, f"Posting results of {name} run to slack!")
-                        post_to_slack(data, url, logger=LOG)
-            except subprocess.CalledProcessError as e :
-                LOG.log(0, "Process " + str(e.cmd) + " returned error code " + str(e.returncode))
-            finally:
-                LOG.log(0, "Finished nightly run for " + name)
-    
-        LOG.log(0, "Finished nightly run for today")
+        runner = NightlyRunner("nightlies.conf", NR)
+        runner.load()
+        runner.run()
