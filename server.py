@@ -8,6 +8,7 @@ import tempfile
 import subprocess
 import sys
 import os
+import json
 
 RUNNING_NIGHTLIES = []
 
