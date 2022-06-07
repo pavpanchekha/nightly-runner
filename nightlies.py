@@ -268,11 +268,14 @@ class Repository:
         self.runner.log.log(1, f"Fetching default branch {default_branch.name}")
         default_branch.load()
 
-        git_branch = self.runner.log.run(2, ["git", "-C", default_branch.dir, "branch", "-r"])
-        all_branches = [
-            branch.split("/", 1)[-1] for branch
-            in git_branch.stdout.decode("utf8").strip().split("\n")
-        ]
+        if "branches" in self.config:
+            all_branches = self.config["branches"].split()
+        else:
+            git_branch = self.runner.log.run(2, ["git", "-C", default_branch.dir, "branch", "-r"])
+            all_branches = [
+                branch.split("/", 1)[-1] for branch
+                in git_branch.stdout.decode("utf8").strip().split("\n")
+            ]
 
         self.branches = {default_branch.name: default_branch}
         for branch_name in all_branches:
