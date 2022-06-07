@@ -5,7 +5,17 @@
 th { text-align: left; }
 </style>
 
-<a href="http://warfa.cs.washington.edu/nightlies/?C=M;O=D">Logs</a>
+<h1>Actions</h1>
+
+<form action="http://warfa.cs.washington.edu/nightlies/?C=M;O=D" method="get">
+  <input type=hidden name=C value=M>
+  <input type=hidden name=O value=D>
+  <button>View logs</button>
+</form>
+
+<form action="/dryrun" method="get">
+  <button>Start a dry run</button>
+</form>
 
 <h1 id="repositories">Repositories</h1>
 
