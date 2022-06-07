@@ -67,7 +67,7 @@ def runnext():
             Branch(repo, branch).lastcommit.unlink(missing_ok=True)
 
 def run_nightlies(conf):
-    with tempfile.NamedTemporaryFile(prefix="nightlies-", delete=False) as f:
+    with tempfile.NamedTemporaryFile(prefix="nightlies-", mode="wt", delete=False) as f:
         conf.write(f)
     RUNNING_NIGHTLIES.append(
         subprocess.Popen(
