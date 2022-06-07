@@ -215,6 +215,7 @@ class NightlyRunner:
                 self.base_url = configuration.get("baseurl")
                 if not self.baseurl.endswith("/"): self.base_url += "/"
                 self.log_dir = Path(configuration.get("logs")).resolve()
+                self.dryrun = "dryrun" in configuration
             else:
                 self.repos.append(Repository(self, name, configuration))
 
@@ -270,7 +271,7 @@ class Repository:
             branch = Branch(self, branch_name)
             branch.load()
             if branch.check():
-                self.branches[branch_name = branch]
+                self.branches[branch_name] = branch
 
     def filter(self):
         self.runner.log.log(1, "Filtering branches " + ", ".join(self.branches))
@@ -343,11 +344,11 @@ class Branch:
             t = datetime.now()
             to = parse_time(self.repo.config.get("timeout"))
 
-            self.repo.runner.log(2, f"running branch {branch}")
             try:
-                result = subprocess.run(
-                    ["nice", "make", "-c", self.dir, "nightly"],
-                    check=True, stdout=fd, stderr=subprocess.stdout, timeout=to)
+                cmd = ["nice", "make", "-c", self.dir, "nightly"]
+                self.repo.runner.log(2, "Executing " + " ".join([shlex.quote(arg) for arg in cmd]))
+                if not self.repo.runner.dryrun:
+                    subprocess.run(cmd, check=True, stdout=fd, stderr=subprocess.stdout, timeout=to)
             except subprocess.TimeoutExpired:
                 self.repo.runner.log(1, f"run on branch {self.name} timed out after {format_time(timeout)}")
                 failure = "timeout"
@@ -357,6 +358,11 @@ class Branch:
             else:
                 self.repo.runner.log(1, f"successfully ran on branch {self.name}")
                 failure = ""
+
+            if not self.repo.runner.dryrun:
+                out = self.rupo.runner.log.run(1, ["git", "-C", self.dir, "rev-parse", f"origin/{self.name}"])
+                with self.lastcommit.open("wb") as last_commit_fd:
+                    last_commit_fd.write(out.stdout)
 
             self.info = self.repo.runner.NR.info()
             self.info["result"] = f"*{failure}*" if success else "success"
