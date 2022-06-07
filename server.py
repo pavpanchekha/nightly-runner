@@ -40,6 +40,7 @@ def dryrun():
     runner.load()
     runner.config["DEFAULT"]["dryrun"] = "true"
     run_nightlies(runner.config)
+    bottle.redirect("/")
     
 @bottle.post("/runnow")
 def runnow():
@@ -55,6 +56,7 @@ def runnow():
         else:
             runner.config.remove_section(repo_name)
     run_nightlies(runner.config)
+    bottle.redirect("/")
 
 @bottle.post("/runnext")
 def runnext():
@@ -65,6 +67,7 @@ def runnext():
     for repo in runner.repos:
         if repo.name == repo_name:
             Branch(repo, branch).lastcommit.unlink(missing_ok=True)
+    bottle.redirect("/")
 
 def run_nightlies(conf):
     with tempfile.NamedTemporaryFile(prefix="nightlies-", mode="wt", delete=False) as f:
