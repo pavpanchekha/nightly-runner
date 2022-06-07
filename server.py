@@ -76,7 +76,6 @@ def run_nightlies(conf):
     RUNNING_NIGHTLIES.append(
         subprocess.Popen(
             [sys.executable, nightlies.__file__, f.name],
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             cwd=os.path.dirname(nightlies.__file__)))
 
 if __name__ == "__main__":
