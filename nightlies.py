@@ -211,7 +211,6 @@ class NightlyRunner:
 
         for name, configuration in config.items():
             if name == "DEFAULT":
-                self.slack_url = configuration.get("slack")
                 self.base_url = configuration.get("baseurl")
                 if not self.baseurl.endswith("/"): self.base_url += "/"
                 self.log_dir = Path(configuration.get("logs")).resolve()
@@ -241,6 +240,8 @@ class Repository:
     def __init__(self, runner, name, configuration):
         self.runner = runner
         self.config = configuration
+
+        self.slack_url = configuration.get("slack")
 
         if "url" in self.config:
             self.url = self.config["url"]
@@ -293,7 +294,7 @@ class Repository:
             branch.run()
 
     def post(self):
-        if not runner.slack_url or not runner.base_url:
+        if not self.slack_url or not self.runner.base_url:
             self.runner.log.log(2, f"Not posting to slack, slack or baseurl not configured")
             return
 
@@ -305,7 +306,7 @@ class Repository:
 
         if data:
             self.runner.log.log(2, f"Posting results of {repo.name} run to slack!")
-            post_to_slack(data, self.runner.slack_url, logger=self.runner.log)
+            post_to_slack(data, self.slack_url, logger=self.runner.log)
 
 class Branch:
     def __init__(self, repo, name):
