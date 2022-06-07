@@ -371,7 +371,7 @@ class Branch:
             self.repo.runner.log.log(2, "Executing " + " ".join([shlex.quote(arg) for arg in cmd]))
             if not self.repo.runner.dryrun:
                 with (self.repo.runner.log_dir / log_name).open("wt") as fd:
-                    subprocess.run(cmd, check=True, stdout=fd, stderr=subprocess.stdout, timeout=to)
+                    subprocess.run(cmd, check=True, stdout=fd, stderr=subprocess.STDOUT, timeout=to)
         except subprocess.TimeoutExpired:
             self.repo.runner.log.log(1, f"Run on branch {self.name} timed out after {format_time(timeout)}")
             failure = "timeout"
