@@ -221,10 +221,10 @@ class NightlyRunner:
                 self.repos.append(Repository(self, name, configuration))
 
     def run(self):
-        start = datetime.now()
+        start = datetime.now().isoformat()
 
         self.log = Log()
-        self.log.log(0, f"Nightly script starting up at {datetime.now():%Y-%m-%d at %H:%M:%S}")
+        self.log.log(0, f"Nightly script starting up at {start}")
         self.log.log(0, "Loaded configuration for " + ", ".join([repo.name for repo in self.repos]))
 
         try:
@@ -238,7 +238,7 @@ class NightlyRunner:
                 self.log.log(0, f"Nightly already running")
         else:
             with self.pid_file.open("w") as f:
-                json.dump({ "pid": os.getpid() }, f)
+                json.dump({ "pid": os.getpid(), "start": start }, f)
 
         if self.dryrun:
             self.log.log(0, "Running in dry-run mode. No nightlies will be executed.")
@@ -254,6 +254,8 @@ class NightlyRunner:
             finally:
                 self.log.log(0, f"Finished nightly run for {repo.name}")
             repo.post()
+
+        self.pid_file.unlink()
         self.log.log(0, "Finished nightly run for today")
 
 class Repository:

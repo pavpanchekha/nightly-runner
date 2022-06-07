@@ -16,6 +16,15 @@ def index():
     runner = nightlies.NightlyRunner("nightlies.conf", None)
     runner.load()
 
+    if self.pid_file.exists():
+        try:
+            with self.pid_file.open("r") as f:
+                current_process = json.load(f)
+        except OSError:
+            current_process = None
+    else:
+        current_process = None
+
     for repo in runner.repos:
         repo.branches = {}
         for fn in repo.dir.iterdir():
@@ -23,7 +32,7 @@ def index():
             if fn in repo.ignored_files: continue
             repo.branches[fn.name] = nightlies.Branch(repo, fn.name)
 
-    return { "runner": runner }
+    return { "runner": runner, "current": current_process }
 
 @bottle.post("/dryrun")
 def dryrun():

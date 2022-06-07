@@ -1,12 +1,21 @@
 <!doctype html>
 <title>Nightly runs</title>
 
+% from datetime import datetime, timedelta
+
 <style>
 th { text-align: left; }
 form.inline { display: inline; }
 </style>
 
 <h1>Actions</h1>
+
+%if current
+<p>
+  Nightlty running with PID {{current["pid"]}}
+  for {{datetime.now() - datetime.fromisoformat(current["start"])}}.
+</p>
+%end
 
 <form action="http://warfa.cs.washington.edu/nightlies/?C=M;O=D" method="get" class="inline">
   <input type=hidden name=C value=M>
