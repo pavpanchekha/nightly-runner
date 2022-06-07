@@ -7,6 +7,7 @@ import configparser
 import tempfile
 import subprocess
 import sys
+import os
 
 RUNNING_NIGHTLIES = []
 
