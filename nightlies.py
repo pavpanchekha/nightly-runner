@@ -8,7 +8,7 @@ import urllib.request, urllib.error
 import configparser
 import json
 import tempfile
-import shlex
+import shlex, shutil
 
 class Log:
     dir = Path("logs/").resolve()
@@ -260,6 +260,7 @@ class Repository:
         self.dir.mkdir(parents=True, exist_ok=True)
 
         default_branch = Branch(self, self.config.get("master", "master"))
+        self.runner.log.log(1, f"Fetching default branch {default_branch.name}")
         default_branch.load()
 
         git_branch = self.runner.log.run(2, ["git", "-C", default_branch.dir, "branch", "-r"])
@@ -273,9 +274,22 @@ class Repository:
             if branch_name.startswith("HEAD"): continue
             if branch_name == default_branch.name: continue
             branch = Branch(self, branch_name)
+            self.runner.log.log(1, f"Fetching branch {branch.name}")
             branch.load()
-            if branch.check():
-                self.branches[branch_name] = branch
+            self.branches[branch_name] = branch
+
+        expected_files = { branch.dir for branch in self.branches.values() } | \
+            { branch.lastcommit for branch in self.branches.values() } | \
+            { self.dir / path for path in shlex.split(self.config.get("ignore", "")) }
+        self.runner.log.log(1, "Cleaning unnecessary files")
+        for fn in self.dir.iterdir():
+            if fn not in expected_files:
+                self.runner.log.log(2, f"Deleting unknown file {fn}")
+                if not self.runner.dryrun:
+                    if fn.is_dir():
+                        shutil.rmtree(str(fn))
+                    else:
+                        fn.unlink()
 
     def filter(self):
         self.runner.log.log(1, "Filtering branches " + ", ".join(self.branches))
@@ -292,9 +306,12 @@ class Repository:
                 self.runnable.append(branch)
 
     def run(self):
-        self.runner.log.log(1, "Running branches " + " ".join([b.name for b in self.runnable]))
-        for branch in self.runnable:
-            branch.run()
+        if self.runnable:
+            self.runner.log.log(1, "Running branches " + " ".join([b.name for b in self.runnable]))
+            for branch in self.runnable:
+                branch.run()
+        else:
+            self.runner.log.log(1, "No branches to run")
 
     def post(self):
         if not self.slack_url or not self.runner.base_url:
