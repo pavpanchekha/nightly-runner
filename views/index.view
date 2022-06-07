@@ -17,7 +17,7 @@ form.inline { display: inline; }
 </p>
 %end
 
-<form action="/logs" method="get" class="inline">
+<form action="/logs/" method="get" class="inline">
   <input type=hidden name=C value=M>
   <input type=hidden name=O value=D>
   <button>View logs</button>
