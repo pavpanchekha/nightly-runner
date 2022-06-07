@@ -219,6 +219,7 @@ class NightlyRunner:
             else:
                 self.repos.append(Repository(self, name, configuration))
 
+    def startlog(self):
         self.log = Log()
         self.log.log(0, f"Nightly script starting up at {datetime.now():%Y-%m-%d at %H:%M:%S}")
         self.log.log(0, "Loaded configuration for " + ", ".join([repo.name for repo in self.repos]))
@@ -253,6 +254,10 @@ class Repository:
 
         self.name = name.split("/")[-1]
         self.dir = Path(self.name)
+        self.ignored_files = {
+            self.dir / path
+            for path in shlex.split(self.config.get("ignore", ""))
+        }
         self.fatalerror = None
 
     def load(self):
@@ -280,7 +285,7 @@ class Repository:
 
         expected_files = { branch.dir for branch in self.branches.values() } | \
             { branch.lastcommit for branch in self.branches.values() } | \
-            { self.dir / path for path in shlex.split(self.config.get("ignore", "")) }
+            self.ignored_files
         self.runner.log.log(1, "Cleaning unnecessary files")
         for fn in self.dir.iterdir():
             if fn not in expected_files:
@@ -392,4 +397,5 @@ if __name__ == "__main__":
     with NightlyResults() as NR:
         runner = NightlyRunner("nightlies.conf", NR)
         runner.load()
+        runner.startlog()
         runner.run()

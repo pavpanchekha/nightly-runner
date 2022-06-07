@@ -7,33 +7,17 @@ import nightlies
 @bottle.route("/")
 @bottle.view("index.view")
 def index():
-    dir = Path("logs/")
-    if not dir.is_dir(): return {}
-    
-    dates = {}
-    repos = {}
+    runner = nightlies.NightlyRunner("nightlies.conf", None)
+    runner.load()
 
-    for fn in sorted(dir.iterdir()):
-        when, *what = nightlies.Log.parse(fn.name)
-        if when.date() not in dates:
-            data = {
-                "log": fn,
-                "when": when,
-                "runs": [],
-            }
-            dates[when.date()] = data
-        if what:
-            name, branch = what
-            data = {
-                "log": fn,
-                "when": when,
-                "name": name,
-                "branch": branch,
-            }
-            dates[when.date()]["runs"].append(data)
-            repos.setdefault(name, {})[branch] = data
+    for repo in runner.repos:
+        repo.branches = {}
+        for fn in repo.dir.iterdir():
+            if not fn.is_dir(): continue
+            if fn in repo.ignored_files: continue
+            repo.branches[fn.name] = nightlies.Branch(repo, fn.name)
 
-    return { "dates": dates, "repos": repos}
+    return { "runner": runner }
 
 @bottle.get("/logs/<filepath:re:.*\.log>")
 def log(filepath):
