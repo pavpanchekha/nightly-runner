@@ -24,6 +24,7 @@ class Log:
             f.write("{}\t{}{}\n".format(datetime.now() - self.start, "    " * level, s))
 
     def run(self, level : int, cmd : List[str]):
+        cmd = [str(arg) for arg in cmd]
         self.log(level, "Executing " + " ".join([shlex.quote(arg) for arg in cmd]))
         return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
             
@@ -209,11 +210,11 @@ class NightlyRunner:
         self.config.read(self.config_file)
         self.repos = []
 
-        for name, configuration in config.items():
+        for name, configuration in self.config.items():
             if name == "DEFAULT":
                 self.base_url = configuration.get("baseurl")
-                if not self.baseurl.endswith("/"): self.base_url += "/"
-                self.log_dir = Path(configuration.get("logs")).resolve()
+                if not self.base_url.endswith("/"): self.base_url += "/"
+                self.log_dir = Path(configuration.get("logs", "logs")).resolve()
                 self.dryrun = "dryrun" in configuration
             else:
                 self.repos.append(Repository(self, name, configuration))
@@ -261,8 +262,8 @@ class Repository:
 
         git_branch = self.runner.log.run(2, ["git", "-C", default_branch.dir, "branch", "-r"])
         all_branches = [
-            branch.split("/", 1) for branch
-            in git_branch.stdout.decode("utf8").strip().split("/")
+            branch.split("/", 1)[-1] for branch
+            in git_branch.stdout.decode("utf8").strip().split("\n")
         ]
 
         self.branches = {default_branch.name: default_branch}
@@ -276,20 +277,20 @@ class Repository:
 
     def filter(self):
         self.runner.log.log(1, "Filtering branches " + ", ".join(self.branches))
-        self.runnable = [branch for branch in self.branches if branch.check()]
-        if "baseline" in configuration:
-            baseline = repo.branches[self.config["baseline"]]
-            if branches and not baseline.changed:
+        self.runnable = [branch for name, branch in self.branches.items() if branch.check()]
+        for branch_name in self.config.get("baseline", "").split():
+            baseline = self.branches[branch_name]
+            if self.runnable and not baseline not in self.runnable:
                 self.runner.log.log(2, f"Adding baseline branch {baseline.name}")
                 self.runnable.append(baseline)
-        if "always" in configuration:
-            branch = repo.branches[self.config["always"]]
-            if branch not in branches:
+        for branch_name in self.config.get("always", "").split():
+            branch = self.branches[branch_name]
+            if branch not in self.runnable:
                 self.runner.log.log(2, f"Adding always run on branch {branch.name}")
                 self.runnable.append(branch)
 
     def run(self):
-        runner.log.log(1, "Running branches " + " ".join(self.runnable))
+        self.runner.log.log(1, "Running branches " + " ".join([b.name for b in self.runnable]))
         for branch in self.runnable:
             branch.run()
 
@@ -304,8 +305,8 @@ class Repository:
             runs = { branch.name : branch.info for branch in self.runnable }
             data = build_slack_blocks(self.name, runs, self.runner.base_url)
 
-        if data:
-            self.runner.log.log(2, f"Posting results of {repo.name} run to slack!")
+        if not self.runner.dryrun and data:
+            self.runner.log.log(2, f"Posting results of {self.name} run to slack!")
             post_to_slack(data, self.slack_url, logger=self.runner.log)
 
 class Branch:
@@ -329,47 +330,44 @@ class Branch:
         if self.lastcommit.is_file():
             with self.lastcommit.open("rb") as f:
                 last_commit = f.read()
-            self.changed = (last_commit == current_commit)
-        else:
-            self.changed = True
-        if not self.changed:
-            self.runner.log.log(2, "Branch " + self.name + " has not changed since last run; skipping")
-        return self.changed
+            if last_commit == current_commit:
+                self.repo.runner.log.log(2, "Branch " + self.name + " has not changed since last run; skipping")
+                return False
+        return True
 
     def run(self):
         self.repo.runner.log.log(1, f"Running tests on branch {self.name}")
         date = datetime.now()
         log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{self.repo.name}-{self.filename}.log"
 
-        with (self.repo.runner.log_dir / name).open("wt") as fd:
-            t = datetime.now()
+        t = datetime.now()
+        try:
             to = parse_time(self.repo.config.get("timeout"))
-
-            try:
-                cmd = ["nice", "make", "-c", self.dir, "nightly"]
-                self.repo.runner.log(2, "Executing " + " ".join([shlex.quote(arg) for arg in cmd]))
-                if not self.repo.runner.dryrun:
-                    subprocess.run(cmd, check=True, stdout=fd, stderr=subprocess.stdout, timeout=to)
-            except subprocess.TimeoutExpired:
-                self.repo.runner.log(1, f"run on branch {self.name} timed out after {format_time(timeout)}")
-                failure = "timeout"
-            except subprocess.CalledProcessError as e:
-                self.repo.runner.log(1, f"run on branch {self.name} failed with error code {e.returncode}")
-                failure = "failure"
-            else:
-                self.repo.runner.log(1, f"successfully ran on branch {self.name}")
-                failure = ""
-
+            cmd = ["nice", "make", "-c", str(self.dir), "nightly"]
+            self.repo.runner.log.log(2, "Executing " + " ".join([shlex.quote(arg) for arg in cmd]))
             if not self.repo.runner.dryrun:
-                out = self.rupo.runner.log.run(1, ["git", "-C", self.dir, "rev-parse", f"origin/{self.name}"])
-                with self.lastcommit.open("wb") as last_commit_fd:
-                    last_commit_fd.write(out.stdout)
+                with (self.repo.runner.log_dir / log_name).open("wt") as fd:
+                    subprocess.run(cmd, check=True, stdout=fd, stderr=subprocess.stdout, timeout=to)
+        except subprocess.TimeoutExpired:
+            self.repo.runner.log.log(1, f"Run on branch {self.name} timed out after {format_time(timeout)}")
+            failure = "timeout"
+        except subprocess.CalledProcessError as e:
+            self.repo.runner.log.log(1, f"Run on branch {self.name} failed with error code {e.returncode}")
+            failure = "failure"
+        else:
+            self.repo.runner.log.log(1, f"Successfully ran on branch {self.name}")
+            failure = ""
 
-            self.info = self.repo.runner.NR.info()
-            self.info["result"] = f"*{failure}*" if success else "success"
-            self.info["time"] = format_time((datetime.now() - t).seconds)
-            self.info["file"] = fd.name
-            self.repo.runner.NR.reset()
+        if not self.repo.runner.dryrun:
+            out = self.rupo.runner.log.run(1, ["git", "-C", self.dir, "rev-parse", f"origin/{self.name}"])
+            with self.lastcommit.open("wb") as last_commit_fd:
+                last_commit_fd.write(out.stdout)
+
+        self.info = self.repo.runner.NR.info()
+        self.info["result"] = f"*{failure}*" if failure else "success"
+        self.info["time"] = format_time((datetime.now() - t).seconds)
+        self.info["file"] = log_name
+        self.repo.runner.NR.reset()
 
 if __name__ == "__main__":
     with NightlyResults() as NR:
