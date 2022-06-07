@@ -367,7 +367,7 @@ class Branch:
         t = datetime.now()
         try:
             to = parse_time(self.repo.config.get("timeout"))
-            cmd = ["nice", "make", "-c", str(self.dir), "nightly"]
+            cmd = ["nice", "make", "-C", str(self.dir), "nightly"]
             self.repo.runner.log.log(2, "Executing " + " ".join([shlex.quote(arg) for arg in cmd]))
             if not self.repo.runner.dryrun:
                 with (self.repo.runner.log_dir / log_name).open("wt") as fd:
@@ -383,7 +383,7 @@ class Branch:
             failure = ""
 
         if not self.repo.runner.dryrun:
-            out = self.rupo.runner.log.run(1, ["git", "-C", self.dir, "rev-parse", f"origin/{self.name}"])
+            out = self.repo.runner.log.run(1, ["git", "-C", self.dir, "rev-parse", f"origin/{self.name}"])
             with self.lastcommit.open("wb") as last_commit_fd:
                 last_commit_fd.write(out.stdout)
 
