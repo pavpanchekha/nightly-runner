@@ -222,6 +222,8 @@ class NightlyRunner:
         self.log = Log()
         self.log.log(0, f"Nightly script starting up at {datetime.now():%Y-%m-%d at %H:%M:%S}")
         self.log.log(0, "Loaded configuration for " + ", ".join([repo.name for repo in self.repos]))
+        if self.dryrun:
+            self.log.log(0, "Running in dry-run mode. No nightlies will be executed.")
 
     def run(self):
         for repo in self.repos:
