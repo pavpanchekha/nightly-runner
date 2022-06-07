@@ -10,7 +10,7 @@ form.inline { display: inline; }
 
 <h1>Actions</h1>
 
-%if current
+%if current:
 <p>
   Nightlty running with PID {{current["pid"]}}
   for {{datetime.now() - datetime.fromisoformat(current["start"])}}.
