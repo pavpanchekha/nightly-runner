@@ -31,6 +31,31 @@ def dryrun():
     runner.load()
     runner.config["dryrun"] = "true"
     run_nightlies(runner.config)
+    
+@bottle.post("/runnow")
+def runnow():
+    repo = request.forms.get('repo')
+    branch = request.forms.get('branch')
+    runner = nightlies.NightlyRunner("nightlies.conf", None)
+    runner.load()
+    for repo_name in runner.config.sections():
+        if repo_name == "DEFAULT":
+            continue
+        elif repo == repo_name or repo_name.endswith("/" + repo):
+            runner.config[repo_name]["branches"] = branch
+        else:
+            runner.config.remove_section(repo_name)
+    run_nightlies(runner.config)
+
+@bottle.post("/runnext")
+def runnext():
+    repo_name = request.forms.get('repo')
+    branch = request.forms.get('branch')
+    runner = nightlies.NightlyRunner("nightlies.conf", None)
+    runner.load()
+    for repo in runner.repos:
+        if repo.name == repo_name:
+            Branch(repo, branch).lastcommit.unlink(missing_ok=True)
 
 @bottle.get("/logs/<filepath:re:.*\.log>")
 def log(filepath):

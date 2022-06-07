@@ -216,17 +216,33 @@ class NightlyRunner:
                 if not self.base_url.endswith("/"): self.base_url += "/"
                 self.log_dir = Path(configuration.get("logs", "logs")).resolve()
                 self.dryrun = "dryrun" in configuration
+                self.pid_file = Path(configuration.get("pid", "running.pid")).resolve()
             else:
                 self.repos.append(Repository(self, name, configuration))
 
-    def startlog(self):
+    def run(self):
+        start = datetime.now()
+
         self.log = Log()
         self.log.log(0, f"Nightly script starting up at {datetime.now():%Y-%m-%d at %H:%M:%S}")
         self.log.log(0, "Loaded configuration for " + ", ".join([repo.name for repo in self.repos]))
+
+        try:
+            self.pid_file.touch(exists_ok=False)
+        except FileExistsError:
+            try:
+                with self.pid_file.open("r") as f:
+                    current_process = json.load(f)
+                    self.log.log(0, f"Nightly already running on pid {current_process['pid']}")
+            except OSError:
+                self.log.log(0, f"Nightly already running")
+        else:
+            with self.pid_file.open("w") as f:
+                json.dump({ "pid": os.getpid() }, f)
+
         if self.dryrun:
             self.log.log(0, "Running in dry-run mode. No nightlies will be executed.")
 
-    def run(self):
         for repo in self.repos:
             try:
                 repo.load()
@@ -402,5 +418,4 @@ if __name__ == "__main__":
     with NightlyResults() as NR:
         runner = NightlyRunner(conf_file, NR)
         runner.load()
-        runner.startlog()
         runner.run()

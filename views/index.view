@@ -3,30 +3,41 @@
 
 <style>
 th { text-align: left; }
+form.inline { display: inline; }
 </style>
 
 <h1>Actions</h1>
 
-<form action="http://warfa.cs.washington.edu/nightlies/?C=M;O=D" method="get">
+<form action="http://warfa.cs.washington.edu/nightlies/?C=M;O=D" method="get" class="inline">
   <input type=hidden name=C value=M>
   <input type=hidden name=O value=D>
   <button>View logs</button>
 </form>
 
-<form action="/dryrun" method="get">
+<form action="/dryrun" method="get" class="inline">
   <button>Start a dry run</button>
 </form>
 
 <h1 id="repositories">Repositories</h1>
-
 %for repo in runner.repos:
+
 <h2><kbd>{{repo.name}}</kbd></h2>
 
-<table class="branches">
+<ul class="branches">
   %for branch in repo.branches.values():
-    <tr>
-      <th>{{branch.name}}</th>
-    </tr>
+    <li>
+      <form action="/runnow" action="post" class="inline">
+        <input type="hidden" name="repo" value="{{repo.name}}" />
+        <input type="hidden" name="branch" value="{{branch.name}}" />
+        <button>Run now</button>
+      </form>
+      <form action="/runnext" action="post" class="inline">
+        <input type="hidden" name="repo" value="{{repo.name}}" />
+        <input type="hidden" name="branch" value="{{branch.name}}" />
+        <button>Run tonight</button>
+      </form>
+      <kbd>{{branch.name}}</kbd>
+    </li>
   %end 
-</table>
+</ul>
 %end
