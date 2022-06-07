@@ -66,10 +66,6 @@ def runnext():
         if repo.name == repo_name:
             Branch(repo, branch).lastcommit.unlink(missing_ok=True)
 
-@bottle.get("/logs/<filepath:re:.*\.log>")
-def log(filepath):
-    return bottle.static_file(filepath, root="logs", mimetype="text/plain")
-
 def run_nightlies(conf):
     with tempfile.NamedTemporaryFile(prefix="nightlies-", delete=False) as f:
         conf.write(f)
