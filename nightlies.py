@@ -228,7 +228,7 @@ class NightlyRunner:
         self.log.log(0, "Loaded configuration for " + ", ".join([repo.name for repo in self.repos]))
 
         try:
-            self.pid_file.touch(exists_ok=False)
+            self.pid_file.touch(exist_ok=False)
         except FileExistsError:
             try:
                 with self.pid_file.open("r") as f:
