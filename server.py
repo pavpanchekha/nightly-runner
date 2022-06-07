@@ -38,7 +38,7 @@ def index():
 def dryrun():
     runner = nightlies.NightlyRunner("nightlies.conf", None)
     runner.load()
-    runner.config["dryrun"] = "true"
+    runner.config["DEFAULT"]["dryrun"] = "true"
     run_nightlies(runner.config)
     
 @bottle.post("/runnow")
