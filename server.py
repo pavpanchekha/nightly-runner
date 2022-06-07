@@ -16,9 +16,9 @@ def index():
     runner = nightlies.NightlyRunner("nightlies.conf", None)
     runner.load()
 
-    if self.pid_file.exists():
+    if runner.pid_file.exists():
         try:
-            with self.pid_file.open("r") as f:
+            with runner.pid_file.open("r") as f:
                 current_process = json.load(f)
         except OSError:
             current_process = None
