@@ -3,7 +3,7 @@ Description=Runs nightly scripts
 Wants=nightlies.timer
 
 [Service]
-ExecStart=/usr/bin/python3 /data/pavpan/nightlies/nightlies.py
+ExecStart=/usr/bin/python3 /data/pavpan/nightlies/nightlies.py /data/pavpan/nightlies/nightlies.conf
 WorkingDirectory=/data/pavpan/nightlies
 User=p92
 Group=p92

@@ -397,8 +397,10 @@ class Branch:
         self.repo.runner.NR.reset()
 
 if __name__ == "__main__":
+    import sys
+    conf_file = sys.argv[1] if len(sys.argv) > 1 else "nightlies.conf"
     with NightlyResults() as NR:
-        runner = NightlyRunner("nightlies.conf", NR)
+        runner = NightlyRunner(conf_file, NR)
         runner.load()
         runner.startlog()
         runner.run()
