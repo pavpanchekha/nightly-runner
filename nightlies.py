@@ -393,8 +393,8 @@ class Branch:
             if not self.repo.runner.dryrun:
                 with (self.repo.runner.log_dir / log_name).open("wt") as fd:
                     subprocess.run(cmd, check=True, stdout=fd, stderr=subprocess.STDOUT, timeout=to)
-        except subprocess.TimeoutExpired:
-            self.repo.runner.log.log(1, f"Run on branch {self.name} timed out after {format_time(timeout)}")
+        except subprocess.TimeoutExpired as e:
+            self.repo.runner.log.log(1, f"Run on branch {self.name} timed out after {format_time(e.timeout)}")
             failure = "timeout"
         except subprocess.CalledProcessError as e:
             self.repo.runner.log.log(1, f"Run on branch {self.name} failed with error code {e.returncode}")

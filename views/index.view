@@ -23,7 +23,7 @@ form.inline { display: inline; }
   <button>View logs</button>
 </form>
 
-<form action="/dryrun" method="get" class="inline">
+<form action="/dryrun" method="post" class="inline">
   <button>Start a dry run</button>
 </form>
 
