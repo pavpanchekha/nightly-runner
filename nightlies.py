@@ -342,7 +342,7 @@ class Repository:
         if self.fatalerror:
             data = build_slack_fatal(self.name, self.fatalerror, self.runner.base_url)
         else:
-            runs = { branch.name : branch.info for branch in self.runnable }
+            runs = { branch.name : branch.info for branch in self.runnable if branch.info }
             data = build_slack_blocks(self.name, runs, self.runner.base_url)
 
         if not self.runner.dryrun and data:
