@@ -51,10 +51,8 @@ def runnow():
     runner = nightlies.NightlyRunner("nightlies.conf", None)
     runner.load()
     for section in runner.config.sections():
-        if section == "DEFAULT":
-            continue
-        elif repo == section or section.endswith("/" + repo):
-            runner.config[repo]["branches"] = branch
+        if repo == section or section.endswith("/" + repo):
+            runner.config[section]["branches"] = branch
         else:
             runner.config.remove_section(section)
     run_nightlies(runner.config)
