@@ -399,7 +399,14 @@ class Branch:
             self.repo.runner.log(2, f"Executing nice make -C {shlex.quote(str(self.dir))} nightly")
             if not self.repo.runner.dryrun:
                 with (self.repo.runner.log_dir / log_name).open("wt") as fd:
-                    subprocess.run(cmd, check=True, stdout=fd, stderr=subprocess.STDOUT, timeout=to)
+                    try:
+                        process = subprocess.Popen(cmd, check=True, stdout=fd, stderr=subprocess.STDOUT, timeout=to)
+                        self.repo.runner.data["branch_pid"] = process.pid
+                        self.repo.runner.save()
+                        process.wait()
+                        if process.poll(): raise subprocess.CalledProcessError(process.poll(), cmd)
+                    finally:
+                        process.kill()
         except subprocess.TimeoutExpired as e:
             self.repo.runner.log(1, f"Run on branch {self.name} timed out after {format_time(e.timeout)}")
             failure = "timeout"

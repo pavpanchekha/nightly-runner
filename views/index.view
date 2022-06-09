@@ -30,6 +30,9 @@ form.inline { display: inline; }
     <form action="/logs/{{current['branch_log']}}" method="get" class="inline">
       <button>View output</button>
     </form> 
+    <form action="/killbranch" method="post" class="inline">
+      <button>Kill</button>
+    </form> 
     %end
     Currently running nightly for <kbd>{{current["repo"]}}</kbd> repository,
     %if "branch" in current:

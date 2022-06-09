@@ -106,6 +106,21 @@ def kill():
         current_process = None
     bottle.redirect("/")
 
+@bottle.post("/killbranch")
+def killbranch():
+    runner = nightlies.NightlyRunner("nightlies.conf", None)
+    runner.load()
+    if runner.pid_file.exists():
+        try:
+            with runner.pid_file.open("r") as f:
+                current_process = json.load(f)
+                os.kill(current_process["branch_pid"], signal.SIGTERM)
+        except OSError:
+            current_process = None
+    else:
+        current_process = None
+    bottle.redirect("/")
+
 def run_nightlies(conf):
     with tempfile.NamedTemporaryFile(prefix="nightlies-", mode="wt", delete=False) as f:
         conf.write(f)
