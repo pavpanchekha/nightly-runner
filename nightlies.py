@@ -237,8 +237,8 @@ class NightlyRunner:
 
         for repo in self.repos:
             try:
-                self.runner.data["repo"] = repo.name
-                self.runner.save()
+                self.data["repo"] = repo.name
+                self.save()
                 repo.load()
                 repo.filter()
                 repo.run()
@@ -248,8 +248,8 @@ class NightlyRunner:
             finally:
                 repo.post()
                 self.log(0, f"Finished nightly run for {repo.name}")
-                del self.runner.data["repo"]
-                self.runner.save()
+                del self.data["repo"]
+                self.save()
 
         self.pid_file.unlink()
         self.log(0, "Finished nightly run for today")
