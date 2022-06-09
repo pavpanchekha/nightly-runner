@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import typing
+from typing import Dict, Any, List, Union
 import os, sys, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -42,7 +42,7 @@ def format_time(ts : float) -> str:
     else:
         return f"{t/60/60:.1f}h"
 
-def parse_time(to : typing.Union[str, None]) -> typing.Union[float, None]:
+def parse_time(to : Union[str, None]) -> Union[float, None]:
     if to is None: return to
     units = {
         "hr": 3600, "h": 3600,
@@ -54,7 +54,7 @@ def parse_time(to : typing.Union[str, None]) -> typing.Union[float, None]:
             return float(to[:-len(unit)]) * multiplier
     return float(to)
 
-def build_slack_blocks(name : str, runs : dict[str, dict[str, typing.Any]], baseurl : str):
+def build_slack_blocks(name : str, runs : Dict[str, Dict[str, Any]], baseurl : str):
     blocks = []
     for branch, info in runs.items():
         result = info["result"]
@@ -63,7 +63,7 @@ def build_slack_blocks(name : str, runs : dict[str, dict[str, typing.Any]], base
         if "emoji" in info:
             text += " " + info["emoji"]
 
-        block : dict[str, typing.Any] = {
+        block : Dict[str, Any] = {
             "type": "section",
             "text": { "type": "mrkdwn", "text": text },
         }
@@ -167,7 +167,7 @@ fi
             pass
 
 class NightlyRunner:
-    def __init__(self, config_file : typing.Union[str, Path], NR : NightlyResults):
+    def __init__(self, config_file : Union[str, Path], NR : NightlyResults):
         self.config_file = config_file
         self.NR = NR
 
@@ -186,7 +186,7 @@ class NightlyRunner:
         for name in self.config.sections():
             self.repos.append(Repository(self, name, self.config[name]))
 
-    def exec(self, level : int, cmd : list[typing.Union[str, Path]]):
+    def exec(self, level : int, cmd : List[Union[str, Path]]):
         cmd2 = [str(arg) for arg in cmd]
         self.log(level, "Executing " + " ".join([shlex.quote(arg) for arg in cmd2]))
         return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
