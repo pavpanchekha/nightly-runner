@@ -308,7 +308,7 @@ class Repository:
         self.runnable = [branch for name, branch in self.branches.items() if branch.check()]
         for branch_name in self.config.get("baseline", "").split():
             baseline = self.branches[branch_name]
-            if self.runnable and not baseline not in self.runnable:
+            if self.runnable and baseline not in self.runnable:
                 self.runner.log(2, f"Adding baseline branch {baseline.name}")
                 self.runnable.append(baseline)
         for branch_name in self.config.get("always", "").split():
