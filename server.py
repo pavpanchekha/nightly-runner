@@ -77,7 +77,7 @@ def runnext():
     runner.load()
     for repo in runner.repos:
         if repo.name == repo_name:
-            Branch(repo, branch).lastcommit.unlink(missing_ok=True)
+            nightlies.Branch(repo, branch).lastcommit.unlink(missing_ok=True)
     bottle.redirect("/")
 
 @bottle.post("/kill")
