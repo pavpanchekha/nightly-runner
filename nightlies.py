@@ -400,10 +400,10 @@ class Branch:
             if not self.repo.runner.dryrun:
                 with (self.repo.runner.log_dir / log_name).open("wt") as fd:
                     try:
-                        process = subprocess.Popen(cmd, check=True, stdout=fd, stderr=subprocess.STDOUT, timeout=to)
+                        process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT)
                         self.repo.runner.data["branch_pid"] = process.pid
                         self.repo.runner.save()
-                        process.wait()
+                        process.wait(timeout=to)
                         if process.poll(): raise subprocess.CalledProcessError(process.poll(), cmd)
                     finally:
                         process.kill()
