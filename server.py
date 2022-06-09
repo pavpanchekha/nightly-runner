@@ -81,6 +81,8 @@ def runnext():
 
 @bottle.post("/kill")
 def kill():
+    runner = nightlies.NightlyRunner("nightlies.conf", None)
+    runner.load()
     if runner.pid_file.exists():
         try:
             with runner.pid_file.open("r") as f:
