@@ -12,11 +12,11 @@ form.inline { display: inline; }
 
 %if current:
 <p>
-  <form action="/{{current['log']}}" method="get" class="inline">
-    <button>View log</button>>
+  <form action="/logs/{{current_log}}" method="get" class="inline">
+    <button>View log</button>
   </form>
   <form action="/kill" method="post" class="inline">
-    <button>Kill</button>>
+    <button>Kill</button>
   </form>
   Nightly running with PID {{current["pid"]}}
   for {{datetime.now() - datetime.fromisoformat(current["start"])}}.

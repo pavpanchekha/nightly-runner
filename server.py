@@ -34,7 +34,16 @@ def index():
             if fn in repo.ignored_files: continue
             repo.branches[fn.name] = nightlies.Branch(repo, fn.name)
 
-    return { "runner": runner, "current": current_process, }
+    if current_process:
+        current_log = Path(current_process["log"])
+        try:
+            relpath = current_log.relative_to(runner.log_dir)
+        except ValueError:
+            relpath = None
+    else:
+        relpath = None
+
+    return { "runner": runner, "current": current_process, "current_log": relpath }
 
 @bottle.post("/dryrun")
 def dryrun():
