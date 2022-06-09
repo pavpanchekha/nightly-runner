@@ -210,15 +210,15 @@ class NightlyRunner:
         self.config.read(self.config_file)
         self.repos = []
 
-        for name, configuration in self.config.items():
-            if name == "DEFAULT":
-                self.base_url = configuration.get("baseurl")
-                if not self.base_url.endswith("/"): self.base_url += "/"
-                self.log_dir = Path(configuration.get("logs", "logs")).resolve()
-                self.dryrun = "dryrun" in configuration
-                self.pid_file = Path(configuration.get("pid", "running.pid")).resolve()
-            else:
-                self.repos.append(Repository(self, name, configuration))
+        defaults = configuration.defaults()
+        self.base_url = defaults.get("baseurl")
+        if not self.base_url.endswith("/"): self.base_url += "/"
+        self.log_dir = Path(defaults.get("logs", "logs")).resolve()
+        self.dryrun = "dryrun" in defaults
+        self.pid_file = Path(defaults.get("pid", "running.pid")).resolve()
+
+        for name in self.config.sections():
+            self.repos.append(Repository(self, name, configuration[name]))
 
     def run(self):
         start = datetime.now().isoformat()
