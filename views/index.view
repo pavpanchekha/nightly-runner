@@ -53,6 +53,10 @@ form.inline { display: inline; }
   <form action="/dryrun" method="post" class="inline">
     <button {{disabled}} >Start a dry run</button>
   </form>
+
+  <form action="/fullrun" method="post" class="inline">
+    <button {{disabled}} >Start a full run</button>
+  </form>
 </div>
 
 %for repo in runner.repos:

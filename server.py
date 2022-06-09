@@ -54,6 +54,13 @@ def dryrun():
     run_nightlies(runner.config)
     bottle.redirect("/")
     
+@bottle.post("/fullrun")
+def fullrun():
+    runner = nightlies.NightlyRunner("nightlies.conf", None)
+    runner.load()
+    run_nightlies(runner.config)
+    bottle.redirect("/")
+    
 @bottle.post("/runnow")
 def runnow():
     repo = bottle.request.forms.get('repo')
