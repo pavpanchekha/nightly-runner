@@ -12,7 +12,7 @@ form.inline { display: inline; }
 
 %if current:
 <p>
-  Nightlty running with PID {{current["pid"]}}
+  Nightly running with PID {{current["pid"]}}
   for {{datetime.now() - datetime.fromisoformat(current["start"])}}.
 </p>
 %end
