@@ -42,8 +42,11 @@ form.inline { display: inline; }
     %end
   </div>
   %end
-  <div>Controls disabled until current nightly ends.</div>
 </div>
+%end
+
+%if disabled:
+  <div>Controls disabled until current nightly ends.</div>
 %end
 
 <div>
