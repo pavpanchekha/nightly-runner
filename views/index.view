@@ -13,29 +13,47 @@ form.inline { display: inline; }
 
 %if current:
 <div class="status">
-  <form action="/logs/{{current_log}}" method="get" class="inline">
-    <button>View log</button>
-  </form>
-  <form action="/kill" method="post" class="inline">
-    <button>Kill</button>
-  </form>
-  Nightly running
-  for {{format_time((datetime.now() - datetime.fromisoformat(current["start"])).total_seconds())}}
-  on PID <kbd>{{current["pid"]}}</kbd>.
-  
-  <p>Controls disabled until current nightly ends.</p>
+  <div>
+    <form action="/logs/{{current_log}}" method="get" class="inline">
+      <button>View log</button>
+    </form>
+    <form action="/kill" method="post" class="inline">
+      <button>Kill</button>
+    </form>
+    Nightly running
+    for {{format_time((datetime.now() - datetime.fromisoformat(current["start"])).total_seconds())}}
+    on PID <kbd>{{current["pid"]}}</kbd>.
+  </div>
+  %if "repo" in current:
+  <div class="indent">
+    %if "branch" in current:
+    <form action="/logs/{{current['branch_log']}}" method="get" class="inline">
+      <button>View output</button>
+    </form> 
+    %end
+    Currently running nightly for <kbd>{{current["repo"]}}</kbd> repository,
+    %if "branch" in current:
+      <kbd>{{current['branch']}}</kbd> branch
+    %else:
+      downloading
+    %end
+  </div>
+  %end
+  <div>Controls disabled until current nightly ends.</div>
 </div>
 %end
 
-<form action="/logs/" method="get" class="inline">
-  <input type=hidden name=C value=M>
-  <input type=hidden name=O value=D>
-  <button>View logs</button>
-</form>
+<div>
+  <form action="/logs/" method="get" class="inline">
+    <input type=hidden name=C value=M>
+    <input type=hidden name=O value=D>
+    <button>View logs</button>
+  </form>
 
-<form action="/dryrun" method="post" class="inline">
-  <button {{disabled}} >Start a dry run</button>
-</form>
+  <form action="/dryrun" method="post" class="inline">
+    <button {{disabled}} >Start a dry run</button>
+  </form>
+</div>
 
 %for repo in runner.repos:
 

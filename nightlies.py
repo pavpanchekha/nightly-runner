@@ -195,12 +195,23 @@ class NightlyRunner:
         with self.log_path.open("at") as f:
             f.write("{}\t{}{}\n".format(datetime.now() - self.start, "    " * level, s))
 
+    def save(self):
+        with self.pid_file.open("w") as f:
+            json.dump(self.data, f)
+
     def run(self):
         self.start = datetime.now()
         name = f"{self.start:%Y-%m-%d}-{self.start:%H%M%S}.log"
         self.log_path = self.log_dir / name
         self.log(0, f"Nightly script starting up at {self.start:%H:%M}")
         self.log(0, f"Loaded configuration file {self.config_file}")
+
+        self.data = {
+            "pid": os.getpid(),
+            "start": self.start.isoformat(),
+            "config": str(Path(self.config_file).resolve()),
+            "log": str(self.log_path),
+        }
 
         try:
             self.pid_file.touch(exist_ok=False)
@@ -214,13 +225,7 @@ class NightlyRunner:
                 self.log(0, f"Nightly already running")
                 return
         else:
-            with self.pid_file.open("w") as f:
-                json.dump({
-                    "pid": os.getpid(),
-                    "start": self.start.isoformat(),
-                    "config": str(Path(self.config_file).resolve()),
-                    "log": str(self.log_path),
-                }, f)
+            self.save()
 
         if self.dryrun:
             self.log(0, "Running in dry-run mode. No nightlies will be executed.")
@@ -320,8 +325,12 @@ class Repository:
     def run(self):
         if self.runnable:
             self.runner.log(1, "Running branches " + " ".join([b.name for b in self.runnable]))
+            self.runner.data["repo"] = self.name
+            self.runner.save()
             for branch in self.runnable:
                 branch.run()
+            del self.runner.data["repo"]
+            self.runner.save()
         else:
             self.runner.log(1, "No branches to run")
 
@@ -380,6 +389,9 @@ class Branch:
         date = datetime.now()
         log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{self.repo.name}-{self.filename}.log"
 
+        self.repo.runner.data["branch"] = self.name
+        self.repo.runner.data["branch_log"] = log_name
+        self.repo.runner.save()
         t = datetime.now()
         try:
             to = parse_time(self.repo.config.get("timeout"))
@@ -408,6 +420,9 @@ class Branch:
         self.info["time"] = format_time((datetime.now() - t).seconds)
         self.info["file"] = log_name
         self.repo.runner.NR.reset()
+        del self.repo.runner.data["branch"]
+        del self.repo.runner.data["branch_log"]
+        self.repo.runner.save()
 
 if __name__ == "__main__":
     import sys
