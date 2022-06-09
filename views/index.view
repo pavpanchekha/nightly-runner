@@ -35,12 +35,12 @@ form.inline { display: inline; }
 <ul class="branches">
   %for branch in repo.branches.values():
     <li>
-      <form action="/runnow" action="post" class="inline">
+      <form action="/runnow" method="post" class="inline">
         <input type="hidden" name="repo" value="{{repo.name}}" />
         <input type="hidden" name="branch" value="{{branch.name}}" />
         <button>Run now</button>
       </form>
-      <form action="/runnext" action="post" class="inline">
+      <form action="/runnext" method="post" class="inline">
         <input type="hidden" name="repo" value="{{repo.name}}" />
         <input type="hidden" name="branch" value="{{branch.name}}" />
         <button>Run tonight</button>
