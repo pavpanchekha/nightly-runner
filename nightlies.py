@@ -234,8 +234,10 @@ class NightlyRunner:
                 with self.pid_file.open("r") as f:
                     current_process = json.load(f)
                     self.log.log(0, f"Nightly already running on pid {current_process['pid']}")
+                    return
             except OSError:
                 self.log.log(0, f"Nightly already running")
+                return
         else:
             with self.pid_file.open("w") as f:
                 json.dump({
