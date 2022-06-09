@@ -9,6 +9,7 @@ import subprocess
 import sys
 import os
 import json
+import signal
 
 RUNNING_NIGHTLIES = []
 
@@ -87,7 +88,7 @@ def kill():
         try:
             with runner.pid_file.open("r") as f:
                 current_process = json.load(f)
-                os.kill(current_process["pid"])
+                os.kill(current_process["pid"], signals.SIGTERM)
             runner.pid_file.unlink()
         except OSError:
             current_process = None
