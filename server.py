@@ -77,7 +77,10 @@ def runnext():
     runner.load()
     for repo in runner.repos:
         if repo.name == repo_name:
-            nightlies.Branch(repo, branch).lastcommit.unlink(missing_ok=True)
+            try:
+                nightlies.Branch(repo, branch).lastcommit.unlink()
+            except FileNotFound:
+                pass
     bottle.redirect("/")
 
 @bottle.post("/kill")
