@@ -71,12 +71,12 @@ def runnow():
 
 @bottle.post("/runnext")
 def runnext():
-    repo = bottle.request.forms.get('repo')
+    repo_name = bottle.request.forms.get('repo')
     branch = bottle.request.forms.get('branch')
     runner = nightlies.NightlyRunner("nightlies.conf", None)
     runner.load()
     for repo in runner.repos:
-        if repo.name == repo:
+        if repo.name == repo_name:
             Branch(repo, branch).lastcommit.unlink(missing_ok=True)
     bottle.redirect("/")
 
