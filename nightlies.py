@@ -399,10 +399,10 @@ class Branch:
             self.repo.runner.log(2, f"Executing nice make -C {shlex.quote(str(self.dir))} nightly")
             if not self.repo.runner.dryrun:
                 with (self.repo.runner.log_dir / log_name).open("wt") as fd:
+                    process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT)
+                    self.repo.runner.data["branch_pid"] = process.pid
+                    self.repo.runner.save()
                     try:
-                        process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT)
-                        self.repo.runner.data["branch_pid"] = process.pid
-                        self.repo.runner.save()
                         process.wait(timeout=to)
                         if process.poll(): raise subprocess.CalledProcessError(process.poll(), cmd)
                     finally:
