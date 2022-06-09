@@ -295,23 +295,11 @@ class Repository:
         self.runner.log.log(1, f"Fetching default branch {default_branch.name}")
         default_branch.load()
 
-        if "branches" in self.config:
-            all_branches = self.config["branches"].split()
-        else:
-            git_branch = self.runner.log.run(2, ["git", "-C", default_branch.dir, "branch", "-r"])
-            all_branches = [
-                branch.split("/", 1)[-1] for branch
-                in git_branch.stdout.decode("utf8").strip().split("\n")
-            ]
-
-        self.branches = {default_branch.name: default_branch}
-        for branch_name in all_branches:
-            if branch_name.startswith("HEAD"): continue
-            if branch_name == default_branch.name: continue
-            branch = Branch(self, branch_name)
-            self.runner.log.log(1, f"Fetching branch {branch.name}")
-            branch.load()
-            self.branches[branch_name] = branch
+        git_branch = self.runner.log.run(2, ["git", "-C", default_branch.dir, "branch", "-r"])
+        all_branches = [
+            branch.split("/", 1)[-1] for branch
+            in git_branch.stdout.decode("utf8").strip().split("\n")
+        ]
 
         expected_files = { branch.dir for branch in self.branches.values() } | \
             { branch.lastcommit for branch in self.branches.values() } | \
@@ -325,6 +313,18 @@ class Repository:
                         shutil.rmtree(str(fn))
                     else:
                         fn.unlink()
+
+        if "branches" in self.config:
+            all_branches = self.config["branches"].split()
+
+        self.branches = {default_branch.name: default_branch}
+        for branch_name in all_branches:
+            if branch_name.startswith("HEAD"): continue
+            if branch_name == default_branch.name: continue
+            branch = Branch(self, branch_name)
+            self.runner.log.log(1, f"Fetching branch {branch.name}")
+            branch.load()
+            self.branches[branch_name] = branch
 
     def filter(self):
         self.runner.log.log(1, "Filtering branches " + ", ".join(self.branches))
