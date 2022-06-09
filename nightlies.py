@@ -219,7 +219,7 @@ class NightlyRunner:
                     "pid": os.getpid(),
                     "start": self.start.isoformat(),
                     "config": str(Path(self.config_file).resolve()),
-                    "log": str(self.log.path),
+                    "log": str(self.log_path),
                 }, f)
 
         if self.dryrun:
