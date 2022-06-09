@@ -88,7 +88,7 @@ def kill():
         try:
             with runner.pid_file.open("r") as f:
                 current_process = json.load(f)
-                os.kill(current_process["pid"], signals.SIGTERM)
+                os.kill(current_process["pid"], signal.SIGTERM)
             runner.pid_file.unlink()
         except OSError:
             current_process = None
