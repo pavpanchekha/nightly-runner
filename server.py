@@ -53,6 +53,7 @@ def runnow():
     for section in runner.config.sections():
         if repo == section or section.endswith("/" + repo):
             runner.config[section]["branches"] = branch
+            runner.config[section]["always"] = branch
         else:
             runner.config.remove_section(section)
     run_nightlies(runner.config)

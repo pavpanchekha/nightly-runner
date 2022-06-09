@@ -225,7 +225,7 @@ class NightlyRunner:
 
         self.log = Log()
         self.log.log(0, f"Nightly script starting up at {start}")
-        self.log.log(0, "Loaded configuration for " + ", ".join([repo.name for repo in self.repos]))
+        self.log.log(0, f"Loaded configuration file {self.config_file}")
 
         try:
             self.pid_file.touch(exist_ok=False)
@@ -238,7 +238,11 @@ class NightlyRunner:
                 self.log.log(0, f"Nightly already running")
         else:
             with self.pid_file.open("w") as f:
-                json.dump({ "pid": os.getpid(), "start": start }, f)
+                json.dump({
+                    "pid": os.getpid(),
+                    "start": start,
+                    "config": str(Path(self.config_file).resolve()),
+                }, f)
 
         if self.dryrun:
             self.log.log(0, "Running in dry-run mode. No nightlies will be executed.")
