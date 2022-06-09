@@ -46,8 +46,8 @@ def dryrun():
     
 @bottle.post("/runnow")
 def runnow():
-    repo = request.forms.get('repo')
-    branch = request.forms.get('branch')
+    repo = bottle.request.forms.get('repo')
+    branch = bottle.request.forms.get('branch')
     runner = nightlies.NightlyRunner("nightlies.conf", None)
     runner.load()
     for section in runner.config.sections():
@@ -62,8 +62,8 @@ def runnow():
 
 @bottle.post("/runnext")
 def runnext():
-    repo_name = request.forms.get('repo')
-    branch = request.forms.get('branch')
+    repo_name = bottle.request.forms.get('repo')
+    branch = bottle.request.forms.get('branch')
     runner = nightlies.NightlyRunner("nightlies.conf", None)
     runner.load()
     for repo in runner.repos:
