@@ -243,10 +243,10 @@ class NightlyRunner:
         if self.dryrun:
             self.log.log(0, "Running in dry-run mode. No nightlies will be executed.")
 
-        with open(".gitignore", "wt") as f:
-            f.write(self.config_file + "\n")
-            for repo in self.repos:
-                f.write(repo.dir.name + "\n")
+        if Path(".git/info").exists():
+            with open(".git/info/exclude", "wt") as f:
+                for repo in self.repos:
+                    f.write(repo.dir.name + "\n")
 
         for repo in self.repos:
             try:
