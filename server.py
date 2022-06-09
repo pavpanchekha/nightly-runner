@@ -54,7 +54,7 @@ def runnow():
         if section == "DEFAULT":
             continue
         elif repo == section or section.endswith("/" + repo):
-            runner.config[repo_name]["branches"] = branch
+            runner.config[repo]["branches"] = branch
         else:
             runner.config.remove_section(section)
     run_nightlies(runner.config)
@@ -62,12 +62,12 @@ def runnow():
 
 @bottle.post("/runnext")
 def runnext():
-    repo_name = bottle.request.forms.get('repo')
+    repo = bottle.request.forms.get('repo')
     branch = bottle.request.forms.get('branch')
     runner = nightlies.NightlyRunner("nightlies.conf", None)
     runner.load()
     for repo in runner.repos:
-        if repo.name == repo_name:
+        if repo.name == repo:
             Branch(repo, branch).lastcommit.unlink(missing_ok=True)
     bottle.redirect("/")
 
