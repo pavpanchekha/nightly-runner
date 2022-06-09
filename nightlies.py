@@ -198,7 +198,7 @@ class NightlyRunner:
     def run(self):
         self.start = datetime.now()
         name = f"{self.start:%Y-%m-%d}-{self.start:%H%M%S}.log"
-        self.log_path = self.dir / name
+        self.log_path = self.log_dir / name
         self.log(0, f"Nightly script starting up at {self.start:%H:%M}")
         self.log(0, f"Loaded configuration file {self.config_file}")
 
