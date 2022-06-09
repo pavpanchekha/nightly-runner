@@ -2,16 +2,16 @@
 <title>Nightly runs</title>
 
 % from datetime import datetime, timedelta
+% disabled = "disabled" if current else ""
 
 <style>
-th { text-align: left; }
+body { width: 80ex; margin: 1em auto; }
 form.inline { display: inline; }
+.status { margin: 1em 0; padding: 1ex; border: medium solid navy; background: lightblue; }
 </style>
 
-<h1>Actions</h1>
-
 %if current:
-<p>
+<div class="status">
   <form action="/logs/{{current_log}}" method="get" class="inline">
     <button>View log</button>
   </form>
@@ -20,7 +20,9 @@ form.inline { display: inline; }
   </form>
   Nightly running with PID {{current["pid"]}}
   for {{datetime.now() - datetime.fromisoformat(current["start"])}}.
-</p>
+  
+  <p>Controls disabled until current nightly ends.</p>
+</div>
 %end
 
 <form action="/logs/" method="get" class="inline">
@@ -30,10 +32,9 @@ form.inline { display: inline; }
 </form>
 
 <form action="/dryrun" method="post" class="inline">
-  <button>Start a dry run</button>
+  <button {{disabled}} >Start a dry run</button>
 </form>
 
-<h1 id="repositories">Repositories</h1>
 %for repo in runner.repos:
 
 <h2><kbd>{{repo.name}}</kbd></h2>
@@ -44,12 +45,12 @@ form.inline { display: inline; }
       <form action="/runnow" method="post" class="inline">
         <input type="hidden" name="repo" value="{{repo.name}}" />
         <input type="hidden" name="branch" value="{{branch.name}}" />
-        <button>Run now</button>
+        <button {{disabled}}>Run now</button>
       </form>
       <form action="/runnext" method="post" class="inline">
         <input type="hidden" name="repo" value="{{repo.name}}" />
         <input type="hidden" name="branch" value="{{branch.name}}" />
-        <button>Run tonight</button>
+        <button {{disabled}}>Run tonight</button>
       </form>
       <kbd>{{branch.name}}</kbd>
     </li>
