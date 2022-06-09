@@ -34,7 +34,7 @@ def index():
             if fn in repo.ignored_files: continue
             repo.branches[fn.name] = nightlies.Branch(repo, fn.name)
 
-    return { "runner": runner, "current": current_process }
+    return { "runner": runner, "current": current_process, }
 
 @bottle.post("/dryrun")
 def dryrun():
@@ -68,6 +68,20 @@ def runnext():
     for repo in runner.repos:
         if repo.name == repo:
             Branch(repo, branch).lastcommit.unlink(missing_ok=True)
+    bottle.redirect("/")
+
+@bottle.post("/kill")
+def kill():
+    if runner.pid_file.exists():
+        try:
+            with runner.pid_file.open("r") as f:
+                current_process = json.load(f)
+                os.kill(current_process["pid"])
+            runner.pid_file.unlink()
+        except OSError:
+            current_process = None
+    else:
+        current_process = None
     bottle.redirect("/")
 
 def run_nightlies(conf):

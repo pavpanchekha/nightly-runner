@@ -14,6 +14,9 @@ form.inline { display: inline; }
 <p>
   Nightly running with PID {{current["pid"]}}
   for {{datetime.now() - datetime.fromisoformat(current["start"])}}.
+  <form action="/{{current['log']}}" method="get" class="inline">
+    <button>View log</button>>
+  </form>
 </p>
 %end
 
