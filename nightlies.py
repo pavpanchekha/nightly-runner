@@ -303,8 +303,8 @@ class Repository:
             in git_branch.stdout.decode("utf8").strip().split("\n")
         ]
 
-        expected_files = self.ignored_files | set(all_branches) | \
-            { branch + ".last-commit" for branch in all_branches }
+        expected_files = self.ignored_files | {self.dir / b for b in all_branches} | \
+            { self.dir / f"{b}.last-commit" for b in all_branches }
         self.runner.log.log(1, "Cleaning unnecessary files")
         for fn in self.dir.iterdir():
             if fn not in expected_files:
