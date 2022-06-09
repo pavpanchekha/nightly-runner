@@ -50,13 +50,13 @@ def runnow():
     branch = request.forms.get('branch')
     runner = nightlies.NightlyRunner("nightlies.conf", None)
     runner.load()
-    for repo_name in runner.config.sections():
-        if repo_name == "DEFAULT":
+    for section in runner.config.sections():
+        if section == "DEFAULT":
             continue
-        elif repo == repo_name or repo_name.endswith("/" + repo):
+        elif repo == section or section.endswith("/" + repo):
             runner.config[repo_name]["branches"] = branch
         else:
-            runner.config.remove_section(repo_name)
+            runner.config.remove_section(section)
     run_nightlies(runner.config)
     bottle.redirect("/")
 

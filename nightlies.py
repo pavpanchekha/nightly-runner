@@ -244,6 +244,7 @@ class NightlyRunner:
             self.log.log(0, "Running in dry-run mode. No nightlies will be executed.")
 
         with open(".gitignore", "wt") as f:
+            f.write(self.config_file + "\n")
             for repo in self.repos:
                 f.write(repo.dir.name + "\n")
 
@@ -286,7 +287,7 @@ class Repository:
         self.runner.log.log(0, "Beginning nightly run for " + self.name)
         self.dir.mkdir(parents=True, exist_ok=True)
 
-        default_branch = Branch(self, self.config.get("master", "master"))
+        default_branch = Branch(self, self.config.get("main", "main"))
         self.runner.log.log(1, f"Fetching default branch {default_branch.name}")
         default_branch.load()
 
