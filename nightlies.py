@@ -244,8 +244,8 @@ class NightlyRunner:
                 repo.fatalerror = f"Process {e.cmd} returned error code {e.returncode}"
                 self.log(0, repo.fatalerror)
             finally:
+                repo.post()
                 self.log(0, f"Finished nightly run for {repo.name}")
-            repo.post()
 
         self.pid_file.unlink()
         self.log(0, "Finished nightly run for today")
