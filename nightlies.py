@@ -237,6 +237,8 @@ class NightlyRunner:
 
         for repo in self.repos:
             try:
+                self.runner.data["repo"] = repo.name
+                self.runner.save()
                 repo.load()
                 repo.filter()
                 repo.run()
@@ -246,6 +248,8 @@ class NightlyRunner:
             finally:
                 repo.post()
                 self.log(0, f"Finished nightly run for {repo.name}")
+                del self.runner.data["repo"]
+                self.runner.save()
 
         self.pid_file.unlink()
         self.log(0, "Finished nightly run for today")
@@ -325,12 +329,8 @@ class Repository:
     def run(self):
         if self.runnable:
             self.runner.log(1, "Running branches " + " ".join([b.name for b in self.runnable]))
-            self.runner.data["repo"] = self.name
-            self.runner.save()
             for branch in self.runnable:
                 branch.run()
-            del self.runner.data["repo"]
-            self.runner.save()
         else:
             self.runner.log(1, "No branches to run")
 
