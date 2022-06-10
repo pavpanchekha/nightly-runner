@@ -34,12 +34,13 @@ form.inline { display: inline; }
       <button>Kill</button>
     </form> 
     %end
-    Currently running nightly for <kbd>{{current["repo"]}}</kbd> repository,
+    Currently
     %if "branch" in current:
-      <kbd>{{current['branch']}}</kbd> branch
-    %else:
-      downloading
+    running <kbd>{{current['branch']}}</kbd> branch
+    %else
+    downloading branches
     %end
+    for <kbd>{{current["repo"]}}</kbd> repository.
   </div>
   %end
 </div>
