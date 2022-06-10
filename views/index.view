@@ -37,7 +37,7 @@ form.inline { display: inline; }
     Currently
     %if "branch" in current:
     running <kbd>{{current['branch']}}</kbd> branch
-    %else
+    %else:
     downloading branches
     %end
     for <kbd>{{current["repo"]}}</kbd> repository.
