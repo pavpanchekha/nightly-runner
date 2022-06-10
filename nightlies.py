@@ -75,7 +75,7 @@ def build_slack_blocks(name : str, runs : Dict[str, Dict[str, Any]], baseurl : s
                     "type": "plain_text",
                     "text": "Error Log",
                 },
-                "url": baseurl + file,
+                "url": baseurl + "logs/" + file,
                 "style": "primary",
             }
         elif "url" in info:
