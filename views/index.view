@@ -46,7 +46,7 @@ form.inline { display: inline; }
   %end
   %if not running:
   <div>
-    <form action="/delete_pid" method="pos" class="inline">
+    <form action="/delete_pid" method="post" class="inline">
       <button>Delete lockfile</button>
     </form> 
     Nightly seems dead (PID not found).
