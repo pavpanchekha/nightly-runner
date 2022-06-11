@@ -35,16 +35,15 @@ def index():
             if fn in repo.ignored_files: continue
             repo.branches[fn.name] = nightlies.Branch(repo, fn.name)
 
-    if current_process:
-        current_log = Path(current_process["log"])
+    if "pid" in current:
         try:
-            relpath = current_log.relative_to(runner.log_dir)
-        except ValueError:
-            relpath = None
-    else:
-        relpath = None
+            os.kill(current["pid"], 0) # Does not actually kill, but does check if pid exists
+        except OSError:
+            running = False
+        else:
+            running = True
 
-    return { "runner": runner, "current": current_process, "current_log": relpath }
+    return { "runner": runner, "current": current_process, "running": running }
 
 @bottle.post("/dryrun")
 def dryrun():
@@ -119,6 +118,14 @@ def killbranch():
             current_process = None
     else:
         current_process = None
+    bottle.redirect("/")
+    
+@bottle.post("/delete_pid")
+def delete_pid():
+    runner = nightlies.NightlyRunner("nightlies.conf", None)
+    runner.load()
+    if runner.pid_file.exists():
+        runner.pid_file.unlink()
     bottle.redirect("/")
 
 def run_nightlies(conf):

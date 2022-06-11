@@ -14,13 +14,13 @@ form.inline { display: inline; }
 %if current:
 <div class="status">
   <div>
-    <form action="/logs/{{current_log}}" method="get" class="inline">
+    <form action="/logs/{{Path(current['log']).name}}" method="get" class="inline">
       <button>View log</button>
     </form>
     <form action="/kill" method="post" class="inline">
       <button>Kill</button>
     </form>
-    Nightly running
+    Nightly {{ "" if running else "was" }} running
     for {{format_time((datetime.now() - datetime.fromisoformat(current["start"])).total_seconds())}}
     on PID <kbd>{{current["pid"]}}</kbd>.
   </div>
@@ -34,13 +34,21 @@ form.inline { display: inline; }
       <button>Kill</button>
     </form> 
     %end
-    Currently
+    {{ "Currently" if running else "Was" }}
     %if "branch" in current:
     running <kbd>{{current['branch']}}</kbd> branch
     %else:
     downloading branches
     %end
     for <kbd>{{current["repo"]}}</kbd> repository.
+  </div>
+  %end
+  %if not running:
+  <div>
+    <form action="/delete_pid" method="pos" class="inline">
+      <button>Delete lockfile</button>
+    </form> 
+    Nightly seems dead (PID not found).
   </div>
   %end
 </div>
