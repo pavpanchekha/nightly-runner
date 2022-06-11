@@ -2,6 +2,7 @@
 <title>Nightly runs</title>
 
 % from datetime import datetime, timedelta
+% import pathlib
 % from nightlies import format_time
 % disabled = "disabled" if current else ""
 
