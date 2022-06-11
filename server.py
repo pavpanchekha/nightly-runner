@@ -35,12 +35,13 @@ def index():
             if fn in repo.ignored_files: continue
             repo.branches[fn.name] = nightlies.Branch(repo, fn.name)
 
+    running = False
     if current_process and "pid" in current_process:
         try:
             # Does not actually kill, but does check if pid exists
             os.kill(current_process["pid"], 0)
         except OSError:
-            running = False
+            pass
         else:
             running = True
 
