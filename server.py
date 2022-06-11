@@ -37,7 +37,8 @@ def index():
 
     if "pid" in current_process:
         try:
-            os.kill(current["pid"], 0) # Does not actually kill, but does check if pid exists
+            # Does not actually kill, but does check if pid exists
+            os.kill(current_process["pid"], 0)
         except OSError:
             running = False
         else:
