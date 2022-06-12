@@ -57,9 +57,7 @@ def dryrun():
     
 @bottle.post("/fullrun")
 def fullrun():
-    runner = nightlies.NightlyRunner("nightlies.conf", None)
-    runner.load()
-    run_nightlies(runner.config)
+    run_nightlies()
     bottle.redirect("/")
     
 @bottle.post("/runnow")
@@ -130,12 +128,16 @@ def delete_pid():
         runner.pid_file.unlink()
     bottle.redirect("/")
 
-def run_nightlies(conf):
-    with tempfile.NamedTemporaryFile(prefix="nightlies-", mode="wt", delete=False) as f:
-        conf.write(f)
+def run_nightlies(conf=None):
+    if conf:
+        with tempfile.NamedTemporaryFile(prefix="nightlies-", mode="wt", delete=False) as f:
+            conf.write(f)
+            fn = f.name
+    else:
+        fn = "nightlies.conf"
     RUNNING_NIGHTLIES.append(
         subprocess.Popen(
-            [sys.executable, nightlies.__file__, f.name],
+            [sys.executable, nightlies.__file__, fn],
             cwd=os.path.dirname(nightlies.__file__)))
 
 if __name__ == "__main__":
