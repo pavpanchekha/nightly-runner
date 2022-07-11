@@ -23,7 +23,7 @@ def index():
         try:
             with runner.pid_file.open("r") as f:
                 current_process = json.load(f)
-        except OSError, json.decoder.JSONDecodeError:
+        except (OSError, json.decoder.JSONDecodeError):
             current_process = None
     else:
         current_process = None

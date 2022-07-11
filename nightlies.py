@@ -221,7 +221,7 @@ class NightlyRunner:
                     current_process = json.load(f)
                     self.log(0, f"Nightly already running on pid {current_process['pid']}")
                     return
-            except OSError, json.decoder.JSONDecodeError:
+            except (OSError, json.decoder.JSONDecodeError):
                 self.log(0, f"Nightly already running")
                 return
         else:
