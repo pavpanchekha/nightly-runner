@@ -52,6 +52,10 @@ def index():
         "baseurl": runner.base_url,
     }
 
+@bottle.route("/robots.txt")
+@bottle.view("robots.txt")
+def robots_txt(): pass
+
 @bottle.post("/dryrun")
 def dryrun():
     runner = nightlies.NightlyRunner("nightlies.conf", None)
