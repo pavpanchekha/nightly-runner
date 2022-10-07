@@ -167,9 +167,20 @@ fi
             pass
 
 class NightlyRunner:
-    def __init__(self, config_file : Union[str, Path], NR : NightlyResults):
+    def __init__(self, config_file : str, NR : NightlyResults):
         self.config_file = config_file
         self.NR = NR
+        self.is_dirty = False
+
+    def update_system_repo(self, dir):
+        self.log(1, f"Updating system {dir} repository")
+        conf_commit = self.exec(2, ["git", "-C", dir, "rev-parse", "origin/main"]).stdout
+        self.exec(2, ["git", "-C", dir, "fetch", "origin", "--prune"])
+        self.exec(2, ["git", "-C", dir, "reset", "--hard", "origin/main"])
+        conf_commit2 = self.exec(2, ["git", "-C", dir, "rev-parse", "origin/main"]).stdout
+        if conf_commit != conf_commit2:
+            self.log(1, f"System {dir} repository updated; will need to restart")
+            self.is_dirty = True
 
     def load(self):
         self.config = configparser.ConfigParser()
@@ -182,6 +193,11 @@ class NightlyRunner:
         self.log_dir = Path(defaults.get("logs", "logs")).resolve()
         self.dryrun = "dryrun" in defaults
         self.pid_file = Path(defaults.get("pid", "running.pid")).resolve()
+
+        if defaults.getboolean("pullconf", fallback=False):
+            self.update_system_repo(os.path.dirname(self.config_file))
+        if defaults.getboolean("pullself", fallback=False):
+            self.update_system_repo(".")
 
         for name in self.config.sections():
             self.repos.append(Repository(self, name, self.config[name]))
@@ -433,8 +449,12 @@ class Branch:
 
 if __name__ == "__main__":
     import sys
-    conf_file = sys.argv[1] if len(sys.argv) > 1 else "nightlies.conf"
+    conf_file = sys.argv[1] if len(sys.argv) > 1 else "conf/nightlies.conf"
     with NightlyResults() as NR:
         runner = NightlyRunner(conf_file, NR)
         runner.load()
+        if runner.is_dirty:
+            runner.log(0, "Restarting nightly run due to updated system repositories")
+            os.execv(sys.executable, sys.argv)
+            # No return, os.execv takes over this process
         runner.run()
