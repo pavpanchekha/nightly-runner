@@ -15,10 +15,10 @@ form.inline { display: inline; }
 %if current:
 <div class="status">
   <div>
-    <form action="/logs/{{Path(current['log']).name}}" method="get" class="inline">
+    <form action="{baseurl}/logs/{{Path(current['log']).name}}" method="get" class="inline">
       <button>View log</button>
     </form>
-    <form action="/kill" method="post" class="inline">
+    <form action="{baseurl}/kill" method="post" class="inline">
       <button>Kill</button>
     </form>
     Nightly {{ "" if running else "was" }} running
@@ -28,10 +28,10 @@ form.inline { display: inline; }
   %if "repo" in current:
   <div class="indent">
     %if "branch" in current:
-    <form action="/logs/{{current['branch_log']}}" method="get" class="inline">
+    <form action="{baseurl}/logs/{{current['branch_log']}}" method="get" class="inline">
       <button>View output</button>
     </form> 
-    <form action="/killbranch" method="post" class="inline">
+    <form action="{baseurl}/killbranch" method="post" class="inline">
       <button>Kill</button>
     </form> 
     %end
@@ -46,7 +46,7 @@ form.inline { display: inline; }
   %end
   %if not running:
   <div>
-    <form action="/delete_pid" method="post" class="inline">
+    <form action="{baseurl}/delete_pid" method="post" class="inline">
       <button>Delete lockfile</button>
     </form> 
     Nightly seems dead (PID not found).
@@ -60,17 +60,17 @@ form.inline { display: inline; }
 %end
 
 <div>
-  <form action="/logs/" method="get" class="inline">
+  <form action="{baseurl}/logs/" method="get" class="inline">
     <input type=hidden name=C value=M>
     <input type=hidden name=O value=D>
     <button>View logs</button>
   </form>
 
-  <form action="/dryrun" method="post" class="inline">
+  <form action="{baseurl}/dryrun" method="post" class="inline">
     <button {{disabled}} >Start a dry run</button>
   </form>
 
-  <form action="/fullrun" method="post" class="inline">
+  <form action="{baseurl}/fullrun" method="post" class="inline">
     <button {{disabled}} >Start a full run</button>
   </form>
 </div>
@@ -82,12 +82,12 @@ form.inline { display: inline; }
 <ul class="branches">
   %for branch in repo.branches.values():
     <li>
-      <form action="/runnow" method="post" class="inline">
+      <form action="{baseurl}/runnow" method="post" class="inline">
         <input type="hidden" name="repo" value="{{repo.name}}" />
         <input type="hidden" name="branch" value="{{branch.name}}" />
         <button {{disabled}}>Run now</button>
       </form>
-      <form action="/runnext" method="post" class="inline">
+      <form action="{baseurl}/runnext" method="post" class="inline">
         <input type="hidden" name="repo" value="{{repo.name}}" />
         <input type="hidden" name="branch" value="{{branch.name}}" />
         <button {{disabled}}>Run tonight</button>

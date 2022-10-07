@@ -45,7 +45,12 @@ def index():
         else:
             running = True
 
-    return { "runner": runner, "current": current_process, "running": running }
+    return {
+        "runner": runner,
+        "current": current_process,
+        "running": running,
+        "baseurl": runner.base_url,
+    }
 
 @bottle.post("/dryrun")
 def dryrun():
