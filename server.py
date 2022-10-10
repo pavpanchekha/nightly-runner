@@ -30,10 +30,11 @@ def index():
 
     for repo in runner.repos:
         repo.branches = {}
-        for fn in repo.dir.iterdir():
-            if not fn.is_dir(): continue
-            if fn in repo.ignored_files: continue
-            repo.branches[fn.name] = nightlies.Branch(repo, fn.name)
+        if repo.dir.is_dir():
+            for fn in repo.dir.iterdir():
+                if not fn.is_dir(): continue
+                if fn in repo.ignored_files: continue
+                repo.branches[fn.name] = nightlies.Branch(repo, fn.name)
 
     running = False
     if current_process and "pid" in current_process:
