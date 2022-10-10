@@ -194,13 +194,15 @@ class NightlyRunner:
         self.dryrun = "dryrun" in defaults
         self.pid_file = Path(defaults.get("pid", "running.pid")).resolve()
 
-        if defaults.getboolean("pullconf", fallback=False):
-            self.update_system_repo(os.path.dirname(self.config_file))
-        if defaults.getboolean("pullself", fallback=False):
-            self.update_system_repo(".")
-
         for name in self.config.sections():
             self.repos.append(Repository(self, name, self.config[name]))
+
+    def update(self):
+        if self.config.getboolean(None, "pullconf", fallback=False):
+            self.update_system_repo(os.path.dirname(self.config_file))
+        if self.config.getboolean(None, "pullself", fallback=False):
+            self.update_system_repo(".")
+        return self.is_dirty
 
     def exec(self, level : int, cmd : List[Union[str, Path]]):
         cmd2 = [str(arg) for arg in cmd]
@@ -453,7 +455,7 @@ if __name__ == "__main__":
     with NightlyResults() as NR:
         runner = NightlyRunner(conf_file, NR)
         runner.load()
-        if runner.is_dirty:
+        if runner.update():
             runner.log(0, "Restarting nightly run due to updated system repositories")
             os.execv(sys.executable, sys.argv)
             # No return, os.execv takes over this process
