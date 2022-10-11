@@ -16,7 +16,7 @@ RUNNING_NIGHTLIES = []
 @bottle.route("/")
 @bottle.view("index.view")
 def index():
-    runner = nightlies.NightlyRunner("nightlies.conf", None)
+    runner = nightlies.NightlyRunner("conf/nightlies.conf", None)
     runner.load()
 
     if runner.pid_file.exists():
@@ -59,7 +59,7 @@ def robots_txt(): pass
 
 @bottle.post("/dryrun")
 def dryrun():
-    runner = nightlies.NightlyRunner("nightlies.conf", None)
+    runner = nightlies.NightlyRunner("conf/nightlies.conf", None)
     runner.load()
     runner.config["DEFAULT"]["dryrun"] = "true"
     run_nightlies(runner.config)
@@ -74,7 +74,7 @@ def fullrun():
 def runnow():
     repo = bottle.request.forms.get('repo')
     branch = bottle.request.forms.get('branch')
-    runner = nightlies.NightlyRunner("nightlies.conf", None)
+    runner = nightlies.NightlyRunner("conf/nightlies.conf", None)
     runner.load()
     for section in runner.config.sections():
         if repo == section or section.endswith("/" + repo):
@@ -89,7 +89,7 @@ def runnow():
 def runnext():
     repo_name = bottle.request.forms.get('repo')
     branch = bottle.request.forms.get('branch')
-    runner = nightlies.NightlyRunner("nightlies.conf", None)
+    runner = nightlies.NightlyRunner("conf/nightlies.conf", None)
     runner.load()
     for repo in runner.repos:
         if repo.name == repo_name:
@@ -101,7 +101,7 @@ def runnext():
 
 @bottle.post("/kill")
 def kill():
-    runner = nightlies.NightlyRunner("nightlies.conf", None)
+    runner = nightlies.NightlyRunner("conf/nightlies.conf", None)
     runner.load()
     if runner.pid_file.exists():
         try:
@@ -117,7 +117,7 @@ def kill():
 
 @bottle.post("/killbranch")
 def killbranch():
-    runner = nightlies.NightlyRunner("nightlies.conf", None)
+    runner = nightlies.NightlyRunner("conf/nightlies.conf", None)
     runner.load()
     if runner.pid_file.exists():
         try:
@@ -132,7 +132,7 @@ def killbranch():
     
 @bottle.post("/delete_pid")
 def delete_pid():
-    runner = nightlies.NightlyRunner("nightlies.conf", None)
+    runner = nightlies.NightlyRunner("conf/nightlies.conf", None)
     runner.load()
     if runner.pid_file.exists():
         runner.pid_file.unlink()
@@ -144,7 +144,7 @@ def run_nightlies(conf=None):
             conf.write(f)
             fn = f.name
     else:
-        fn = "nightlies.conf"
+        fn = "conf/nightlies.conf"
     RUNNING_NIGHTLIES.append(
         subprocess.Popen(
             [sys.executable, nightlies.__file__, fn],
