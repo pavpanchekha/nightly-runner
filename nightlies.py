@@ -183,13 +183,14 @@ class NightlyRunner:
             self.is_dirty = True
 
     def load(self):
+        assert self.config_file.is_file(), f"Configuration file {self.config_file} is not a file"
         self.config = configparser.ConfigParser()
         self.config.read(self.config_file)
         self.repos = []
 
         defaults = self.config.defaults()
         self.base_url = defaults.get("baseurl")
-        if not self.base_url.endswith("/"): self.base_url += "/"
+        if self.base_url and not self.base_url.endswith("/"): self.base_url += "/"
         self.log_dir = Path(defaults.get("logs", "logs")).resolve()
         self.dryrun = "dryrun" in defaults
         self.pid_file = Path(defaults.get("pid", "running.pid")).resolve()
