@@ -168,7 +168,7 @@ fi
 
 class NightlyRunner:
     def __init__(self, config_file : str, NR : NightlyResults):
-        self.config_file = pathlib.Path(config_file)
+        self.config_file = Path(config_file)
         self.NR = NR
         self.is_dirty = False
 
