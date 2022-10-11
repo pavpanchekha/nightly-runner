@@ -2,3 +2,5 @@ nightlies.conf
 bottle.py
 logs/
 running.pid
+passwords
+conf/
