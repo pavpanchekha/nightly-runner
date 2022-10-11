@@ -168,7 +168,7 @@ fi
 
 class NightlyRunner:
     def __init__(self, config_file : str, NR : NightlyResults):
-        self.config_file = config_file
+        self.config_file = pathlib.Path(config_file)
         self.NR = NR
         self.is_dirty = False
 
@@ -185,7 +185,7 @@ class NightlyRunner:
     def load(self):
         assert self.config_file.is_file(), f"Configuration file {self.config_file} is not a file"
         self.config = configparser.ConfigParser()
-        self.config.read(self.config_file)
+        self.config.read(str(self.config_file))
         self.repos = []
 
         defaults = self.config.defaults()
