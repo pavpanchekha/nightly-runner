@@ -228,6 +228,11 @@ class NightlyRunner:
         self.log(0, f"Nightly script starting up at {self.start:%H:%M}")
         self.log(0, f"Loaded configuration file {self.config_file}")
 
+        if runner.update():
+            runner.log(0, "Restarting nightly run due to updated system repositories")
+            os.execv(sys.executable, sys.argv)
+            # No return, os.execv takes over this process
+
         self.data = {
             "pid": os.getpid(),
             "start": self.start.isoformat(),
@@ -459,8 +464,4 @@ if __name__ == "__main__":
     with NightlyResults() as NR:
         runner = NightlyRunner(conf_file, NR)
         runner.load()
-        if runner.update():
-            runner.log(0, "Restarting nightly run due to updated system repositories")
-            os.execv(sys.executable, sys.argv)
-            # No return, os.execv takes over this process
         runner.run()
