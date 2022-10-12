@@ -185,6 +185,8 @@ class NightlyRunner:
         dirty = conf_commit != conf_commit2
         if dirty:
             self.log(1, f"System {dir} repository updated; will need to restart")
+        else:
+            self.log(1, f"System {dir} repository up to date")
         return dirty
 
     def load(self):
