@@ -178,9 +178,10 @@ class NightlyRunner:
         self.exec(2, ["git", "-C", dir, "fetch", "origin", "--prune"])
         self.exec(2, ["git", "-C", dir, "reset", "--hard", "origin/main"])
         conf_commit2 = self.exec(2, ["git", "-C", dir, "rev-parse", "origin/main"]).stdout
-        if conf_commit != conf_commit2:
+        dirty = conf_commit != conf_commit2:
+        if dirty:
             self.log(1, f"System {dir} repository updated; will need to restart")
-            self.is_dirty = True
+        return dirty
 
     def load(self):
         assert self.config_file.is_file(), f"Configuration file {self.config_file} is not a file"
@@ -199,11 +200,13 @@ class NightlyRunner:
             self.repos.append(Repository(self, name, self.config[name]))
 
     def update(self):
-        if self.config.getboolean(None, "pullconf", fallback=False):
-            self.update_system_repo(os.path.dirname(self.config_file))
-        if self.config.getboolean(None, "pullself", fallback=False):
-            self.update_system_repo(".")
-        return self.is_dirty
+        dirty = False
+        if self.config.getboolean("DEFAULT", "pullconf", fallback=False):
+            conf_dir = os.path.dirname(self.config_file)
+            dirty = dirty or self.update_system_repo(conf_dir)
+        if self.config.getboolean("DEFAULT", "pullself", fallback=False):
+            dirty = dirty or self.update_system_repo(".")
+        return dirty
 
     def exec(self, level : int, cmd : List[Union[str, Path]]):
         cmd2 = [str(arg) for arg in cmd]
