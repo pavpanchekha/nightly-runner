@@ -230,7 +230,7 @@ class NightlyRunner:
 
         if runner.update():
             runner.log(0, "Restarting nightly run due to updated system repositories")
-            os.execv(sys.executable, sys.argv)
+            os.execv(sys.executable, ["python3"] + sys.argv)
             # No return, os.execv takes over this process
 
         self.data = {
