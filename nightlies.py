@@ -178,7 +178,7 @@ class NightlyRunner:
         self.exec(2, ["git", "-C", dir, "fetch", "origin", "--prune"])
         self.exec(2, ["git", "-C", dir, "reset", "--hard", "origin/main"])
         conf_commit2 = self.exec(2, ["git", "-C", dir, "rev-parse", "origin/main"]).stdout
-        dirty = conf_commit != conf_commit2:
+        dirty = conf_commit != conf_commit2
         if dirty:
             self.log(1, f"System {dir} repository updated; will need to restart")
         return dirty
