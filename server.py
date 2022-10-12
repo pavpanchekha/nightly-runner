@@ -142,6 +142,7 @@ def delete_pid():
 
 def run_nightlies(conf=None):
     if conf:
+        conf.set("DEFAULT", "conffile", Path(CONF_FILE).resolve())
         with tempfile.NamedTemporaryFile(prefix="nightlies-", mode="wt", delete=False) as f:
             conf.write(f)
             fn = f.name

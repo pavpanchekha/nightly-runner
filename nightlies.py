@@ -195,6 +195,7 @@ class NightlyRunner:
         self.log_dir = Path(defaults.get("logs", "logs")).resolve()
         self.dryrun = "dryrun" in defaults
         self.pid_file = Path(defaults.get("pid", "running.pid")).resolve()
+        self.config_file = Path(defaults.get("conffile", str(self.config_file))).resolve()
 
         for name in self.config.sections():
             self.repos.append(Repository(self, name, self.config[name]))
