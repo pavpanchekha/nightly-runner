@@ -174,10 +174,14 @@ class NightlyRunner:
 
     def update_system_repo(self, dir):
         self.log(1, f"Updating system {dir} repository")
-        conf_commit = self.exec(2, ["git", "-C", dir, "rev-parse", "origin/main"]).stdout
-        self.exec(2, ["git", "-C", dir, "fetch", "origin", "--prune"])
-        self.exec(2, ["git", "-C", dir, "reset", "--hard", "origin/main"])
-        conf_commit2 = self.exec(2, ["git", "-C", dir, "rev-parse", "origin/main"]).stdout
+        try:
+            conf_commit = self.exec(2, ["git", "-C", dir, "rev-parse", "origin/main"]).stdout
+            self.exec(2, ["git", "-C", dir, "fetch", "origin", "--prune"])
+            self.exec(2, ["git", "-C", dir, "reset", "--hard", "origin/main"])
+            conf_commit2 = self.exec(2, ["git", "-C", dir, "rev-parse", "origin/main"]).stdout
+        except subprocess.CalledProcessError as e:
+            self.log(0, f"Process {e.cmd} returned error code {e.returncode}")
+            os.exit(1)
         dirty = conf_commit != conf_commit2
         if dirty:
             self.log(1, f"System {dir} repository updated; will need to restart")
