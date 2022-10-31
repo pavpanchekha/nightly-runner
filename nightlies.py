@@ -212,7 +212,6 @@ class NightlyRunner:
         if self.config.getboolean("DEFAULT", "pullconf", fallback=False):
             conf_dir = os.path.dirname(self.config_file)
             if self.update_system_repo(conf_dir): self.restart()
-        return dirty
 
     def restart(self):
         self.log(0, "Restarting nightly run due to updated system repositories")
