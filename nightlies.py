@@ -182,12 +182,12 @@ class NightlyRunner:
         except subprocess.CalledProcessError as e:
             self.log(0, f"Process {e.cmd} returned error code {e.returncode}")
             os.exit(1)
-        dirty = conf_commit != conf_commit2
-        if dirty:
-            self.log(1, f"System {dir} repository updated; will need to restart")
-        else:
+        if conf_commit == conf_commit2:
             self.log(1, f"System {dir} repository up to date")
-        return dirty
+            return False
+        else:
+            self.log(1, f"System {dir} repository updated; will need to restart")
+            return True
 
     def load(self):
         assert self.config_file.is_file(), f"Configuration file {self.config_file} is not a file"
@@ -207,13 +207,16 @@ class NightlyRunner:
             self.repos.append(Repository(self, name, self.config[name]))
 
     def update(self):
-        dirty = False
+        if self.config.getboolean("DEFAULT", "pullself", fallback=False):
+            if self.update_system_repo("."): self.restart()
         if self.config.getboolean("DEFAULT", "pullconf", fallback=False):
             conf_dir = os.path.dirname(self.config_file)
-            dirty = dirty or self.update_system_repo(conf_dir)
-        if self.config.getboolean("DEFAULT", "pullself", fallback=False):
-            dirty = dirty or self.update_system_repo(".")
+            if self.update_system_repo(conf_dir): self.restart()
         return dirty
+
+    def restart(self):
+        self.log(0, "Restarting nightly run due to updated system repositories")
+        os.execv(sys.executable, ["python3"] + sys.argv)
 
     def exec(self, level : int, cmd : List[Union[str, Path]]):
         cmd2 = [str(arg) for arg in cmd]
@@ -234,11 +237,7 @@ class NightlyRunner:
         self.log_path = self.log_dir / name
         self.log(0, f"Nightly script starting up at {self.start:%H:%M}")
         self.log(0, f"Loaded configuration file {self.config_file}")
-
-        if runner.update():
-            runner.log(0, "Restarting nightly run due to updated system repositories")
-            os.execv(sys.executable, ["python3"] + sys.argv)
-            # No return, os.execv takes over this process
+        self.update()
 
         self.data = {
             "pid": os.getpid(),
