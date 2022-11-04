@@ -41,6 +41,9 @@ def format_time(ts : float) -> str:
         return f"{t/60:.1f}m"
     else:
         return f"{t/60/60:.1f}h"
+    
+def format_cmd(s : list[Any]) -> str:
+    return shlex.join([str(part) for part in s])
 
 def parse_time(to : Union[str, None]) -> Union[float, None]:
     if to is None: return to
@@ -115,10 +118,11 @@ def build_slack_blocks(name : str, runs : Dict[str, Dict[str, Any]], baseurl : s
     
 def build_slack_fatal(name : str, text : str, baseurl : str):
     return {
-        "text": f"Fatal error running nightlies for {name}", "blocks":{
+        "text": f"Fatal error running nightlies for {name}",
+        "blocks": [{
             "type": "section",
             "text": { "type": "mrkdwn", "text": text },
-        }
+        }]
     }
 
 class NightlyResults:
@@ -180,7 +184,7 @@ class NightlyRunner:
             self.exec(2, ["git", "-C", dir, "reset", "--hard", "origin/main"])
             conf_commit2 = self.exec(2, ["git", "-C", dir, "rev-parse", "origin/main"]).stdout
         except subprocess.CalledProcessError as e:
-            self.log(0, f"Process {e.cmd} returned error code {e.returncode}")
+            self.log(0, f"Process {format_cmd(e.cmd)} returned error code {e.returncode}")
             os.exit(1)
         if conf_commit == conf_commit2:
             self.log(1, f"System {dir} repository up to date")
@@ -218,8 +222,7 @@ class NightlyRunner:
         os.execv(sys.executable, ["python3"] + sys.argv)
 
     def exec(self, level : int, cmd : List[Union[str, Path]]):
-        cmd2 = [str(arg) for arg in cmd]
-        self.log(level, "Executing " + " ".join([shlex.quote(arg) for arg in cmd2]))
+        self.log(level, f"Executing {format_cmd(cmd)}")
         return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
 
     def log(self, level : int, s : str):
@@ -275,8 +278,8 @@ class NightlyRunner:
                 repo.filter()
                 repo.run()
             except subprocess.CalledProcessError as e :
-                repo.fatalerror = f"Process {e.cmd} returned error code {e.returncode}"
-                self.log(0, repo.fatalerror)
+                repo.fatalerror = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
+                self.log(1, repo.fatalerror)
             finally:
                 repo.post()
                 self.log(0, f"Finished nightly run for {repo.name}")
@@ -428,7 +431,7 @@ class Branch:
         try:
             to = parse_time(self.repo.config.get("timeout"))
             cmd = ["nice", "make", "-C", str(self.dir), "nightly"]
-            self.repo.runner.log(2, f"Executing nice make -C {shlex.quote(str(self.dir))} nightly")
+            self.repo.runner.log(2, f"Executing {format_cmd(cmd)}")
             if not self.repo.runner.dryrun:
                 with (self.repo.runner.log_dir / log_name).open("wt") as fd:
                     process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT)
