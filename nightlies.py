@@ -277,7 +277,7 @@ class NightlyRunner:
                 repo.load()
                 repo.filter()
                 repo.run()
-            except subprocess.CalledProcessError as e :
+            except subprocess.CalledProcessError as e:
                 repo.fatalerror = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
                 self.log(1, repo.fatalerror)
             finally:
@@ -295,6 +295,7 @@ class Repository:
         self.config = configuration
 
         self.slack_url = configuration.get("slack")
+        self.run_all = False
 
         if "url" in self.config:
             self.url = self.config["url"]
@@ -312,6 +313,13 @@ class Repository:
     def load(self):
         self.runner.log(0, "Beginning nightly run for " + self.name)
         self.dir.mkdir(parents=True, exist_ok=True)
+
+        apt_pkgs = self.config.get("apt", "").split()
+        if apt_pkgs:
+            updates = apt.check_updates(self.runner, apt_pkgs)
+            if updates:
+                apt.install(self.runner, apt_pkgs)
+                self.run_all = True
 
         default_branch = Branch(self, self.config.get("main", "main"))
         self.runner.log(1, f"Fetching default branch {default_branch.name}")
@@ -348,6 +356,10 @@ class Repository:
             self.branches[branch_name] = branch
 
     def filter(self):
+        if self.run_all:
+            self.runnable = self.branches.values()
+            return
+
         self.runner.log(1, "Filtering branches " + ", ".join(self.branches))
         self.runnable = [branch for name, branch in self.branches.items() if branch.check()]
         for branch_name in self.config.get("baseline", "").split():
@@ -379,6 +391,9 @@ class Repository:
         else:
             runs = { branch.name : branch.info for branch in self.runnable if branch.info }
             data = build_slack_blocks(self.name, runs, self.runner.base_url)
+
+        if self.run_all:
+            data.blocks = apt.post() + data.blocks
 
         if not self.runner.dryrun and data:
             self.runner.log(2, f"Posting results of {self.name} run to slack!")
