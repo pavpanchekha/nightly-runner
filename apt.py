@@ -1,6 +1,7 @@
 import nightlies
 import subprocess
 import re
+import shlex
 import slack
 
 APT_LINE_RE = re.compile(r"^(\d+) upgraded, (\d+) newly installed, (\d+) to remove and (\d+) not upgraded\.$", re.MULTILINE)
