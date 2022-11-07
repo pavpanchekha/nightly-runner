@@ -296,14 +296,12 @@ class Repository:
             self.runner.log(2, f"Not posting to slack, slack or baseurl not configured")
             return
 
-        runs = { branch.name : branch.info for branch in self.runnable if branch.info }
-
         if self.fatalerror:
             data = slack.build_fatal(self.name, self.fatalerror, self.runner.base_url)
-        elif runs:
-            data = slack.build_runs(self.name, runs, self.runner.base_url)
         else:
-            return
+            runs = { branch.name : branch.info for branch in self.runnable if branch.info }
+            if not runs: return
+            data = slack.build_runs(self.name, runs, self.runner.base_url)
 
         if self.run_all:
             apt.post(data)
