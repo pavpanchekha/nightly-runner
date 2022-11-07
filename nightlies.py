@@ -225,7 +225,7 @@ class Repository:
 
         apt_pkgs = self.config.get("apt", "").split()
         print(self.config.get("apt", ""), apt_pkgs)
-        if apt_pkgs and not self.dryrun:
+        if apt_pkgs and not self.runner.dryrun:
             updates = apt.check_updates(self.runner, apt_pkgs)
             if updates:
                 apt.install(self.runner, apt_pkgs)
