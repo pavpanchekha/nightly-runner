@@ -11,7 +11,7 @@ def check_updates(runner, pkgs):
     res = runner.exec(2, ["sudo", "apt", "install", "-s"] + pkgs)
 
     # Parse the `apt` output, ugh
-    match = APT_LINE_RE.search(res.stdout)
+    match = APT_LINE_RE.search(res.stdout.decode("latin1"))
     if not match:
         raise IOError("apt: Could not find package line in `apt` results")
 
