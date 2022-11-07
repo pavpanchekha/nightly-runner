@@ -225,11 +225,11 @@ class Repository:
 
         apt_pkgs = self.config.get("apt", "").split()
         print(self.config.get("apt", ""), apt_pkgs)
-        if apt_pkgs and not self.runner.dryrun:
+        if apt_pkgs:
             updates = apt.check_updates(self.runner, apt_pkgs)
-            if updates:
+            if updates and not self.runner.dryrun:
                 apt.install(self.runner, apt_pkgs)
-                self.run_all = True
+            self.run_all = True
 
         default_branch = Branch(self, self.config.get("main", "main"))
         self.runner.log(1, f"Fetching default branch {default_branch.name}")
