@@ -317,6 +317,7 @@ class Branch:
         self.filename = self.name.replace(":", "::").replace("/", ":")
         self.dir = self.repo.dir / self.filename
         self.lastcommit = self.repo.dir / (self.filename + ".last-commit")
+        self.info = None
 
     def load(self):
         if not self.dir.is_dir():
