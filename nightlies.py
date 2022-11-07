@@ -9,6 +9,7 @@ import configparser
 import json
 import tempfile
 import shlex, shutil
+import slack, apt
 
 def format_time(ts : float) -> str:
     t = float(ts)
