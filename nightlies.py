@@ -10,29 +10,6 @@ import json
 import tempfile
 import shlex, shutil
 
-def parse_log_name(fn):
-    if fn.endswith(".gz"): fn = fn[:-len(".gz")]
-    assert fn.endswith(".log")
-    fn = fn[:-len(".log")]
-
-    if fn.count("-") >= 3:
-        y, m, d, hms = fn.split("-", 3)
-        if hms[:6].isdigit():
-            h, mm, s, rest = hms[:2], hms[2:4], hms[4:6], hms[7:]
-        else:
-            rest = hms
-            h, mm, s = 0, 0, 0
-    else:
-        y, m, d = fn.split("-")
-        h, mm, s = 0, 0, 0
-        rest = ""
-    when = datetime(int(y), int(m), int(d), int(h), int(mm), int(s))
-    if "-" in rest:
-        name, branch = rest.split("-", 1)
-        return when, name, branch
-    else:
-        return when,
-
 def format_time(ts : float) -> str:
     t = float(ts)
     if t < 120:
@@ -56,74 +33,6 @@ def parse_time(to : Union[str, None]) -> Union[float, None]:
         if to.endswith(unit):
             return float(to[:-len(unit)]) * multiplier
     return float(to)
-
-def build_slack_blocks(name : str, runs : Dict[str, Dict[str, Any]], baseurl : str):
-    blocks = []
-    for branch, info in runs.items():
-        result = info["result"]
-        time = info["time"]
-        text = f"Branch `{branch}` of `{name}` was a {result} in {time}"
-        if "emoji" in info:
-            text += " " + info["emoji"]
-
-        block : Dict[str, Any] = {
-            "type": "section",
-            "text": { "type": "mrkdwn", "text": text },
-        }
-        if "success" != result:
-            file = os.path.basename(info["file"])
-            block["accessory"] = {
-                "type": "button",
-                "text": {
-                    "type": "plain_text",
-                    "text": "Error Log",
-                },
-                "url": baseurl + "logs/" + file,
-                "style": "primary",
-            }
-        elif "url" in info:
-            block["accessory"] = {
-                "type": "button",
-                "text": {
-                    "type": "plain_text",
-                    "text": "View Report",
-                },
-                "url": info["url"]
-            }
-        fields = []
-        for k, v in info.items():
-            if k in ["url", "emoji", "result", "time", "img", "file"]: continue
-            fields.append({
-                "type": "mrkdwn",
-                "text": "*" + k.title() + "*",
-            })
-            fields.append({
-                "type": "mrkdwn",
-            "text": v,
-            })
-        if fields:
-            block["fields"] = fields
-        blocks.append(block)
-        if "img" in info:
-            url, *alttext = info["img"].split(" ")
-            blocks.append({
-                "type": "image",
-                "image_url": url,
-                "alt_text": " ".join(alttext) or f"Image for {name} branch {branch}",
-            })
-    if blocks:
-        return { "text": f"Nightly data for {name}", "blocks": blocks }
-    else:
-        return None
-    
-def build_slack_fatal(name : str, text : str, baseurl : str):
-    return {
-        "text": f"Fatal error running nightlies for {name}",
-        "blocks": [{
-            "type": "section",
-            "text": { "type": "mrkdwn", "text": text },
-        }]
-    }
 
 class NightlyResults:
     def __enter__(self):
@@ -386,27 +295,20 @@ class Repository:
             self.runner.log(2, f"Not posting to slack, slack or baseurl not configured")
             return
 
+        runs = { branch.name : branch.info for branch in self.runnable if branch.info }
+
         if self.fatalerror:
-            data = build_slack_fatal(self.name, self.fatalerror, self.runner.base_url)
+            data = slack.build_fatal(self.name, self.fatalerror, self.runner.base_url)
+        elif runs:
+            data = slack.build_runs(self.name, runs, self.runner.base_url)
         else:
-            runs = { branch.name : branch.info for branch in self.runnable if branch.info }
-            data = build_slack_blocks(self.name, runs, self.runner.base_url)
+            return
 
         if self.run_all:
-            data.blocks = apt.post() + data.blocks
+            apt.post(data)
 
-        if not self.runner.dryrun and data:
-            self.runner.log(2, f"Posting results of {self.name} run to slack!")
-            payload = json.dumps(data)
-            req = urllib.request.Request(self.slack_url, data=payload.encode("utf8"), method="POST")
-            req.add_header("Content-Type", "application/json; charset=utf8")
-            try:
-                with urllib.request.urlopen(req, timeout=10) as response:
-                    self.runner.log(2, f"Slack returned response {response.status} {response.reason}, because {response.read()}")
-            except urllib.error.HTTPError as exc:
-                reason = exc.read().decode('utf-8')
-                self.runner.log(2, f"Slack error: {exc.code} {exc.reason}, because {reason}")
-                self.runner.log(2, payload)
+        if not self.runner.dryrun:
+            slack.send(self.runner, self.slack_url, data)
 
 class Branch:
     def __init__(self, repo : Repository, name : str):

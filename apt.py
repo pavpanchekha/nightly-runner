@@ -1,6 +1,7 @@
 import nightlies
 import subprocess
 import re
+import slack
 
 APT_LINE_RE = re.compile(r"^(\d+) upgraded, (\d+) newly installed, (\d+) to remove and (\d+) not upgraded\.$", re.MULTILINE)
 
@@ -20,11 +21,6 @@ def install(runner, pkgs):
     runner.log(1, f"Installing apt packages {shlex.join(pkgs)}")
     runner.exec(2, ["sudo", "apt", "install"] + pkgs)
 
-def post(self):
-    return [{
-        "type": "section",
-        "text": {
-            "type": "markdwn",
-            "text": "`apt`: Reran all branches because a package updated",
-        },
-    }]
+def post(self, res):
+    res.add(TextBlock("`apt`: Reran all branches because a package updated"))
+
