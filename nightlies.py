@@ -4,7 +4,6 @@ from typing import Dict, Any, List, Union
 import os, sys, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
-import urllib.request, urllib.error
 import configparser
 import json
 import tempfile
