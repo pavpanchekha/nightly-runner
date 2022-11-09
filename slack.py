@@ -15,7 +15,7 @@ class Response:
     def to_json(self):
         return {
             "text": self.text,
-            "blocks": self.blocks,
+            "blocks": [block.to_json() for block in self.blocks],
         }
 
     def add(self, block : Block):

@@ -97,7 +97,7 @@ def runnext():
         if repo.name == repo_name:
             try:
                 nightlies.Branch(repo, branch).lastcommit.unlink()
-            except FileNotFound:
+            except FileNotFoundError:
                 pass
     bottle.redirect("/")
 
