@@ -25,7 +25,7 @@ class Response:
 class TextBlock(Block):
     def __init__(self, text):
         self.text = text
-        self.accesorry = None
+        self.accessory = None
 
     def to_json(self):
         block = {
