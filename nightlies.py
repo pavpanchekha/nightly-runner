@@ -282,6 +282,11 @@ class Repository:
             if branch not in self.runnable:
                 self.runner.log(2, f"Adding always run on branch {branch.name}")
                 self.runnable.append(branch)
+        for branch_name in self.config.get("never", "").split():
+            branch = self.branches[branch_name]
+            if branch in self.runnable:
+                self.runner.log(2, f"Remove never run on branch {branch.name}")
+                self.runnable.remove(branch)
 
     def run(self):
         if self.runnable:
