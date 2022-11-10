@@ -141,7 +141,7 @@ def send(runner, url: str, res: Response):
     runner.log(2, f"Posting results of run to slack!")
 
     payload = json.dumps(res.to_json()).encode("utf8")
-    req = urllib.request.Request(self.slack_url, data=payload, method="POST")
+    req = urllib.request.Request(runner.slack_url, data=payload, method="POST")
     req.add_header("Content-Type", "application/json; charset=utf8")
 
     try:
