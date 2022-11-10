@@ -312,7 +312,7 @@ class Repository:
             apt.post(data)
 
         if not self.runner.dryrun:
-            slack.send(self, self.slack_url, data)
+            slack.send(self.runner, self.slack_url, data)
 
 class Branch:
     def __init__(self, repo : Repository, name : str):
