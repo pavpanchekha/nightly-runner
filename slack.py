@@ -30,7 +30,7 @@ class TextBlock(Block):
     def to_json(self):
         block = {
             "type": "section",
-            "text": { "type": "mrkdwn", "text": text },
+            "text": { "type": "mrkdwn", "text": self.text },
         }
         if self.accessory:
             block["accessory"] = self.accessory.to_json()
