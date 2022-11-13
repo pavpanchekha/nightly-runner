@@ -3,22 +3,24 @@ import os
 import json
 import urllib.request, urllib.error
 
-class Block: pass
+class Block:
+    def to_json(self) -> dict[str, Any]:
+        raise NotImplemented
 
 class Accessory: pass
 
 class Response:
     def __init__(self, text: str):
         self.text = text
-        self.blocks = []
+        self.blocks : list[Block] = []
 
-    def to_json(self):
+    def to_json(self) -> dict[str, Any]:
         return {
             "text": self.text,
             "blocks": [block.to_json() for block in self.blocks],
         }
 
-    def add(self, block : Block):
+    def add(self, block : Block) -> None:
         assert isinstance(block, Block), "Can only add Blocks to Response"
         self.blocks.append(block)
 
@@ -27,7 +29,7 @@ class TextBlock(Block):
         self.text = text
         self.accessory = None
 
-    def to_json(self):
+    def to_json(self) -> dict[str, Any]:
         block = {
             "type": "section",
             "text": { "type": "mrkdwn", "text": self.text },
@@ -36,7 +38,7 @@ class TextBlock(Block):
             block["accessory"] = self.accessory.to_json()
         return block
 
-    def add(self, accessory: Accessory):
+    def add(self, accessory: Accessory) -> None:
         assert isinstance(accessory, Accessory), "Can only add Accessories to Blocks"
         assert not self.accessory, "This Block already has an Accessory"
         self.accessory = accessory
@@ -45,7 +47,7 @@ class Fields(Block):
     def __init__(self, fields : Dict[str, str]):
         self.fields = fields
 
-    def to_json(self):
+    def to_json(self) -> dict[str, Any]:
         fields = []
         for k, v in self.fields.items():
             fields.append({
@@ -68,7 +70,7 @@ class Image(Block):
         self.text = text
         self.url = url
 
-    def to_json(self):
+    def to_json(self) -> dict[str, Any]:
         return {
             "type": "image",
             "image_url": self.url,
@@ -84,7 +86,7 @@ class Button(Accessory):
         self.url = url
         self.style = style
 
-    def to_json(self):
+    def to_json(self) -> dict[str, Any]:
         accessory = {
             "type": "button",
             "text": {
@@ -97,7 +99,7 @@ class Button(Accessory):
             accessory["style"] = self.style
         return accessory
 
-def build_runs(name : str, runs : Dict[str, Dict[str, Any]], baseurl : str):
+def build_runs(name : str, runs : Dict[str, Dict[str, str]], baseurl : str) -> Response:
     res = Response(f"Nightly data for {name}")
     for branch, info in runs.items():
         result = info["result"]
@@ -128,16 +130,16 @@ def build_runs(name : str, runs : Dict[str, Dict[str, Any]], baseurl : str):
         if "img" in info:
             url, *alttext = info["img"].split(" ")
             text = " ".join(alttext) or f"Image for {name} branch {branch}"
-            block = Image(text, url)
-            res.add(block)
+            img = Image(text, url)
+            res.add(img)
     return res
     
-def build_fatal(name : str, text : str, baseurl : str):
+def build_fatal(name : str, text : str, baseurl : str) -> Response:
     res = Response(f"Fatal error running nightlies for {name}")
     res.add(TextBlock(text))
     return res
 
-def send(runner, url: str, res: Response):
+def send(runner, url: str, res: Response) -> None:
     runner.log(2, f"Posting results of run to slack!")
 
     payload = json.dumps(res.to_json()).encode("utf8")

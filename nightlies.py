@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Union, Optional
 import os, sys, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -22,7 +22,7 @@ def format_time(ts : float) -> str:
 def format_cmd(s : list[Any]) -> str:
     return shlex.join([str(part) for part in s])
 
-def parse_time(to : Union[str, None]) -> Union[float, None]:
+def parse_time(to : Optional[str]) -> Optional[float]:
     if to is None: return to
     units = {
         "hr": 3600, "h": 3600,
@@ -66,7 +66,7 @@ fi
         os.putenv("PATH", self.oldpath)
         self.dir.cleanup()
 
-    def info(self):
+    def info(self) -> dict[str, str]:
         out = {}
         with self.infofile.open() as f:
             for line in f:
@@ -75,17 +75,17 @@ fi
                 out[key] = " ".join(values)
         return out
 
-    def reset(self):
+    def reset(self) -> None:
         with self.infofile.open("w") as f:
             pass
 
 class NightlyRunner:
-    def __init__(self, config_file : str, NR : NightlyResults):
+    def __init__(self, config_file : str, NR : NightlyResults) -> None:
         self.config_file = Path(config_file)
         self.NR = NR
         self.is_dirty = False
 
-    def update_system_repo(self, dir):
+    def update_system_repo(self, dir) -> bool:
         self.log(1, f"Updating system {dir} repository")
         try:
             conf_commit = self.exec(2, ["git", "-C", dir, "rev-parse", "origin/main"]).stdout
@@ -94,7 +94,7 @@ class NightlyRunner:
             conf_commit2 = self.exec(2, ["git", "-C", dir, "rev-parse", "origin/main"]).stdout
         except subprocess.CalledProcessError as e:
             self.log(0, f"Process {format_cmd(e.cmd)} returned error code {e.returncode}")
-            os.exit(1)
+            sys.exit(1)
         if conf_commit == conf_commit2:
             self.log(1, f"System {dir} repository up to date")
             return False
@@ -102,7 +102,7 @@ class NightlyRunner:
             self.log(1, f"System {dir} repository updated; will need to restart")
             return True
 
-    def load(self):
+    def load(self) -> None:
         assert self.config_file.is_file(), f"Configuration file {self.config_file} is not a file"
         self.config = configparser.ConfigParser()
         self.config.read(str(self.config_file))
@@ -119,30 +119,30 @@ class NightlyRunner:
         for name in self.config.sections():
             self.repos.append(Repository(self, name, self.config[name]))
 
-    def update(self):
+    def update(self) -> None:
         if self.config.getboolean("DEFAULT", "pullself", fallback=False):
             if self.update_system_repo("."): self.restart()
         if self.config.getboolean("DEFAULT", "pullconf", fallback=False):
             conf_dir = os.path.dirname(self.config_file)
             if self.update_system_repo(conf_dir): self.restart()
 
-    def restart(self):
+    def restart(self) -> None:
         self.log(0, "Restarting nightly run due to updated system repositories")
         os.execv(sys.executable, ["python3"] + sys.argv)
 
-    def exec(self, level : int, cmd : List[Union[str, Path]]):
+    def exec(self, level : int, cmd : List[Union[str, Path]]) -> subprocess.CompletedProcess:
         self.log(level, f"Executing {format_cmd(cmd)}")
         return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
 
-    def log(self, level : int, s : str):
+    def log(self, level : int, s : str) -> None:
         with self.log_path.open("at") as f:
             f.write("{}\t{}{}\n".format(datetime.now() - self.start, "    " * level, s))
 
-    def save(self):
+    def save(self) -> None:
         with self.pid_file.open("w") as f:
             json.dump(self.data, f)
 
-    def run(self):
+    def run(self) -> None:
         self.start = datetime.now()
         name = f"{self.start:%Y-%m-%d}-{self.start:%H%M%S}.log"
         self.log_path = self.log_dir / name
@@ -217,9 +217,9 @@ class Repository:
             self.dir / path
             for path in shlex.split(self.config.get("ignore", ""))
         }
-        self.fatalerror = None
+        self.fatalerror: Optional[str] = None
 
-    def load(self):
+    def load(self) -> None:
         self.runner.log(0, "Beginning nightly run for " + self.name)
         self.dir.mkdir(parents=True, exist_ok=True)
 
@@ -265,9 +265,9 @@ class Repository:
             branch.load()
             self.branches[branch_name] = branch
 
-    def filter(self):
+    def filter(self) -> None:
         if self.run_all:
-            self.runnable = self.branches.values()
+            self.runnable = list(self.branches.values())
             return
 
         self.runner.log(1, "Filtering branches " + ", ".join(self.branches))
@@ -288,7 +288,7 @@ class Repository:
                 self.runner.log(2, f"Removing never run on branch {branch.name}")
                 self.runnable.remove(branch)
 
-    def run(self):
+    def run(self) -> None:
         if self.runnable:
             self.runner.log(1, "Running branches " + " ".join([b.name for b in self.runnable]))
             for branch in self.runnable:
@@ -296,7 +296,7 @@ class Repository:
         else:
             self.runner.log(1, "No branches to run")
 
-    def post(self):
+    def post(self) -> None:
         if not self.slack_url or not self.runner.base_url:
             self.runner.log(2, f"Not posting to slack, slack or baseurl not configured")
             return
@@ -321,9 +321,8 @@ class Branch:
         self.filename = self.name.replace(":", "::").replace("/", ":")
         self.dir = self.repo.dir / self.filename
         self.lastcommit = self.repo.dir / (self.filename + ".last-commit")
-        self.info = None
 
-    def load(self):
+    def load(self) -> None:
         if not self.dir.is_dir():
             self.repo.runner.exec(2, ["git", "clone", "--recursive", self.repo.url, self.dir])
         self.repo.runner.exec(2, ["git", "-C", self.dir, "fetch", "origin", "--prune"])
@@ -341,7 +340,7 @@ class Branch:
                 return False
         return True
 
-    def run(self):
+    def run(self) -> None:
         self.repo.runner.log(1, f"Running tests on branch {self.name}")
         date = datetime.now()
         log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{self.repo.name}-{self.filename}.log"
@@ -361,7 +360,8 @@ class Branch:
                     self.repo.runner.save()
                     try:
                         process.wait(timeout=to)
-                        if process.poll(): raise subprocess.CalledProcessError(process.poll(), cmd)
+                        p = process.poll()
+                        if p: raise subprocess.CalledProcessError(p, cmd)
                     finally:
                         process.kill()
         except subprocess.TimeoutExpired as e:

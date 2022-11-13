@@ -6,7 +6,7 @@ import slack
 
 APT_LINE_RE = re.compile(r"^(\d+) upgraded, (\d+) newly installed, (\d+) to remove and (\d+) not upgraded\.$", re.MULTILINE)
 
-def check_updates(runner, pkgs):
+def check_updates(runner, pkgs : list[str]) -> bool:
     runner.log(1, f"Checking for updates to apt packages {shlex.join(pkgs)}")
     res = runner.exec(2, ["sudo", "apt", "install", "-s"] + pkgs)
 
@@ -16,12 +16,12 @@ def check_updates(runner, pkgs):
         raise IOError("apt: Could not find package line in `apt` results")
 
     num_u, num_i, num_r, num_n = match.group(1, 2, 3, 4)
-    return int(num_u) or int(num_i) or int(num_r)
+    return bool(int(num_u) or int(num_i) or int(num_r))
 
-def install(runner, pkgs):
+def install(runner, pkgs : list[str]) -> None:
     runner.log(1, f"Installing apt packages {shlex.join(pkgs)}")
     runner.exec(2, ["sudo", "apt", "install"] + pkgs)
 
-def post(self, res):
-    res.add(TextBlock("`apt`: Reran all branches because a package updated"))
+def post(res : slack.Response) -> None:
+    res.add(slack.TextBlock("`apt`: Reran all branches because a package updated"))
 
