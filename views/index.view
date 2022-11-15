@@ -39,9 +39,12 @@ form.inline { display: inline; }
     %if "branch" in current:
     running <kbd>{{current['branch']}}</kbd> branch
     %else:
-    downloading branches
+    doing bookkeeping
     %end
     for <kbd>{{current["repo"]}}</kbd> repository.
+    %if last_print:
+    Last print {{format_time(last_print)}} ago.
+    %end
   </div>
   %end
   %if not running:

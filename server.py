@@ -10,6 +10,7 @@ import sys
 import os
 import json
 import signal
+import time
 
 CONF_FILE = "conf/nightlies.conf"
 
@@ -48,11 +49,17 @@ def index():
         else:
             running = True
 
+    last_print = None
+    if current_process and "branch_log" in current_process:
+        log_file = runner.log_dir / current_process["branch_log"]
+        last_print = time.time() - os.path.getmtime(str(log_file))
+
     return {
         "runner": runner,
         "current": current_process,
         "running": running,
         "baseurl": runner.base_url,
+        "last_print": last_print,
     }
 
 @bottle.route("/robots.txt")
