@@ -42,6 +42,8 @@ form.inline { display: inline; }
     doing bookkeeping
     %end
     for <kbd>{{current["repo"]}}</kbd> repository.
+  </div>
+  <div>
     %if last_print:
     Last print {{format_time(last_print)}} ago.
     %end
