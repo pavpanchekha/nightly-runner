@@ -20,7 +20,7 @@ def check_updates(runner, pkgs : list[str]) -> bool:
 
 def install(runner, pkgs : list[str]) -> None:
     runner.log(1, f"Installing apt packages {shlex.join(pkgs)}")
-    runner.exec(2, ["sudo", "apt", "install"] + pkgs)
+    runner.exec(2, ["sudo", "apt", "install", "--yes"] + pkgs)
 
 def post(res : slack.Response) -> None:
     res.add(slack.TextBlock("`apt`: Reran all branches because a package updated"))
