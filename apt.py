@@ -8,7 +8,7 @@ APT_LINE_RE = re.compile(r"^(\d+) upgraded, (\d+) newly installed, (\d+) to remo
 
 def check_updates(runner, pkgs : list[str]) -> bool:
     runner.log(1, f"Checking for updates to apt packages {shlex.join(pkgs)}")
-    res = runner.exec(2, ["sudo", "apt", "install", "-s"] + pkgs)
+    res = runner.exec(2, ["sudo", "apt", "install", "--dry-run"] + pkgs)
 
     # Parse the `apt` output, ugh
     match = APT_LINE_RE.search(res.stdout.decode("latin1"))
