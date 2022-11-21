@@ -1,4 +1,6 @@
 nightlies.conf
+nightlies.service
+nightlies.timer
 bottle.py
 logs/
 running.pid
