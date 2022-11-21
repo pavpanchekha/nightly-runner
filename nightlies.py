@@ -42,8 +42,8 @@ class NightlyResults:
         self.infofile = Path(self.dir.name, "info")
         self.cmdfile = Path(self.dir.name, "nightly-results")
 
-        os.chdir("/data/pavpan/nightlies")
-        os.putenv("PATH", self.dir.name + ":/home/p92/bin/:" + self.oldpath)
+        os.chdir("/home/nightlies/nightlies")
+        os.putenv("PATH", self.dir.name + ":" + self.oldpath)
         self.infofile.touch()
         with self.cmdfile.open("w") as f:
             f.write(rf"""#!/bin/bash
