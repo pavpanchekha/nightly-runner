@@ -54,7 +54,7 @@ def index():
         log_file = runner.log_dir / current_process["branch_log"]
         try:
             last_print = time.time() - os.path.getmtime(str(log_file))
-        except OSError:
+        except FileNotFoundError:
             running = False
 
     return {
