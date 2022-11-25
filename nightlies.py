@@ -89,9 +89,11 @@ class NightlyRunner:
         self.log(1, f"Updating system {dir} repository")
         try:
             conf_commit = self.exec(2, ["git", "-C", dir, "rev-parse", "origin/main"]).stdout
+            self.log(2, f"Commit {conf_commit!r}")
             self.exec(2, ["git", "-C", dir, "fetch", "origin", "--prune"])
             self.exec(2, ["git", "-C", dir, "reset", "--hard", "origin/main"])
             conf_commit2 = self.exec(2, ["git", "-C", dir, "rev-parse", "origin/main"]).stdout
+            self.log(2, f"Commit {conf_commit2!r}")
         except subprocess.CalledProcessError as e:
             self.log(0, f"Process {format_cmd(e.cmd)} returned error code {e.returncode}")
             sys.exit(1)
