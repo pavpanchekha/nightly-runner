@@ -342,6 +342,7 @@ class Branch:
         date = datetime.now()
         log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{self.repo.name}-{self.filename}.log"
 
+        self.info = None
         self.repo.runner.data["branch"] = self.name
         self.repo.runner.data["branch_log"] = log_name
         self.repo.runner.save()
