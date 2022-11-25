@@ -75,14 +75,9 @@ fi
                 out[key] = " ".join(values)
         return out
 
-    def reset(self) -> None:
-        with self.infofile.open("w") as f:
-            pass
-
 class NightlyRunner:
-    def __init__(self, config_file : str, NR : NightlyResults) -> None:
+    def __init__(self, config_file : str) -> None:
         self.config_file = Path(config_file)
-        self.NR = NR
         self.is_dirty = False
 
     def update_system_repo(self, dir) -> bool:
@@ -357,15 +352,17 @@ class Branch:
             self.repo.runner.log(2, f"Executing {format_cmd(cmd)}")
             if not self.repo.runner.dryrun:
                 with (self.repo.runner.log_dir / log_name).open("wt") as fd:
-                    process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT)
-                    self.repo.runner.data["branch_pid"] = process.pid
-                    self.repo.runner.save()
-                    try:
-                        process.wait(timeout=to)
-                        p = process.poll()
-                        if p: raise subprocess.CalledProcessError(p, cmd)
-                    finally:
-                        process.kill()
+                    with NightlyResults() as NR:
+                        process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT)
+                        self.repo.runner.data["branch_pid"] = process.pid
+                        self.repo.runner.save()
+                        try:
+                            process.wait(timeout=to)
+                            p = process.poll()
+                            if p: raise subprocess.CalledProcessError(p, cmd)
+                        finally:
+                            self.info = NR.info()
+                            process.kill()
         except subprocess.TimeoutExpired as e:
             self.repo.runner.log(1, f"Run on branch {self.name} timed out after {format_time(e.timeout)}")
             failure = "timeout"
@@ -381,11 +378,9 @@ class Branch:
             with self.lastcommit.open("wb") as last_commit_fd:
                 last_commit_fd.write(out.stdout)
 
-        self.info = self.repo.runner.NR.info()
         self.info["result"] = f"*{failure}*" if failure else "success"
         self.info["time"] = format_time((datetime.now() - t).seconds)
         self.info["file"] = log_name
-        self.repo.runner.NR.reset()
         del self.repo.runner.data["branch"]
         del self.repo.runner.data["branch_log"]
         self.repo.runner.save()
@@ -393,7 +388,6 @@ class Branch:
 if __name__ == "__main__":
     import sys
     conf_file = sys.argv[1] if len(sys.argv) > 1 else "conf/nightlies.conf"
-    with NightlyResults() as NR:
-        runner = NightlyRunner(conf_file, NR)
-        runner.load()
-        runner.run()
+    runner = NightlyRunner(conf_file)
+    runner.load()
+    runner.run()
