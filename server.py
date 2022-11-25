@@ -52,7 +52,10 @@ def index():
     last_print = None
     if current_process and "branch_log" in current_process:
         log_file = runner.log_dir / current_process["branch_log"]
-        last_print = time.time() - os.path.getmtime(str(log_file))
+        try:
+            last_print = time.time() - os.path.getmtime(str(log_file))
+        except OSError:
+            running = False
 
     return {
         "runner": runner,
