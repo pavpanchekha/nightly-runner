@@ -41,7 +41,6 @@ SYSTEMD_RUN_CMD = [
     "--same-dir", # Keep current working dir (probably unneeded)
     "--wait", # Wait for it to finish
     "--pty", # Pass through stdio
-    "--setenv=PATH", # Pass through the PATH with the nightly-results script
     f"--uid={os.getuid()}", # As the current user
     f"--gid={os.getgid()}", # As the current group
     "--slice=nightlies.slice", # Run with the nightly resource limits
@@ -56,8 +55,10 @@ class NightlyResults:
         self.infofile = Path(self.dir.name, "info")
         self.cmdfile = Path(self.dir.name, "nightly-results")
 
+        self.newpath = self.dir.name + ":" + self.oldpath
+
         os.chdir("/home/nightlies/nightlies")
-        os.putenv("PATH", self.dir.name + ":" + self.oldpath)
+        os.putenv("PATH", self.newpath)
         self.infofile.touch()
         with self.cmdfile.open("w") as f:
             f.write(rf"""#!/bin/bash
@@ -363,11 +364,13 @@ class Branch:
         t = datetime.now()
         try:
             to = parse_time(self.repo.config.get("timeout"))
-            cmd = SYSTEMD_RUN_CMD + ["make", "-C", str(self.dir), "nightly"]
-            self.repo.runner.log(2, f"Executing {format_cmd(cmd)}")
-            if not self.repo.runner.dryrun:
-                with (self.repo.runner.log_dir / log_name).open("wt") as fd:
-                    with NightlyResults() as NR:
+            with NightlyResults() as NR:
+                cmd = SYSTEMD_RUN_CMD + \
+                    ["--setenv=PATH=" + NR.newpath] + \
+                    ["make", "-C", str(self.dir), "nightly"]
+                self.repo.runner.log(2, f"Executing {format_cmd(cmd)}")
+                if not self.repo.runner.dryrun:
+                    with (self.repo.runner.log_dir / log_name).open("wt") as fd:
                         process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT)
                         self.repo.runner.data["branch_pid"] = process.pid
                         self.repo.runner.save()
