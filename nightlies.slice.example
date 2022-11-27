@@ -1,0 +1,12 @@
+[Unit]
+Description=Slice used to run nightlies themselves
+Before=slices.target
+
+[Slice]
+MemoryAccounting=true
+IOAccounting=true
+CPUAccounting=true
+
+CPUWeight=idle
+MemoryHigh=95%
+MemoryLimit=99%
