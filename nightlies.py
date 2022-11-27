@@ -34,6 +34,19 @@ def parse_time(to : Optional[str]) -> Optional[float]:
             return float(to[:-len(unit)]) * multiplier
     return float(to)
 
+SYSTEMD_RUN_CMD = [
+    "systemd-run",
+    "--user", # Run as the current user
+    "--collect", # If it fails, throw it away
+    "--same-dir", # Keep current working dir (probably unneeded)
+    "--wait", # Wait for it to finish
+    "--pty", # Pass through stdio
+    f"--uid={os.getuid()}", # As the current user
+    f"--gid={os.getgid()}", # As the current group
+    "--slice=nightlies.slice", # Run with the nightly resource limits
+    "--service-type=exec", # It just execs a program
+]
+
 class NightlyResults:
     def __enter__(self):
         self.dir = tempfile.TemporaryDirectory(prefix="nightly")
@@ -349,7 +362,7 @@ class Branch:
         t = datetime.now()
         try:
             to = parse_time(self.repo.config.get("timeout"))
-            cmd = ["nice", "make", "-C", str(self.dir), "nightly"]
+            cmd = SYSTEMD_RUN_CMD + ["make", "-C", str(self.dir), "nightly"]
             self.repo.runner.log(2, f"Executing {format_cmd(cmd)}")
             if not self.repo.runner.dryrun:
                 with (self.repo.runner.log_dir / log_name).open("wt") as fd:
