@@ -35,8 +35,8 @@ def parse_time(to : Optional[str]) -> Optional[float]:
     return float(to)
 
 SYSTEMD_RUN_CMD = [
+    "sudo", # There might not be a user session manager, so run using root's
     "systemd-run",
-    "--user", # Run as the current user
     "--collect", # If it fails, throw it away
     "--same-dir", # Keep current working dir (probably unneeded)
     "--wait", # Wait for it to finish
