@@ -35,7 +35,7 @@ form.inline { display: inline; }
       <button>Kill</button>
     </form> 
     %end
-    {{ "Currently" if running else "Was" }}
+    {{ "Now" if running else "Was" }}
     %if "branch" in current:
     running <kbd>{{current['branch']}}</kbd> branch
     %else:
