@@ -330,7 +330,7 @@ class Branch:
     def __init__(self, repo : Repository, name : str):
         self.repo = repo
         self.name = name
-        self.filename = self.name.replace(":", "::").replace("/", ":")
+        self.filename = self.name.replace("%", "%25").replace("/", "%2f")
         self.dir = self.repo.dir / self.filename
         self.lastcommit = self.repo.dir / (self.filename + ".last-commit")
 
