@@ -372,7 +372,7 @@ class Branch:
                 self.repo.runner.log(2, f"Executing {format_cmd(cmd)}")
                 if not self.repo.runner.dryrun:
                     with (self.repo.runner.log_dir / log_name).open("wt") as fd:
-                        process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT)
+                        process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
                         self.repo.runner.data["branch_pid"] = process.pid
                         self.repo.runner.save()
                         try:
