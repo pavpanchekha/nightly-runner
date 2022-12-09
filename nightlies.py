@@ -341,6 +341,7 @@ class Branch:
         self.repo.runner.exec(2, ["git", "-C", self.dir, "fetch", "origin", self.name])
         self.repo.runner.exec(2, ["git", "-C", self.dir, "checkout", self.name])
         self.repo.runner.exec(2, ["git", "-C", self.dir, "reset", "--hard", "origin/" + self.name])
+        self.repo.runner.exec(2, ["git", "-C", self.dir, "submodule", "update", "--remote"])
 
     def check(self) -> bool:
         current_commit = self.repo.runner.exec(2, ["git", "-C", self.dir, "rev-parse", "origin/" + self.name]).stdout
