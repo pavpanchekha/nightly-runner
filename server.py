@@ -170,4 +170,4 @@ if __name__ == "__main__":
     else:
         port = 9000
 
-    bottle.run(host="0.0.0.0", port=port)
+    bottle.run(server="paste", host="0.0.0.0", port=port)
