@@ -98,6 +98,9 @@ form.inline { display: inline; }
         <button>Run tonight</button>
       </form>
       <kbd>{{branch.name}}</kbd>
+      %for badge in branch.badges:
+      <span class="badge">{{badge}}</span>
+      %end
     </li>
   %end 
 </ul>
