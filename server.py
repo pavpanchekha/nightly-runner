@@ -116,9 +116,11 @@ def kill():
                 current_process = json.load(f)
                 os.kill(current_process["pid"], signal.SIGTERM)
             runner.pid_file.unlink()
-        except OSError:
+        except OSError as e:
+            print("/kill: OSError:", str(e))
             current_process = None
     else:
+        print("/kill: no PID file")
         current_process = None
     bottle.redirect("/")
 
@@ -131,9 +133,11 @@ def killbranch():
             with runner.pid_file.open("r") as f:
                 current_process = json.load(f)
                 os.kill(current_process["branch_pid"], signal.SIGTERM)
-        except OSError:
+        except OSError as e:
+            print("/killbranch: OSError:", str(e))
             current_process = None
     else:
+        print("/killbranch: no PID file")
         current_process = None
     bottle.redirect("/")
     
