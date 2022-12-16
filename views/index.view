@@ -81,7 +81,7 @@ form.inline { display: inline; }
   </form>
 </div>
 
-%for repo in sorted(runner.repos, key=lambda r: r.last_run(), reversed=True):
+%for repo in sorted(runner.repos, key=lambda r: r.last_run(), reverse=True):
 
 <h2><kbd>{{repo.name}}</kbd></h2>
 
