@@ -286,11 +286,11 @@ class Repository:
         self.assign_badges()
 
     def read(self) -> None:
-        repo.branches = {}
-        if repo.dir.is_dir():
-            for fn in repo.dir.iterdir():
+        self.branches = {}
+        if self.dir.is_dir():
+            for fn in self.dir.iterdir():
                 if not fn.is_dir(): continue
-                if fn in repo.ignored_files: continue
+                if fn in self.ignored_files: continue
                 name = Branch.parse_filename(fn.name)
                 self.branches[name] = Branch(self, name)
             self.assign_badges()
@@ -314,8 +314,8 @@ class Repository:
                 self.runner.log(2, f"Adding always run on branch {branch.name}")
                 self.runnable.append(branch)
             if "baseline" in branch.badges and branch not in self.runnable and self.runnable:
-                self.runner.log(2, f"Adding baseline branch {baseline.name}")
-                self.runnable.append(baseline)
+                self.runner.log(2, f"Adding baseline branch {branch.name}")
+                self.runnable.append(branch)
             if "never" in branch.badges and branch in self.runnable:
                 self.runner.log(2, f"Removing never run on branch {branch.name}")
                 self.runnable.remove(branch)
@@ -353,7 +353,7 @@ class Branch:
         self.filename = self.name.replace("%", "%25").replace("/", "%2f")
         self.dir = self.repo.dir / self.filename
         self.lastcommit = self.repo.dir / (self.filename + ".last-commit")
-        self.badges = []
+        self.badges : list[str] = []
 
     @classmethod
     def parse_filename(cls, filename):
