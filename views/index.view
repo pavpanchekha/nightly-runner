@@ -86,7 +86,7 @@ form.inline { display: inline; }
 <h2><kbd>{{repo.name}}</kbd></h2>
 
 <ul class="branches">
-  %for branch in sorted(repo.branches.values(), key=lambda b: b.last_run, reverse=True):
+  %for branch in sorted(repo.branches.values(), key=lambda b: b.last_run(), reverse=True):
     <li>
       <form action="{{baseurl}}/runnow" method="post" class="inline">
         <input type="hidden" name="repo" value="{{repo.name}}" />
