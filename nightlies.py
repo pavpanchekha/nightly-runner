@@ -302,6 +302,10 @@ class Repository:
                     branch = self.branches[branch_name]
                     branch.badges.append(field)
 
+        main_branch = self.config.get("main", "main")
+        if main_branch in self.branches:
+            self.branches[main_branch].badges.append("main")
+
     def filter(self) -> None:
         if self.run_all:
             self.runnable = list(self.branches.values())
