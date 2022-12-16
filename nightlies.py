@@ -359,6 +359,12 @@ class Branch:
         self.lastcommit = self.repo.dir / (self.filename + ".last-commit")
         self.badges : list[str] = []
 
+    def last_run(self):
+        try:
+            return os.path.getmtime(str(self.lastcommit))
+        except FileNotFoundError:
+            return -1
+
     @classmethod
     def parse_filename(cls, filename):
         return filename.replace("%2f", "/").replace("%25", "%")
