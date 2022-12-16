@@ -47,6 +47,12 @@ SYSTEMD_RUN_CMD = [
     "--service-type=exec", # It just execs a program
 ]
 
+REPO_BADGES = [
+    "baseline", # Run this branch if you run anything else
+    "always", # Run this branch every day
+    "never", # Never run this branch
+]
+
 class NightlyResults:
     def __enter__(self):
         self.dir = tempfile.TemporaryDirectory(prefix="nightly")
@@ -277,6 +283,15 @@ class Repository:
             branch.load()
             self.branches[branch_name] = branch
 
+        self.assign_badges()
+
+    def assign_badges(self) -> None:
+        for field in REPO_BADGES:
+            for branch_name in self.config.get(field, "").split():
+                if branch_name in self.branches:
+                    branch = self.branches[branch_name]
+                    branch.badges.append(field)
+
     def filter(self) -> None:
         if self.run_all:
             self.runnable = list(self.branches.values())
@@ -284,19 +299,14 @@ class Repository:
 
         self.runner.log(1, "Filtering branches " + ", ".join(self.branches))
         self.runnable = [branch for name, branch in self.branches.items() if branch.check()]
-        for branch_name in self.config.get("baseline", "").split():
-            baseline = self.branches[branch_name]
-            if self.runnable and baseline not in self.runnable:
-                self.runner.log(2, f"Adding baseline branch {baseline.name}")
-                self.runnable.append(baseline)
-        for branch_name in self.config.get("always", "").split():
-            branch = self.branches[branch_name]
-            if branch not in self.runnable:
+        for branch in self.branches.values():
+            if "always" in branch.badges and branch not in self.runnable:
                 self.runner.log(2, f"Adding always run on branch {branch.name}")
                 self.runnable.append(branch)
-        for branch_name in self.config.get("never", "").split():
-            branch = self.branches[branch_name]
-            if branch in self.runnable:
+            if "baseline" in branch.badges and branch not in self.runnable and self.runnable:
+                self.runner.log(2, f"Adding baseline branch {baseline.name}")
+                self.runnable.append(baseline)
+            if "never" in branch.badges and branch in self.runnable:
                 self.runner.log(2, f"Removing never run on branch {branch.name}")
                 self.runnable.remove(branch)
 
