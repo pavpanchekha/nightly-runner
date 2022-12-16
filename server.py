@@ -160,7 +160,9 @@ def run_nightlies(conf=None):
     RUNNING_NIGHTLIES.append(
         subprocess.Popen(
             [sys.executable, nightlies.__file__, fn],
-            cwd=os.path.dirname(nightlies.__file__)))
+            cwd=os.path.dirname(nightlies.__file__),
+            start_new_session=True,
+        ))
 
 if __name__ == "__main__":
     import sys
