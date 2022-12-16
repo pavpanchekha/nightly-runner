@@ -285,6 +285,16 @@ class Repository:
 
         self.assign_badges()
 
+    def read(self) -> None:
+        repo.branches = {}
+        if repo.dir.is_dir():
+            for fn in repo.dir.iterdir():
+                if not fn.is_dir(): continue
+                if fn in repo.ignored_files: continue
+                name = Branch.parse_filename(fn.name)
+                self.branches[name] = Branch(self, name)
+            self.assign_badges()
+
     def assign_badges(self) -> None:
         for field in REPO_BADGES:
             for branch_name in self.config.get(field, "").split():
@@ -343,6 +353,11 @@ class Branch:
         self.filename = self.name.replace("%", "%25").replace("/", "%2f")
         self.dir = self.repo.dir / self.filename
         self.lastcommit = self.repo.dir / (self.filename + ".last-commit")
+        self.badges = []
+
+    @classmethod
+    def parse_filename(cls, filename):
+        return filename.replace("%2f", "/").replace("%25", "%")
 
     def load(self) -> None:
         if not self.dir.is_dir():
