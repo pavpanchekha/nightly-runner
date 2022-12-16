@@ -81,12 +81,12 @@ form.inline { display: inline; }
   </form>
 </div>
 
-%for repo in sorted(runner.repos, key=lambda r: r.last_run(), reverse=True):
+%for repo in runner.repos:
 
 <h2><kbd>{{repo.name}}</kbd></h2>
 
 <ul class="branches">
-  %for branch in repo.branches.values():
+  %for branch in sorted(repo.branches.values(), key=lambda b: b.last_run, reverse=True):
     <li>
       <form action="{{baseurl}}/runnow" method="post" class="inline">
         <input type="hidden" name="repo" value="{{repo.name}}" />
