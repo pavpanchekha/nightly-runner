@@ -60,6 +60,15 @@ def index():
         "last_print": last_print,
     }
 
+@bottle.route("/disk")
+@bottle.view("disk.view")
+def disk():
+    df_proc = subprocess.run(["df", "-h"], capture_output=True, check=True, encoding="ascii")
+    return {
+        "df": df_proc.stdout,
+    }
+
+
 @bottle.route("/robots.txt")
 @bottle.view("robots.txt")
 def robots_txt(): pass
