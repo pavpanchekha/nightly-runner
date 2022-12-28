@@ -20,16 +20,17 @@ class DiskUsage:
             self.repo = None
             self.by_repo = {}
 
-    def scan(self):
-        for dpath, dnames, files in os.walk(str(self.path.absolute())):
+    def scan(self) -> None:
+        path = str(self.path.absolute())
+        for dirpath, dnames, files in os.walk(path):
             with os.scandir(dirpath) as s:
                 for entry in s:
                     stat = s.stat(follow_links=False)
                     self.available += stat.st_size
                     self.by_extension[Path(entry.path).suffix] += stat.st_size
-        self.available = shutil.disk_usage().free
+        self.available = shutil.disk_usage(path).free
 
-    def add(self, du):
+    def add(self, du) -> None:
         try:
             relative = du.absolute().path.relative_to(self.path)
         except ValueError:
@@ -65,7 +66,7 @@ class DiskUsage:
         v.by_repo = json["repos"]
 
 # From https://stackoverflow.com/questions/1094841/get-human-readable-version-of-file-size
-def format_size(num : int, suffix:str="B") -> str:
+def format_size(num : float, suffix:str="B") -> str:
     for unit in ["", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"]:
         if abs(num) < 1024.0:
             return f"{num:3.1f}{unit}{suffix}"
