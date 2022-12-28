@@ -21,7 +21,7 @@ class DiskUsage:
             self.by_repo = {}
 
     def scan(self):
-        for dpath, dnames, files in os.walk(path):
+        for dpath, dnames, files in os.walk(str(self.path.absolute())):
             with os.scandir(dirpath) as s:
                 for entry in s:
                     stat = s.stat(follow_links=False)
