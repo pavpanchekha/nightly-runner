@@ -31,7 +31,7 @@ class DiskUsage:
                 self.by_extension[suffix] = stat.st_size + self.by_extension.get(suffix, 0)
         self.available = shutil.disk_usage(path).free
 
-    def add(self, du : DiskUsage) -> None:
+    def add(self, du : 'DiskUsage') -> None:
         try:
             relative = du.path.absolute().relative_to(self.path)
         except ValueError:
