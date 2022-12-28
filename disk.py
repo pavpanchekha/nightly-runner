@@ -59,7 +59,7 @@ class DiskUsage:
         }
 
     @classmethod
-    def from_json(cls, json) -> DiskUsage:
+    def from_json(cls, json) -> 'DiskUsage':
         v = cls(Path(json["path"]), json["repo"])
         v.used = json["used"]
         v.available = json["available"]
