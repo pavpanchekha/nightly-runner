@@ -87,3 +87,10 @@ def usage_stats(runner):
         "logs": log_usage.to_json(),
         "repos": repo_usage.to_json(),
     }
+
+if __name__ == "__main__":
+    import server
+    runner = nightlies.NightlyRunner(server.CONF_FILE)
+    runner.load()
+    print(usage_stats(runner))
+
