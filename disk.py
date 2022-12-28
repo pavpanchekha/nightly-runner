@@ -22,12 +22,12 @@ class DiskUsage:
 
     def scan(self) -> None:
         path = str(self.path.absolute())
-        for dirpath, dnames, files in os.walk(path):
-            with os.scandir(dirpath) as s:
-                for entry in s:
-                    stat = s.stat(follow_links=False)
-                    self.available += stat.st_size
-                    self.by_extension[Path(entry.path).suffix] += stat.st_size
+        for dirpath, dnames, fnames in os.walk(path):
+            for name in dnames + fnames:
+                fullpath = str((self.path / dirpath / dnames).absolute())
+                stat = os.stat(fullpath, follow_symlinks=False)
+                self.available += stat.st_size
+                self.by_extension[Path(fullpath).suffix] += stat.st_size
         self.available = shutil.disk_usage(path).free
 
     def add(self, du) -> None:
