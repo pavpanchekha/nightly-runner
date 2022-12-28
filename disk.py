@@ -6,14 +6,14 @@ import os
 import shutil
 
 class DiskUsage:
-    def __init__(self, path, repo):
+    def __init__(self, path, repo=None):
         self.path = path.absolute()
 
         self.used = 0
         self.available = float("inf")
         self.by_extension = {}
 
-        if repo:
+        if repo is not None:
             self.repo = repo
             self.by_repo = None
         else:
