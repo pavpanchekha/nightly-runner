@@ -100,13 +100,13 @@ class NightlyRunner:
     def __init__(self, config_file : str) -> None:
         self.config_file = Path(config_file)
 
-    def update_system_repo(self, dir) -> bool:
+    def update_system_repo(self, dir : str, branch : str) -> bool:
         self.log(1, f"Updating system {dir} repository")
         try:
             conf_commit = self.exec(2, ["git", "-C", dir, "rev-parse", "HEAD"]).stdout
             self.log(2, f"Commit {conf_commit.decode().strip()}")
             self.exec(2, ["git", "-C", dir, "fetch", "origin", "--prune"])
-            self.exec(2, ["git", "-C", dir, "reset", "--hard", "origin/main"])
+            self.exec(2, ["git", "-C", dir, "reset", "--hard", "origin/" + branch])
             conf_commit2 = self.exec(2, ["git", "-C", dir, "rev-parse", "HEAD"]).stdout
             self.log(2, f"Commit {conf_commit2.decode().strip()}")
         except subprocess.CalledProcessError as e:
@@ -139,10 +139,12 @@ class NightlyRunner:
 
     def update(self) -> None:
         if self.config.getboolean("DEFAULT", "pullself", fallback=False):
-            if self.update_system_repo("."): self.restart()
+            branch = self.config.defaults().get("selfbranch", "main")
+            if self.update_system_repo(".", branch): self.restart()
         if self.config.getboolean("DEFAULT", "pullconf", fallback=False):
             conf_dir = os.path.dirname(self.config_file)
-            if self.update_system_repo(conf_dir): self.restart()
+            branch = self.config.defaults().get("confbranch", "main")
+            if self.update_system_repo(conf_dir, branch): self.restart()
 
     def restart(self) -> None:
         self.log(0, "Restarting nightly run due to updated system repositories")
