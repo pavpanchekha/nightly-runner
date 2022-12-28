@@ -3,7 +3,6 @@
 import bottle
 from pathlib import Path
 import nightlies
-import configparser
 import tempfile
 import subprocess
 import sys

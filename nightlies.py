@@ -99,7 +99,6 @@ fi
 class NightlyRunner:
     def __init__(self, config_file : str) -> None:
         self.config_file = Path(config_file)
-        self.is_dirty = False
 
     def update_system_repo(self, dir) -> bool:
         self.log(1, f"Updating system {dir} repository")
