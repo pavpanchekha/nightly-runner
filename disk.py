@@ -45,8 +45,11 @@ class DiskUsage:
         self.available = min(du.available, self.available)
         for k, v in du.by_extension.items():
             self.by_extension[k] = v + self.by_extension.get(k, 0)
-        for k, v in du.by_repo.items():
-            self.by_repo[k] = v + self.by_repo.get(k, 0)
+        if du.repo is not None:
+            self.by_repo[du.repo] = du.used + self.by_repo.get(du.repo, 0)
+        else:
+            for k, v in du.by_repo.items():
+                self.by_repo[k] = v + self.by_repo.get(k, 0)
 
     def to_json(self):
         return {
@@ -78,12 +81,15 @@ def format_size(num : float, suffix:str="B") -> str:
 def usage_stats(runner):
     log_usage = DiskUsage(runner.log_dir)
     log_usage.scan()
+    print(log_usage.to_json())
 
     repo_usage = DiskUsage(Path("."))
     for repo in runner.repos:
         du = DiskUsage(repo.dir, repo.name)
         du.scan()
+        print(du.repo, du.to_json())
         repo_usage.add(du)
+    print(repo_usage.to_json())
 
     return {
         "logs": log_usage.to_json(),
