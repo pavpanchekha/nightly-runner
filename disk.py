@@ -11,7 +11,7 @@ class DiskUsage:
 
         self.used = 0
         self.available = float("inf")
-        self.by_extension = {}
+        self.by_extension : dict[str, int] = {}
 
         if repo is not None:
             self.repo = repo
@@ -27,10 +27,11 @@ class DiskUsage:
                 fullpath = str((self.path / dirpath / name).absolute())
                 stat = os.stat(fullpath, follow_symlinks=False)
                 self.available += stat.st_size
-                self.by_extension[Path(fullpath).suffix] += stat.st_size
+                suffix = Path(fullpath).suffix
+                self.by_extension[suffix] = stat.st_size + self.by_extension.get(suffix, 0)
         self.available = shutil.disk_usage(path).free
 
-    def add(self, du) -> None:
+    def add(self, du : DiskUsage) -> None:
         try:
             relative = du.absolute().path.relative_to(self.path)
         except ValueError:
@@ -43,9 +44,9 @@ class DiskUsage:
         self.used += du.used
         self.available = min(du.available, self.available)
         for k, v in du.by_extension.items():
-            self.by_extension[k] = du.by_extension[k] + self.by_extension[k].get(0)
+            self.by_extension[k] = v + self.by_extension.get(k, 0)
         for k, v in du.by_repo.items():
-            self.by_repo[k] = du.by_repo[k] + self.by_repo[k].get(0)
+            self.by_repo[k] = v + self.by_repo.get(k, 0)
 
     def to_json(self):
         return {
@@ -58,7 +59,7 @@ class DiskUsage:
         }
 
     @classmethod
-    def from_json(self, json):
+    def from_json(self, json) -> DiskUsage:
         v = cls(Path(json["path"]), json["repo"])
         v.used = json["used"]
         v.available = json["available"]
