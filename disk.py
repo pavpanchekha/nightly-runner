@@ -33,7 +33,7 @@ class DiskUsage:
 
     def add(self, du : DiskUsage) -> None:
         try:
-            relative = du.absolute().path.relative_to(self.path)
+            relative = du.path.absolute().relative_to(self.path)
         except ValueError:
             raise ValueError(f"{du.path} is not a subpath of {self.path}")
 
@@ -59,12 +59,13 @@ class DiskUsage:
         }
 
     @classmethod
-    def from_json(self, json) -> DiskUsage:
+    def from_json(cls, json) -> DiskUsage:
         v = cls(Path(json["path"]), json["repo"])
         v.used = json["used"]
         v.available = json["available"]
         v.by_extension = json["extensions"]
         v.by_repo = json["repos"]
+        return v
 
 # From https://stackoverflow.com/questions/1094841/get-human-readable-version-of-file-size
 def format_size(num : float, suffix:str="B") -> str:
