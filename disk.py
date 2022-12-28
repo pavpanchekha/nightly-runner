@@ -24,7 +24,7 @@ class DiskUsage:
         path = str(self.path.absolute())
         for dirpath, dnames, fnames in os.walk(path):
             for name in dnames + fnames:
-                fullpath = str((self.path / dirpath / dnames).absolute())
+                fullpath = str((self.path / dirpath / name).absolute())
                 stat = os.stat(fullpath, follow_symlinks=False)
                 self.available += stat.st_size
                 self.by_extension[Path(fullpath).suffix] += stat.st_size
