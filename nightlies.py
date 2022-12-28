@@ -128,6 +128,7 @@ class NightlyRunner:
         defaults = self.config.defaults()
         self.base_url = defaults.get("baseurl")
         if self.base_url and not self.base_url.endswith("/"): self.base_url += "/"
+        self.dir = Path(defaults.get("repos", ".")).resolve()
         self.log_dir = Path(defaults.get("logs", "logs")).resolve()
         self.dryrun = "dryrun" in defaults
         self.pid_file = Path(defaults.get("pid", "running.pid")).resolve()
@@ -229,7 +230,7 @@ class Repository:
             self.url = "git@github.com:" + configuration.get("github", name) + ".git"
 
         self.name = name.split("/")[-1]
-        self.dir = Path(self.name)
+        self.dir = runner.dir / self.name
         self.ignored_files = {
             self.dir / path
             for path in shlex.split(self.config.get("ignore", ""))
