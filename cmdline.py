@@ -28,8 +28,17 @@ def publish(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None
     assert runner.report_dir.exists(), f"Report dir {runner.report_dir} does not exist"
     repo = runner.data["repo"]
     name = args.name if args.name else str(int(time.time()))
+
     dest_dir = runner.report_dir / repo / name
     shutil.copytree(args.path, dest_dir)
+    if runner.report_group:
+        shutil.chown(path, group=runner.report_group)
+        for dpath, dirs, files in os.walk(str(args.path.resolve())):
+            for dname in dirs:
+                shutil.chown(os.path.join(dirpath, dname), group=runner.report_group)
+            for fname in files:
+                shutil.chown(os.path.join(dirpath, fname), group=runner.report_group)
+
     runner.add_info("url", os.path.join(self.base_url, repo, name))
     if args.image:
         assert args.image.is_relative_to(args.path), \

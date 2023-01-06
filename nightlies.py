@@ -92,6 +92,7 @@ class NightlyRunner:
         self.info_file = Path(defaults.get("info", "running.info")).resolve()
         self.config_file = Path(defaults.get("conffile", str(self.config_file))).resolve()
         self.report_dir = Path(defaults.get("reports", "reports")).resolve()
+        self.report_group = defaults.get("report_group", None)
 
         for name in self.config.sections():
             self.repos.append(Repository(self, name, self.config[name]))
