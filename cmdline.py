@@ -37,7 +37,7 @@ def publish(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None
     runner.log(4, f"Publishing {args.path} to {dest_dir}")
     shutil.copytree(args.path, dest_dir)
 
-    url_base = runner.base_url + "/" + repo + "/" + name
+    url_base = runner.base_url + "reports" + "/" + repo + "/" + name
     runner.add_info("url", url_base)
     if args.image:
         assert args.image.is_relative_to(args.path), \
