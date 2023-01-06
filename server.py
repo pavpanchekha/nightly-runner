@@ -20,25 +20,24 @@ RUNNING_NIGHTLIES = []
 def index():
     runner = nightlies.NightlyRunner(CONF_FILE)
     runner.load()
-
-    current_process = runner.load_data()
+    runner.load_pid()
 
     for repo in runner.repos:
         repo.read()
 
     running = False
-    if current_process and "pid" in current_process:
+    if runner.data and "pid" in runner.data:
         try:
             # Does not actually kill, but does check if pid exists
-            os.kill(current_process["pid"], 0)
+            os.kill(runner.data["pid"], 0)
         except OSError:
             pass
         else:
             running = True
 
     last_print = None
-    if current_process and "branch_log" in current_process:
-        log_file = runner.log_dir / current_process["branch_log"]
+    if runner.data and "branch_log" in runner.data:
+        log_file = runner.log_dir / runner.data["branch_log"]
         try:
             last_print = time.time() - os.path.getmtime(str(log_file))
         except FileNotFoundError:
@@ -46,7 +45,7 @@ def index():
 
     return {
         "runner": runner,
-        "current": current_process,
+        "current": runner.data,
         "running": running,
         "baseurl": runner.base_url,
         "last_print": last_print,
@@ -111,35 +110,30 @@ def runnext():
 def kill():
     runner = nightlies.NightlyRunner(CONF_FILE)
     runner.load()
-    if runner.pid_file.exists():
+    runner.load_pid()
+    if runner.data and "branch_pid" in runner.data:
         try:
-            with runner.pid_file.open("r") as f:
-                current_process = json.load(f)
-                os.kill(current_process["pid"], signal.SIGTERM)
+            os.kill(runner.data["pid"], signal.SIGTERM)
             runner.pid_file.unlink()
         except OSError as e:
             print("/kill: OSError:", str(e))
-            current_process = None
     else:
         print("/kill: no PID file")
-        current_process = None
     bottle.redirect("/")
 
 @bottle.post("/killbranch")
 def killbranch():
     runner = nightlies.NightlyRunner(CONF_FILE)
     runner.load()
-    if runner.pid_file.exists():
+    runner.load_pid()
+    if runner.data and "branch_pid" in runner.data:
         try:
-            with runner.pid_file.open("r") as f:
-                current_process = json.load(f)
-                os.kill(current_process["branch_pid"], signal.SIGTERM)
+            os.kill(runner.data["branch_pid"], signal.SIGTERM)
         except OSError as e:
             print("/killbranch: OSError:", str(e))
-            current_process = None
     else:
         print("/killbranch: no PID file")
-        current_process = None
+
     bottle.redirect("/")
     
 @bottle.post("/delete_pid")

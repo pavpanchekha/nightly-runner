@@ -72,9 +72,7 @@ def load():
     old_cwd = Path.cwd()
     os.chdir(runner.self_dir)
     runner.load()
-    runner.data = runner.load_data()
-    assert runner.data, "Could not load PID file"
-    runner.log_path = Path(runner.data["log"])
+    runner.load_pid()
     os.chdir(old_cwd)
     
     return runner

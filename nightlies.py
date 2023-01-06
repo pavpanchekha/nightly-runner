@@ -143,15 +143,11 @@ class NightlyRunner:
             self.log(2, f"Error loading info file: {e}")
         return out
 
-    def load_data(self) -> Any:
-        if self.pid_file.exists():
-            try:
-                with self.pid_file.open("r") as f:
-                    return json.load(f)
-            except (OSError, json.decoder.JSONDecodeError):
-                return None
-        else:
-            return None
+    def load_pid(self) -> Any:
+        with self.pid_file.open("r") as f:
+            runner.data = json.load(f)
+        runner.log_path = Path(runner.data["log"])
+        runner.start = datetime.date.fromisoformat(runner.data["start"])
 
     def run(self) -> None:
         self.start = datetime.now()
