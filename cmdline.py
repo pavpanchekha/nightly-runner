@@ -13,7 +13,15 @@ def run():
     
     _, cmd, *args = sys.argv
     
-    if cmd == "emoji":
+    if cmd == "info":
+        assert len(args) == 0, "usage: nightly-resutls info"
+        print(f"dir={runner.dir}")
+        print(f"config_file={runner.config_file}")
+        print(f"log_dir={runner.log_dir}")
+        print(f"pid_file={runner.pid_file}")
+        print(f"info_file={runner.info_file}")
+        return
+    elif cmd == "emoji":
         assert len(args) == 1, "usage: nightly-results emoji <emoji name>"
     elif cmd == "url":
         assert len(args) == 1, "usage: nightly-results url <url>"
