@@ -53,49 +53,6 @@ REPO_BADGES = [
     "never", # Never run this branch
 ]
 
-class NightlyResults:
-    def __enter__(self):
-        self.dir = tempfile.TemporaryDirectory(prefix="nightly")
-        self.cwdir = os.getcwd()
-        self.oldpath = os.getenv("PATH")
-        self.infofile = Path(self.dir.name, "info")
-        self.cmdfile = Path(self.dir.name, "nightly-results")
-
-        self.newpath = self.dir.name + ":" + self.oldpath
-
-        os.chdir("/home/nightlies/nightlies")
-        os.putenv("PATH", self.newpath)
-        self.infofile.touch()
-        with self.cmdfile.open("w") as f:
-            f.write(rf"""#!/bin/bash
-if [[ "$1" == "url" && ! "$2" == *://* ]]; then
-    printf "Invalid URL: '%s'\n" "$2"
-    exit 1
-else
-    while [[ "$#" != "0" ]]; do
-        printf '"%s" ' "$1" >> "{self.infofile}"
-        shift
-    done
-    printf "\n" >> "{self.infofile}"
-fi
-""")
-        self.cmdfile.chmod(0o700)
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        os.chdir(self.cwdir)
-        os.putenv("PATH", self.oldpath)
-        self.dir.cleanup()
-
-    def info(self) -> dict[str, str]:
-        out = {}
-        with self.infofile.open() as f:
-            for line in f:
-                if not line.strip(): continue
-                key, *values = shlex.split(line)
-                out[key] = " ".join(values)
-        return out
-
 class NightlyRunner:
     def __init__(self, config_file : str) -> None:
         self.config_file = Path(config_file)
@@ -132,6 +89,7 @@ class NightlyRunner:
         self.log_dir = Path(defaults.get("logs", "logs")).resolve()
         self.dryrun = "dryrun" in defaults
         self.pid_file = Path(defaults.get("pid", "running.pid")).resolve()
+        self.info_file = Path(defaults.get("info", "running.info")).resolve()
         self.config_file = Path(defaults.get("conffile", str(self.config_file))).resolve()
 
         for name in self.config.sections():
@@ -161,6 +119,24 @@ class NightlyRunner:
     def save(self) -> None:
         with self.pid_file.open("w") as f:
             json.dump(self.data, f)
+
+    def add_info(self, cmd, *args) -> None:
+        with self.info_file.open("a") as f:
+            f.write(shlex.join([cmd] + list(args)) + "\n")
+
+    def load_info(self) -> dict[str, str]:
+        out = {}
+        try:
+            with self.info_file.open("r") as f:
+                for line in f:
+                    if not line.strip(): continue
+                    cmd, *args = shlex.split(line)
+                    out[cmd] = " ".join(args)
+            # Clear the info file file
+            self.info_file.open("w").close()
+        except OSError as e:
+            self.log(2, f"Error loading info file: {e}")
+        return out
 
     def run(self) -> None:
         self.start = datetime.now()
@@ -402,23 +378,22 @@ class Branch:
         t = datetime.now()
         try:
             to = parse_time(self.repo.config.get("timeout"))
-            with NightlyResults() as NR:
-                cmd = SYSTEMD_RUN_CMD + \
-                    ["--setenv=PATH=" + NR.newpath] + \
-                    ["make", "-C", str(self.dir), "nightly"]
-                self.repo.runner.log(2, f"Executing {format_cmd(cmd)}")
-                if not self.repo.runner.dryrun:
-                    with (self.repo.runner.log_dir / log_name).open("wt") as fd:
-                        process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
-                        self.repo.runner.data["branch_pid"] = process.pid
-                        self.repo.runner.save()
-                        try:
-                            process.wait(timeout=to)
-                            p = process.poll()
-                            if p: raise subprocess.CalledProcessError(p, cmd)
-                        finally:
-                            self.info = NR.info()
-                            process.kill()
+            cmd = SYSTEMD_RUN_CMD + \
+                ["--setenv=NIGHTLY_CONF_FILE=" + str(self.repo.runner.config_file.resolve())] + \
+                ["make", "-C", str(self.dir), "nightly"]
+            self.repo.runner.log(2, f"Executing {format_cmd(cmd)}")
+            if not self.repo.runner.dryrun:
+                with (self.repo.runner.log_dir / log_name).open("wt") as fd:
+                    process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+                    self.repo.runner.data["branch_pid"] = process.pid
+                    self.repo.runner.save()
+                    try:
+                        process.wait(timeout=to)
+                        p = process.poll()
+                        if p: raise subprocess.CalledProcessError(p, cmd)
+                    finally:
+                        self.info = self.repo.runner.load_info()
+                        process.kill()
         except subprocess.TimeoutExpired as e:
             self.repo.runner.log(1, f"Run on branch {self.name} timed out after {format_time(e.timeout)}")
             failure = "timeout"
