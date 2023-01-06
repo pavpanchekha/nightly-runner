@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Dict, Any, List, Union, Optional
+from typing import Any, Union, Optional, cast
 import os, sys, subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -111,7 +111,7 @@ class NightlyRunner:
         self.log(0, "Restarting nightly run due to updated system repositories")
         os.execv(sys.executable, ["python3"] + sys.argv)
 
-    def exec(self, level : int, cmd : List[Union[str, Path]]) -> subprocess.CompletedProcess:
+    def exec(self, level : int, cmd : list[Union[str, Path]]) -> subprocess.CompletedProcess:
         self.log(level, f"Executing {format_cmd(cmd)}")
         return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
 
@@ -143,11 +143,11 @@ class NightlyRunner:
             self.log(2, f"Error loading info file: {e}")
         return out
 
-    def load_pid(self) -> Any:
+    def load_pid(self) -> None:
         with self.pid_file.open("r") as f:
             runner.data = json.load(f)
-        runner.log_path = Path(runner.data["log"])
-        runner.start = datetime.date.fromisoformat(runner.data["start"])
+        runner.log_path = Path(cast(str, runner.data["log"]))
+        runner.start = datetime.fromisoformat(cast(str, runner.data["start"]))
 
     def run(self) -> None:
         self.start = datetime.now()
