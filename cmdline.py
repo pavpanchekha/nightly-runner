@@ -28,8 +28,14 @@ def publish(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None
     assert runner.report_dir.exists(), f"Report dir {runner.report_dir} does not exist"
     repo = runner.data["repo"]
     name = args.name if args.name else str(int(time.time()))
-    shutil.copytree(args.path, runner.report_dir / repo / name)
+    dest_dir = runner.report_dir / repo / name
+    shutil.copytree(args.path, dest_dir)
     runner.add_info("url", os.path.join(self.base_url, repo, name))
+    if args.image:
+        assert args.image.is_relative_to(args.path), \
+            "Image path {args.image} is not within the pusblished path {args.path}"
+        relpath = args.image.relative_to(args.path)
+        runner.add_info("img", os.path.join(self.base_url, repo, name, str(relpath)))
     
 def download(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
     assert runner.report_dir.exists(), f"Report dir {runner.report_dir} does not exist"
@@ -85,6 +91,7 @@ if __name__ == "__main__":
 
     p = subparser.add_parser("publish", help="Publish a folder")
     p.add_argument("path", type=valid_path)
+    p.add_argument("--image", action="store", type=valid_path, help="Indicates a published image to show in Slack")
     p.add_argument("--name", action="store", default=None, help="Overrides the default (timestamp) name")
     p.set_defaults(func=publish)
 
