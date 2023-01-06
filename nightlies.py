@@ -56,6 +56,7 @@ REPO_BADGES = [
 class NightlyRunner:
     def __init__(self, config_file : str) -> None:
         self.config_file = Path(config_file)
+        self.self_dir = Path(__file__).resolve().parent
 
     def update_system_repo(self, dir : str, branch : str) -> bool:
         self.log(1, f"Updating system {dir} repository")
@@ -384,7 +385,7 @@ class Branch:
             to = parse_time(self.repo.config.get("timeout"))
             cmd = SYSTEMD_RUN_CMD + \
                 ["--setenv=NIGHTLY_CONF_FILE=" + str(self.repo.runner.config_file.resolve())] + \
-                ["--setenv=PATH=" + os.getenv("PATH")] + \
+                [f"--setenv=PATH={self.repo.runner.self_dir}:{os.getenv('PATH')}"] + \
                 ["make", "-C", str(self.dir), "nightly"]
             self.repo.runner.log(2, f"Executing {format_cmd(cmd)}")
             if not self.repo.runner.dryrun:
