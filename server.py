@@ -21,14 +21,7 @@ def index():
     runner = nightlies.NightlyRunner(CONF_FILE)
     runner.load()
 
-    if runner.pid_file.exists():
-        try:
-            with runner.pid_file.open("r") as f:
-                current_process = json.load(f)
-        except (OSError, json.decoder.JSONDecodeError):
-            current_process = None
-    else:
-        current_process = None
+    current_process = runner.load_data()
 
     for repo in runner.repos:
         repo.read()

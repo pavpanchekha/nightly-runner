@@ -27,7 +27,9 @@ def img(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
 
 def publish(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
     assert runner.report_dir.exists(), f"Report dir {runner.report_dir} does not exist"
-    repo = runner.data["repo"]
+    current_process = runner.load_data()
+    assert current_process and "repo" in current_process, "PID file does not have repo information"
+    repo = current_process["repo"]
     name = args.name if args.name else str(int(time.time()))
 
     runner.log(4, f"Publishing {args.path} to {dest_dir}")
@@ -52,7 +54,9 @@ def publish(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None
     
 def download(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
     assert runner.report_dir.exists(), f"Report dir {runner.report_dir} does not exist"
-    repo = runner.data["repo"]
+    current_process = runner.load_data()
+    assert current_process and "repo" in current_process, "PID file does not have repo information"
+    repo = current_process["repo"]
     src = runner.report_dir / repo / args.name
     dst = Path.cwd() / (args.to or args.name)
     runner.log(4, f"Copying {src} to {dst}")
