@@ -33,8 +33,8 @@ def publish(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None
     repo = current_process["repo"]
     name = args.name if args.name else str(int(time.time()))
 
-    runner.log(4, f"Publishing {args.path} to {dest_dir}")
     dest_dir : Path = runner.report_dir / repo / name
+    runner.log(4, f"Publishing {args.path} to {dest_dir}")
     shutil.copytree(args.path, dest_dir)
     if runner.report_group:
         runner.log(4, f"Changing group owner of {args.path} to {runner.report_group}")
