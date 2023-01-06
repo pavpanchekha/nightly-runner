@@ -123,8 +123,10 @@ class NightlyRunner:
             json.dump(self.data, f)
 
     def add_info(self, cmd, *args) -> None:
+        data = shlex.join([cmd] + list(args))
+        runner.log(4, f"Adding info {data}")
         with self.info_file.open("a") as f:
-            f.write(shlex.join([cmd] + list(args)) + "\n")
+            f.write(data + "\n")
 
     def load_info(self) -> dict[str, str]:
         out = {}

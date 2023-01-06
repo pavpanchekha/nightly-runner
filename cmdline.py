@@ -29,28 +29,33 @@ def publish(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None
     repo = runner.data["repo"]
     name = args.name if args.name else str(int(time.time()))
 
+    runner.log(4, f"Publishing {args.path} to {dest_dir}")
     dest_dir = runner.report_dir / repo / name
     shutil.copytree(args.path, dest_dir)
     if runner.report_group:
-        shutil.chown(path, group=runner.report_group)
+        runner.log(4, f"Changing group owner of {args.path} to {runner.report_group}")
+        shutil.chown(args.path, group=runner.report_group)
         for dpath, dirs, files in os.walk(str(args.path.resolve())):
             for dname in dirs:
                 shutil.chown(os.path.join(dirpath, dname), group=runner.report_group)
             for fname in files:
                 shutil.chown(os.path.join(dirpath, fname), group=runner.report_group)
 
-    runner.add_info("url", os.path.join(self.base_url, repo, name))
+    url_base = os.path.join(self.base_url, repo, name)
+    runner.add_info("url", url_base)
     if args.image:
         assert args.image.is_relative_to(args.path), \
             "Image path {args.image} is not within the pusblished path {args.path}"
         relpath = args.image.relative_to(args.path)
-        runner.add_info("img", os.path.join(self.base_url, repo, name, str(relpath)))
+        runner.add_info("img", os.path.join(url_base, str(relpath)))
     
 def download(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
     assert runner.report_dir.exists(), f"Report dir {runner.report_dir} does not exist"
     repo = runner.data["repo"]
-    shutil.copytree(runner.report_dir / repo / args.name,
-                    Path.cwd() / (args.to or args.name))
+    src = runner.report_dir / repo / args.name
+    dst = Path.cwd() / (args.to or args.name)
+    runner.log(4, f"Copying {src} to {dst}")
+    shutil.copytree(src, dst)
     
 # Command handling code
 
