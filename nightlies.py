@@ -125,7 +125,7 @@ class NightlyRunner:
 
     def add_info(self, cmd, *args) -> None:
         data = shlex.join([cmd] + list(args))
-        runner.log(4, f"Adding info {data}")
+        self.log(4, f"Adding info {data}")
         with self.info_file.open("a") as f:
             f.write(data + "\n")
 
@@ -145,9 +145,9 @@ class NightlyRunner:
 
     def load_pid(self) -> None:
         with self.pid_file.open("r") as f:
-            runner.data = json.load(f)
-        runner.log_path = Path(cast(str, runner.data["log"]))
-        runner.start = datetime.fromisoformat(cast(str, runner.data["start"]))
+            self.data = json.load(f)
+        self.log_path = Path(cast(str, self.data["log"]))
+        self.start = datetime.fromisoformat(cast(str, self.data["start"]))
 
     def run(self) -> None:
         self.start = datetime.now()
