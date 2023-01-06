@@ -50,15 +50,15 @@ if __name__ == "__main__":
 
     emoji_p = subparser.add_parser("emoji", help="Show an emoji in Slack")
     emoji_p.add_argument("emoji")
-    info_p.set_defaults(func=emoji)
+    emoji_p.set_defaults(func=emoji)
 
     url_p = subparser.add_parser("url", help="Output to link to in Slack")
     url_p.add_argument("url", type=valid_url)
-    info_p.set_defaults(func=url)
+    url_p.set_defaults(func=url)
 
     img_p = subparser.add_parser("img", help="Image to show in Slack")
     img_p.add_argument("url", type=valid_url)
-    info_p.set_defaults(func=url)
+    img_p.set_defaults(func=img)
 
     args = parser.parse_args()
     runner = load()
