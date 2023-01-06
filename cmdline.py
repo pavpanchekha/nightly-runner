@@ -38,8 +38,8 @@ def publish(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None
     shutil.copytree(args.path, dest_dir)
     if runner.report_group:
         runner.log(4, f"Changing group owner of {args.path} to {runner.report_group}")
-        shutil.chown(args.path, group=runner.report_group)
-        for dpath, dirs, files in os.walk(str(args.path.resolve())):
+        shutil.chown(dest_dir, group=runner.report_group)
+        for dpath, dirs, files in os.walk(str(dest_dir)):
             for dname in dirs:
                 shutil.chown(os.path.join(dpath, dname), group=runner.report_group)
             for fname in files:
