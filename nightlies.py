@@ -144,9 +144,9 @@ class NightlyRunner:
         return out
 
     def load_data(self) -> Any:
-        if runner.pid_file.exists():
+        if self.pid_file.exists():
             try:
-                with runner.pid_file.open("r") as f:
+                with self.pid_file.open("r") as f:
                     return json.load(f)
             except (OSError, json.decoder.JSONDecodeError):
                 return None

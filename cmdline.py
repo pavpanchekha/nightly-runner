@@ -27,24 +27,25 @@ def img(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
 
 def publish(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
     assert runner.report_dir.exists(), f"Report dir {runner.report_dir} does not exist"
+    assert runner.base_url, f"Cannot publish, no baseurl configured"
     current_process = runner.load_data()
     assert current_process and "repo" in current_process, "PID file does not have repo information"
     repo = current_process["repo"]
     name = args.name if args.name else str(int(time.time()))
 
     runner.log(4, f"Publishing {args.path} to {dest_dir}")
-    dest_dir = runner.report_dir / repo / name
+    dest_dir : Path = runner.report_dir / repo / name
     shutil.copytree(args.path, dest_dir)
     if runner.report_group:
         runner.log(4, f"Changing group owner of {args.path} to {runner.report_group}")
         shutil.chown(args.path, group=runner.report_group)
         for dpath, dirs, files in os.walk(str(args.path.resolve())):
             for dname in dirs:
-                shutil.chown(os.path.join(dirpath, dname), group=runner.report_group)
+                shutil.chown(os.path.join(dpath, dname), group=runner.report_group)
             for fname in files:
-                shutil.chown(os.path.join(dirpath, fname), group=runner.report_group)
+                shutil.chown(os.path.join(dpath, fname), group=runner.report_group)
 
-    url_base = os.path.join(self.base_url, repo, name)
+    url_base = runner.base_url + "/" + repo + "/" + name
     runner.add_info("url", url_base)
     if args.image:
         assert args.image.is_relative_to(args.path), \
@@ -76,13 +77,13 @@ def load():
     
     return runner
     
-def valid_url(s : str) -> None:
+def valid_url(s : str) -> str:
     if "://" in s:
         return s
     else:
         raise ValueError("ERROR: <url> must have format http[s]://...")
     
-def valid_path(s : str) -> None:
+def valid_path(s : str) -> Path:
     p = Path(s).resolve()
     if not p.exists():
         raise ValueError(f"ERROR: {s!r} does not exist")
