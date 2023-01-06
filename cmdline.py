@@ -5,19 +5,8 @@ import os
 import nightlies
 from pathlib import Path
 import argparse
-
-def load():
-    CONF_FILE = os.getenv("NIGHTLY_CONF_FILE")
-    assert CONF_FILE, "ERROR: could not find $NIGHTLY_CONF_FILE environment variable"
-    
-    nightly_path = Path(__file__).resolve().parent
-    old_cwd = Path.cwd()
-    os.chdir(nightly_path)
-    runner = nightlies.NightlyRunner(CONF_FILE)
-    runner.load()
-    os.chdir(old_cwd)
-    
-    return runner
+import shutil
+import time
 
 def info(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
     print(f"dir={runner.dir}")
@@ -34,31 +23,75 @@ def url(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
 
 def img(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
     runner.add_info("img", args.url)
+
+def publish(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
+    assert runner.report_dir.exists(), f"Report dir {runner.report_dir} does not exist"
+    repo = runner.data["repo"]
+    name = args.name if args.name else str(int(time.time()))
+    shutil.copytree(args.path, runner.report_dir / repo / name)
+    runner.add_info("url", os.path.join(self.base_url, repo, name))
+    
+def download(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
+    assert runner.report_dir.exists(), f"Report dir {runner.report_dir} does not exist"
+    repo = runner.data["repo"]
+    shutil.copytree(runner.report_dir / repo / args.name,
+                    Path.cwd() / (args.to or args.name))
+    
+# Command handling code
+
+def load():
+    CONF_FILE = os.getenv("NIGHTLY_CONF_FILE")
+    assert CONF_FILE, "ERROR: could not find $NIGHTLY_CONF_FILE environment variable"
+    
+    nightly_path = Path(__file__).resolve().parent
+    old_cwd = Path.cwd()
+    os.chdir(nightly_path)
+    runner = nightlies.NightlyRunner(CONF_FILE)
+    runner.load()
+    os.chdir(old_cwd)
+    
+    return runner
     
 def valid_url(s : str) -> None:
     if "://" in s:
-        return
+        return s
     else:
         raise ValueError("ERROR: <url> must have format http[s]://...")
+    
+def valid_path(s : str) -> None:
+    p = Path(s).resolve()
+    if not p.exists():
+        raise ValueError(f"ERROR: {s!r} does not exist")
+    return p
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="nightly-results")
     subparser = parser.add_subparsers()
 
-    info_p = subparser.add_parser("info", help="Show path information for the nightlies")
-    info_p.set_defaults(func=info)
+    p = subparser.add_parser("info", help="Show path information for the nightlies")
+    p.set_defaults(func=info)
 
-    emoji_p = subparser.add_parser("emoji", help="Show an emoji in Slack")
-    emoji_p.add_argument("emoji")
-    emoji_p.set_defaults(func=emoji)
+    p = subparser.add_parser("emoji", help="Show an emoji in Slack")
+    p.add_argument("emoji")
+    p.set_defaults(func=emoji)
 
-    url_p = subparser.add_parser("url", help="Output to link to in Slack")
-    url_p.add_argument("url", type=valid_url)
-    url_p.set_defaults(func=url)
+    p = subparser.add_parser("url", help="Output to link to in Slack")
+    p.add_argument("url", type=valid_url)
+    p.set_defaults(func=url)
 
-    img_p = subparser.add_parser("img", help="Image to show in Slack")
-    img_p.add_argument("url", type=valid_url)
-    img_p.set_defaults(func=img)
+    p = subparser.add_parser("img", help="Image to show in Slack")
+    p.add_argument("url", type=valid_url)
+    p.set_defaults(func=img)
+
+    p = subparser.add_parser("publish", help="Publish a folder")
+    p.add_argument("path", type=valid_path)
+    p.add_argument("--name", action="store", default=None, help="Overrides the default (timestamp) name")
+    p.set_defaults(func=publish)
+
+    p = subparser.add_parser("download", help="Download a previously-published file or folder")
+    p.add_argument("name")
+    p.add_argument("to", default=None)
+    p.set_defaults(func=download)
 
     args = parser.parse_args()
     runner = load()
