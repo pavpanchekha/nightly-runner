@@ -3,13 +3,18 @@
 import sys
 import os
 import nightlies
+from pathlib import Path
 
 def run():
     CONF_FILE = os.getenv("NIGHTLY_CONF_FILE")
     assert CONF_FILE, "ERROR: could not find $NIGHTLY_CONF_FILE environment variable"
     
+    nightly_path = Path(__file__).resolve().parent
+    old_cwd = Path.cwd()
+    os.chdir(nightly_path)
     runner = nightlies.NightlyRunner(CONF_FILE)
     runner.load()
+    os.chdir(old_cwd)
     
     _, cmd, *args = sys.argv
     
