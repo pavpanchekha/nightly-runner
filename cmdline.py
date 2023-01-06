@@ -36,14 +36,6 @@ def publish(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None
     dest_dir : Path = runner.report_dir / repo / name
     runner.log(4, f"Publishing {args.path} to {dest_dir}")
     shutil.copytree(args.path, dest_dir)
-    if runner.report_group:
-        runner.log(4, f"Changing group owner of {args.path} to {runner.report_group}")
-        shutil.chown(dest_dir, group=runner.report_group)
-        for dpath, dirs, files in os.walk(str(dest_dir)):
-            for dname in dirs:
-                shutil.chown(os.path.join(dpath, dname), group=runner.report_group)
-            for fname in files:
-                shutil.chown(os.path.join(dpath, fname), group=runner.report_group)
 
     url_base = runner.base_url + "/" + repo + "/" + name
     runner.add_info("url", url_base)
@@ -51,7 +43,7 @@ def publish(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None
         assert args.image.is_relative_to(args.path), \
             "Image path {args.image} is not within the pusblished path {args.path}"
         relpath = args.image.relative_to(args.path)
-        runner.add_info("img", os.path.join(url_base, str(relpath)))
+        runner.add_info("img", url_base + "/" + str(relpath))
     
 def download(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
     assert runner.report_dir.exists(), f"Report dir {runner.report_dir} does not exist"
