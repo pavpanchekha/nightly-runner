@@ -28,9 +28,8 @@ def img(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
 def publish(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
     assert runner.report_dir.exists(), f"Report dir {runner.report_dir} does not exist"
     assert runner.base_url, f"Cannot publish, no baseurl configured"
-    current_process = runner.load_data()
-    assert current_process and "repo" in current_process, "PID file does not have repo information"
-    repo = current_process["repo"]
+    assert "repo" in runner.data, "PID file does not have repo information"
+    repo = runner.data["repo"]
     name = args.name if args.name else str(int(time.time()))
 
     dest_dir : Path = runner.report_dir / repo / name
@@ -55,9 +54,8 @@ def publish(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None
     
 def download(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
     assert runner.report_dir.exists(), f"Report dir {runner.report_dir} does not exist"
-    current_process = runner.load_data()
-    assert current_process and "repo" in current_process, "PID file does not have repo information"
-    repo = current_process["repo"]
+    assert "repo" in runner.data, "PID file does not have repo information"
+    repo = runner.data["repo"]
     src = runner.report_dir / repo / args.name
     dst = Path.cwd() / (args.to or args.name)
     runner.log(4, f"Copying {src} to {dst}")
@@ -73,6 +71,9 @@ def load():
     old_cwd = Path.cwd()
     os.chdir(runner.self_dir)
     runner.load()
+    runner.data = runner.load_data()
+    assert runner.data, "Could not load PID file"
+    runner.log_path = Path(runner.data["log"]
     os.chdir(old_cwd)
     
     return runner
