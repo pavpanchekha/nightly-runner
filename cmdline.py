@@ -14,6 +14,7 @@ def info(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
     print(f"log_dir={runner.log_dir}")
     print(f"pid_file={runner.pid_file}")
     print(f"info_file={runner.info_file}")
+    print(f"report_dir={runner.report_dir}")
 
 def emoji(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
     runner.add_info("emoji", args.emoji)
