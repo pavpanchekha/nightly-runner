@@ -384,6 +384,7 @@ class Branch:
             to = parse_time(self.repo.config.get("timeout"))
             cmd = SYSTEMD_RUN_CMD + \
                 ["--setenv=NIGHTLY_CONF_FILE=" + str(self.repo.runner.config_file.resolve())] + \
+                ["--setenv=PATH=" + os.getenv("PATH")] + \
                 ["make", "-C", str(self.dir), "nightly"]
             self.repo.runner.log(2, f"Executing {format_cmd(cmd)}")
             if not self.repo.runner.dryrun:
