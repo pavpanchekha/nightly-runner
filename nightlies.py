@@ -57,6 +57,7 @@ class NightlyRunner:
     def __init__(self, config_file : str) -> None:
         self.config_file = Path(config_file)
         self.self_dir = Path(__file__).resolve().parent
+        self.data = None
 
     def update_system_repo(self, dir : str, branch : str) -> bool:
         self.log(1, f"Updating system {dir} repository")
