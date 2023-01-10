@@ -143,10 +143,13 @@ class NightlyRunner:
         return out
 
     def load_pid(self) -> None:
-        with self.pid_file.open("r") as f:
-            self.data = json.load(f)
-        self.log_path = Path(cast(str, self.data["log"]))
-        self.start = datetime.fromisoformat(cast(str, self.data["start"]))
+        try:
+            with self.pid_file.open("r") as f:
+                self.data = json.load(f)
+            self.log_path = Path(cast(str, self.data["log"]))
+            self.start = datetime.fromisoformat(cast(str, self.data["start"]))
+        except OSError:
+            return
 
     def run(self) -> None:
         self.start = datetime.now()
