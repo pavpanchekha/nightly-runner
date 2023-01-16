@@ -10,7 +10,7 @@ import shutil
 import time
 
 def copything(src, dst):
-    if src.isdir():
+    if src.is_dir():
         shutil.copytree(src, dst)
     else:
         shutil.copy2(src, dst)
