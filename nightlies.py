@@ -95,6 +95,13 @@ class NightlyRunner:
         self.config_file = Path(defaults.get("conffile", str(self.config_file))).resolve()
         self.report_dir = Path(defaults.get("reports", "reports")).resolve()
 
+        if defaults.get("secrets"):
+            path = Path(defaults.get("secrets")).resolve()
+            c = configparser.ConfigParser()
+            self.secrets = c.read(str(path))
+        else:
+            self.secrets = {}
+
         for name in self.config.sections():
             self.repos.append(Repository(self, name, self.config[name]))
 
@@ -213,7 +220,7 @@ class Repository:
         self.runner = runner
         self.config = configuration
 
-        self.slack_url = configuration.get("slack")
+        self.slack_channel = configuration.get("slack")
         self.run_all = False
 
         if "url" in self.config:
@@ -325,9 +332,11 @@ class Repository:
             self.runner.log(1, "No branches to run")
 
     def post(self) -> None:
-        if not self.slack_url or not self.runner.base_url:
+        if not self.slack_channel or not self.runner.base_url:
             self.runner.log(2, f"Not posting to slack, slack or baseurl not configured")
             return
+
+        slack_token = self.runner.secrets[self.slack_channel].get("token")
 
         if self.fatalerror:
             data = slack.build_fatal(self.name, self.fatalerror, self.runner.base_url)
@@ -340,7 +349,7 @@ class Repository:
             apt.post(data)
 
         if not self.runner.dryrun:
-            slack.send(self.runner, self.slack_url, data)
+            slack.send(self.runner, slack_token, data)
 
 class Branch:
     def __init__(self, repo : Repository, name : str):
