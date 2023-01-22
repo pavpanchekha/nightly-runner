@@ -98,7 +98,8 @@ class NightlyRunner:
         if defaults.get("secrets"):
             path = Path(defaults.get("secrets")).resolve()
             c = configparser.ConfigParser()
-            self.secrets = c.read(str(path))
+            c.read(str(path))
+            self.secrets = c
         else:
             self.secrets = {}
 
