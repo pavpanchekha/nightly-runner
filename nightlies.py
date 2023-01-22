@@ -57,7 +57,7 @@ class NightlyRunner:
     def __init__(self, config_file : str) -> None:
         self.config_file = Path(config_file)
         self.self_dir = Path(__file__).resolve().parent
-        self.data = None
+        self.data : Any = None
 
     def update_system_repo(self, dir : str, branch : str) -> bool:
         self.log(1, f"Updating system {dir} repository")
@@ -95,13 +95,10 @@ class NightlyRunner:
         self.config_file = Path(defaults.get("conffile", str(self.config_file))).resolve()
         self.report_dir = Path(defaults.get("reports", "reports")).resolve()
 
+        self.secrets = configparser.ConfigParser()
         if defaults.get("secrets"):
-            path = Path(defaults.get("secrets")).resolve()
-            c = configparser.ConfigParser()
-            c.read(str(path))
-            self.secrets = c
-        else:
-            self.secrets = {}
+            path = Path(cast(str, defaults.get("secrets"))).resolve()
+            self.secrets.read(str(path))
 
         for name in self.config.sections():
             self.repos.append(Repository(self, name, self.config[name]))
