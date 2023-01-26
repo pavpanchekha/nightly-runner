@@ -219,10 +219,11 @@ class Repository:
         self.runner = runner
         self.config = configuration
 
-        self.slack_channel = configuration.get("slack")
-        if self.slack_channel:
-            self.slack_token = self.runner.secrets[self.slack_channel].get("token")
+        if configuration.get("slack"):
+            self.slack_channel = configuration.get("slack")
+            self.slack_token = self.runner.secrets[self.slack_channel]["token"]
         else:
+            self.slack_channel = None
             self.slack_token = None
         self.run_all = False
 
