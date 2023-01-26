@@ -131,7 +131,7 @@ class NightlyRunner:
 
     def add_info(self, cmd, *args) -> None:
         data = shlex.join([cmd] + list(args))
-        self.log(4, f"Adding info {data}")
+        self.log(3, f"Adding info {data}")
         with self.info_file.open("a") as f:
             f.write(data + "\n")
 
@@ -335,9 +335,12 @@ class Repository:
             self.runner.log(1, "No branches to run")
 
     def post(self) -> None:
-        if not self.slack_token or not self.runner.base_url:
-            self.runner.log(2, f"Not posting to slack, slack or baseurl not configured")
-            return
+        if not self.slack_token:
+            return self.runner.log(1, f"Not posting to Slack, slack not configured")
+        elif not self.runner.base_url:
+            return self.runner.log(1, f"Not posting to Slack, baseurl not configured")
+        else:
+            runner.log(1, f"Posting results of run to slack!")
 
         if self.fatalerror:
             data = slack.build_fatal(self.name, self.fatalerror, self.runner.base_url)
@@ -430,7 +433,7 @@ class Branch:
             failure = ""
 
         if not self.repo.runner.dryrun:
-            out = self.repo.runner.exec(1, ["git", "-C", self.dir, "rev-parse", f"origin/{self.name}"])
+            out = self.repo.runner.exec(2, ["git", "-C", self.dir, "rev-parse", f"origin/{self.name}"])
             with self.lastcommit.open("wb") as last_commit_fd:
                 last_commit_fd.write(out.stdout)
 

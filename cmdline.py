@@ -40,7 +40,7 @@ def publish(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None
     name = args.name if args.name else str(int(time.time()))
 
     dest_dir : Path = runner.report_dir / repo / name
-    runner.log(4, f"Publishing {args.path} to {dest_dir}")
+    runner.log(3, f"Publishing {args.path} to {dest_dir}")
     copything(args.path, dest_dir)
 
     url_base = runner.base_url + "reports" + "/" + repo + "/" + name
@@ -57,7 +57,7 @@ def download(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> Non
     repo = typing.cast(str, runner.data["repo"])
     src = runner.report_dir / repo / args.name
     dst = Path.cwd() / (args.to or args.name)
-    runner.log(4, f"Copying {src} to {dst}")
+    runner.log(3, f"Copying {src} to {dst}")
     copything(src, dst)
     
 # Command handling code

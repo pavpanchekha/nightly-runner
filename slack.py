@@ -140,8 +140,6 @@ def build_fatal(name : str, text : str, baseurl : str) -> Response:
     return res
 
 def send(runner, url: str, res: Response) -> None:
-    runner.log(2, f"Posting results of run to slack!")
-
     payload = json.dumps(res.to_json()).encode("utf8")
     req = urllib.request.Request(url, data=payload, method="POST")
     req.add_header("Content-Type", "application/json; charset=utf8")
