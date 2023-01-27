@@ -83,7 +83,13 @@ form.inline { display: inline; }
 
 %for repo in runner.repos:
 
-<h2><kbd>{{repo.name}}</kbd></h2>
+<h2><kbd>{{repo.name}}</kbd>
+  %if repo.slack_channel
+% slack_url = repo.slack_token.replace("hooks.slack.com/services", "app.slack.com/client")
+% slack_url = slack_url.rsplit("/", 2)[0]
+  (posting to <a href="{{slack_url}}">#{{repo.slack_channel}}</a>)
+  %end
+</h2>
 
 <ul class="branches">
   %for branch in sorted(repo.branches.values(), key=lambda b: b.last_run(), reverse=True):
