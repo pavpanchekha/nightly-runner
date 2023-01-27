@@ -84,10 +84,10 @@ form.inline { display: inline; }
 %for repo in runner.repos:
 
 <h2><kbd>{{repo.name}}</kbd>
-  %if repo.slack_channel
-% slack_url = repo.slack_token.replace("hooks.slack.com/services", "app.slack.com/client")
-% slack_url = slack_url.rsplit("/", 2)[0]
-  (posting to <a href="{{slack_url}}">#{{repo.slack_channel}}</a>)
+  %if repo.slack_channel:
+    % slack_url = repo.slack_token.replace("hooks.slack.com/services", "app.slack.com/client")
+    % slack_url = slack_url.rsplit("/", 2)[0]
+    (posting to <a href="{{slack_url}}">#{{repo.slack_channel}}</a>)
   %end
 </h2>
 
