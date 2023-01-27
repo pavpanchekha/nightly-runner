@@ -84,7 +84,7 @@ form.inline { display: inline; }
 %for repo in runner.repos:
 
 <h2><kbd>{{repo.name}}</kbd>
-  (posting to <a href="{{slack_url}}">#{{repo.slack_channel}}</a>)
+  (posting to <kbd>#{{repo.slack_channel}}</kbd>)
 </h2>
 
 <ul class="branches">
