@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from typing import Any, Union, Optional, cast
-import os, sys, subprocess
+import os, sys, subprocess, time
 from datetime import datetime, timedelta
 from pathlib import Path
 import configparser
@@ -403,6 +403,8 @@ class Branch:
         self.repo.runner.data["branch"] = self.name
         self.repo.runner.data["branch_log"] = log_name
         self.repo.runner.save()
+
+        time.sleep(30) # To avoid thermal throttling
         t = datetime.now()
         try:
             to = parse_time(self.repo.config.get("timeout"))
