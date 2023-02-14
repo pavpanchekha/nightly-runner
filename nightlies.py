@@ -395,6 +395,9 @@ class Branch:
         return True
 
     def run(self) -> None:
+        self.repo.runner.log(1, f"Waiting for machine to cool down")
+        time.sleep(30) # To avoid thermal throttling
+
         self.repo.runner.log(1, f"Running tests on branch {self.name}")
         date = datetime.now()
         log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{self.repo.name}-{self.filename}.log"
@@ -404,7 +407,6 @@ class Branch:
         self.repo.runner.data["branch_log"] = log_name
         self.repo.runner.save()
 
-        time.sleep(30) # To avoid thermal throttling
         t = datetime.now()
         try:
             to = parse_time(self.repo.config.get("timeout"))
