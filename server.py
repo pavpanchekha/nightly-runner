@@ -164,7 +164,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         prog = 'server.py',
         description = 'Start the Nightly web UI server')
-    parser.add_argument("port", required=False, type=int, default=9000)
+    parser.add_argument("--port", type=int, default=9000)
     parser.add_argument("--server", default="paste")
     parser.add_argument("--bind", default="0.0.0.0")
     args = parser.parse_args()
