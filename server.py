@@ -16,7 +16,7 @@ CONF_FILE = "conf/nightlies.conf"
 RUNNING_NIGHTLIES = []
 
 
-def edit_conf_url(runner : nightlies.NightlyRunner) -> Optional[str]:
+def edit_conf_url(runner):
     conf_repo = runner.config.defaults().get("conf")
     conf_branch = runner.config.defaults().get("confbranch", "main")
     if conf_repo.startswith("http"):
