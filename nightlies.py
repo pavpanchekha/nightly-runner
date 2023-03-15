@@ -108,6 +108,7 @@ class NightlyRunner:
         self.secrets = configparser.ConfigParser()
         if defaults.get("secrets"):
             for file in Path("secrets").iterdir():
+                if not file.name.endswith(".conf"): continue
                 with file.open() as f:
                     self.secrets.read_file(f, source=f.name)
 
