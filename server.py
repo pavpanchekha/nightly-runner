@@ -15,6 +15,17 @@ CONF_FILE = "conf/nightlies.conf"
 
 RUNNING_NIGHTLIES = []
 
+
+def edit_conf_url(runner : nightlies.NightlyRunner) -> Optional[str]:
+    conf_repo = runner.config.defaults().get("conf")
+    conf_branch = runner.config.defaults().get("confbranch", "main")
+    if conf_repo.startswith("http"):
+        return conf_repo
+    elif ":" in conf_repo:
+        return None
+    else:
+        return f"https://github.com/{conf_repo}/edit/{conf_branch}/{self.config_file.name}"
+
 @bottle.route("/")
 @bottle.view("index.view")
 def index():
@@ -48,6 +59,7 @@ def index():
         "current": runner.data,
         "running": running,
         "baseurl": runner.base_url,
+        "confurl": edit_conf_url(runner),
         "last_print": last_print,
     }
 

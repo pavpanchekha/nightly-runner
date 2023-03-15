@@ -114,15 +114,6 @@ class NightlyRunner:
         for name in self.config.sections():
             self.repos.append(Repository(self, name, self.config[name]))
 
-    def conf_url(self) -> Optional[str]:
-        conf_repo = self.config.defaults().get("conf")
-        if conf_repo.startswith("http"):
-            return conf_repo
-        elif ":" in conf_repo:
-            return None
-        else:
-            return "https://github.com/" + conf_repo
-
     def update(self) -> None:
         if not self.config.getboolean("DEFAULT", "update", fallback=False): return
 
