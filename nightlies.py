@@ -34,6 +34,10 @@ def parse_time(to : Optional[str]) -> Optional[float]:
             return float(to[:-len(unit)]) * multiplier
     return float(to)
 
+def repo_to_url(repo : str) -> str:
+    if repo and ":" in repo: return repo
+    return "git@github.com:" + repo + ".git"
+
 SYSTEMD_RUN_CMD = [
     "sudo", # There might not be a user session manager, so run using root's
     "systemd-run",
@@ -59,8 +63,14 @@ class NightlyRunner:
         self.self_dir = Path(__file__).resolve().parent
         self.data : Any = None
 
-    def update_system_repo(self, dir : str, branch : str) -> bool:
-        self.log(1, f"Updating system {dir} repository")
+    def update_system_repo(self, dir : str, repo : str, branch : str) -> bool:
+        if not Path(dir).is_dir():
+            self.log(1, f"Downloading system {repo} repository {dir}")
+            self.exec(2, ["git", "-C", dir, "clone", "--recursive",
+                          "--branch", branch, "--", repo_to_url(repo), dir])
+            return True
+
+        self.log(1, f"Updating system {repo} repository in {dir}")
         try:
             conf_commit = self.exec(2, ["git", "-C", dir, "rev-parse", "HEAD"]).stdout
             self.log(2, f"Commit {conf_commit.decode().strip()}")
@@ -97,21 +107,30 @@ class NightlyRunner:
 
         self.secrets = configparser.ConfigParser()
         if defaults.get("secrets"):
-            path = Path(cast(str, defaults.get("secrets"))).resolve()
-            with path.open() as f:
-                self.secrets.read_file(f, source=f.name)
+            for file in Path("secrets").iterdir():
+                with file.open() as f:
+                    self.secrets.read_file(f, source=f.name)
 
         for name in self.config.sections():
             self.repos.append(Repository(self, name, self.config[name]))
 
     def update(self) -> None:
-        if self.config.getboolean("DEFAULT", "pullself", fallback=False):
-            branch = self.config.defaults().get("selfbranch", "main")
-            if self.update_system_repo(".", branch): self.restart()
-        if self.config.getboolean("DEFAULT", "pullconf", fallback=False):
-            conf_dir = os.path.dirname(self.config_file)
-            branch = self.config.defaults().get("confbranch", "main")
-            if self.update_system_repo(conf_dir, branch): self.restart()
+        if not self.config.getboolean("DEFAULT", "update", fallback=False): return
+
+        runner_dir = "."
+        runner_repo = self.config.defaults().get("self", "pavpanchekha/nightly-runner")
+        runner_branch = self.config.defaults().get("selfbranch", "main")
+        if self.update_system_repo(runner_dir, runner_repo, runner_branch): self.restart()
+
+        conf_dir = os.path.dirname(self.config_file)
+        conf_repo = self.config.defaults().get("conf")
+        conf_branch = self.config.defaults().get("confbranch", "main")
+        if self.update_system_repo(conf_dir, conf_repo, conf_branch): self.restart()
+
+        sec_dir = self.config.defaults().get("secrets")
+        sec_repo = self.config.defaults().get("secrets")
+        sec_branch = self.config.defaults().get("secretsbranch", "main")
+        if self.update_system_repo(sec_dir, sec_repo, sec_branch): self.restart()
 
     def restart(self) -> None:
         self.log(0, "Restarting nightly run due to updated system repositories")
@@ -227,10 +246,7 @@ class Repository:
             self.slack_token = None
         self.run_all = False
 
-        if "url" in self.config:
-            self.url = self.config["url"]
-        else:
-            self.url = "git@github.com:" + configuration.get("github", name) + ".git"
+        self.url = repo_to_url(self.config.get("url", configuration.get("github", name)))
 
         self.name = name.split("/")[-1]
         self.dir = runner.dir / self.name
