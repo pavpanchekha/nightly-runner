@@ -409,8 +409,9 @@ class Branch:
         return True
 
     def run(self) -> None:
-        self.repo.runner.log(1, f"Waiting for machine to cool down")
-        time.sleep(30) # To avoid thermal throttling
+        if not self.repo.runner.dryrun:
+            self.repo.runner.log(1, f"Waiting for machine to cool down")
+            time.sleep(30) # To avoid thermal throttling
 
         self.repo.runner.log(1, f"Running tests on branch {self.name}")
         date = datetime.now()
