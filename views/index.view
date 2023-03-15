@@ -79,6 +79,12 @@ form.inline { display: inline; }
   <form action="{{baseurl}}/fullrun" method="post" class="inline">
     <button {{disabled}} >Start a full run</button>
   </form>
+
+  %if runner.conf_url()
+  <form action="{{runner.conf_url()}}" method="post" class="inline">
+    <button >Modify configuration</button>
+  </form>
+  %end
 </div>
 
 %for repo in runner.repos:
