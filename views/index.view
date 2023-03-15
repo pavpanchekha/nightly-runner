@@ -6,6 +6,16 @@
 % from nightlies import format_time
 % disabled = "disabled" if current else ""
 
+<script>
+for (const elt of document.querySelectorAll("form[method=get]")) {
+    elt.addEventListener("submit", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        window.location = e.target.action;
+    })
+}
+</script>
+
 <style>
 body { width: 80ex; margin: 1em auto; }
 form.inline { display: inline; }
