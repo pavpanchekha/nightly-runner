@@ -6,3 +6,5 @@ logs/
 running.pid
 passwords
 conf/
+secrets/
+nightly-test/
