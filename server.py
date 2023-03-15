@@ -17,6 +17,9 @@ RUNNING_NIGHTLIES = []
 
 
 def edit_conf_url(runner):
+    if "confedit" in runner.config.defaults():
+        return runner.config.defaults()["confedit"]
+
     conf_repo = runner.config.defaults().get("conf")
     conf_branch = runner.config.defaults().get("confbranch", "main")
     if conf_repo.startswith("http"):
@@ -24,7 +27,7 @@ def edit_conf_url(runner):
     elif ":" in conf_repo:
         return None
     else:
-        return f"https://github.com/{conf_repo}/edit/{conf_branch}/{self.config_file.name}"
+        return f"https://github.com/{conf_repo}/edit/{conf_branch}/{runner.config_file.name}"
 
 @bottle.route("/")
 @bottle.view("index.view")
