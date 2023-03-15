@@ -80,7 +80,7 @@ form.inline { display: inline; }
     <button {{disabled}} >Start a full run</button>
   </form>
 
-  %if runner.conf_url()
+  %if runner.conf_url():
   <form action="{{runner.conf_url()}}" method="post" class="inline">
     <button >Modify configuration</button>
   </form>
