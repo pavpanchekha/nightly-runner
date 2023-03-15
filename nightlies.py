@@ -276,18 +276,6 @@ class Repository:
             in git_branch.stdout.decode("utf8").strip().split("\n")
         ]
 
-        expected_files = self.ignored_files | { b.dir for b in all_branches} | \
-            { b.lastcommit for b in all_branches }
-        self.runner.log(1, "Cleaning unnecessary files")
-        for fn in self.dir.iterdir():
-            if fn not in expected_files:
-                self.runner.log(2, f"Deleting unknown file {fn}")
-                if not self.runner.dryrun:
-                    if fn.is_dir():
-                        shutil.rmtree(str(fn))
-                    else:
-                        fn.unlink()
-
         if "branches" in self.config:
             all_branches = self.config["branches"].split()
 
@@ -301,6 +289,20 @@ class Repository:
             self.branches[branch_name] = branch
 
         self.assign_badges()
+
+        expected_files = self.ignored_files.union(*[
+            {b.dir, b.lastcommit} for b in self.branches.values()
+        ])
+        self.runner.log(1, "Cleaning unnecessary files")
+        for fn in self.dir.iterdir():
+            if fn not in expected_files:
+                self.runner.log(2, f"Deleting unknown file {fn}")
+                if not self.runner.dryrun:
+                    if fn.is_dir():
+                        shutil.rmtree(str(fn))
+                    else:
+                        fn.unlink()
+
 
     def read(self) -> None:
         self.branches = {}
@@ -354,6 +356,8 @@ class Repository:
             return self.runner.log(1, f"Not posting to Slack, slack not configured")
         elif not self.runner.base_url:
             return self.runner.log(1, f"Not posting to Slack, baseurl not configured")
+        elif not hasattr(self, "runnable"):
+            return self.runner.log(1, f"Not posting to Slack, some kind of error occurred")
         else:
             runner.log(1, f"Posting results of run to slack!")
 
