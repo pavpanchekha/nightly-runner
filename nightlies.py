@@ -289,7 +289,10 @@ class Repository:
             self.branches[branch_name] = branch
 
         self.assign_badges()
+        if self.config.getboolean("DEFAULT", "clean", fallback=True):
+            self.clean()
 
+    def clean(self):
         expected_files = self.ignored_files.union(*[
             {b.dir, b.lastcommit} for b in self.branches.values()
         ])
