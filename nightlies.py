@@ -68,7 +68,7 @@ class NightlyRunner:
             self.log(1, f"Downloading system {repo} repository {dir}")
             self.exec(2, ["git", "-C", dir, "clone", "--recursive",
                           "--branch", branch, "--", repo_to_url(repo), dir])
-            return True
+            self.restart()
 
         self.log(1, f"Updating system {repo} repository in {dir}")
         try:
@@ -83,10 +83,9 @@ class NightlyRunner:
             sys.exit(1)
         if conf_commit == conf_commit2:
             self.log(1, f"System {dir} repository up to date")
-            return False
         else:
             self.log(1, f"System {dir} repository updated; will need to restart")
-            return True
+            self.restart()
 
     def load(self) -> None:
         assert self.config_file.is_file(), f"Configuration file {self.config_file} is not a file"
@@ -118,20 +117,18 @@ class NightlyRunner:
     def update(self) -> None:
         if not self.config.getboolean("DEFAULT", "update", fallback=False): return
 
-        runner_dir = "."
         runner_repo = self.config.defaults().get("self", "pavpanchekha/nightly-runner")
         runner_branch = self.config.defaults().get("selfbranch", "main")
-        if self.update_system_repo(runner_dir, runner_repo, runner_branch): self.restart()
+        self.update_system_repo(".", runner_repo, runner_branch)
 
         conf_dir = os.path.dirname(self.config_file)
         conf_repo = self.config.defaults().get("conf")
         conf_branch = self.config.defaults().get("confbranch", "main")
-        if self.update_system_repo(conf_dir, conf_repo, conf_branch): self.restart()
+        self.update_system_repo(conf_dir, conf_repo, conf_branch)
 
-        sec_dir = self.config.defaults().get("secrets")
         sec_repo = self.config.defaults().get("secrets")
         sec_branch = self.config.defaults().get("secretsbranch", "main")
-        if self.update_system_repo(sec_dir, sec_repo, sec_branch): self.restart()
+        self.update_system_repo("secrets", sec_repo, sec_branch)
 
     def restart(self) -> None:
         self.log(0, "Restarting nightly run due to updated system repositories")
