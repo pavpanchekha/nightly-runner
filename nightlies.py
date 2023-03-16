@@ -45,6 +45,7 @@ SYSTEMD_RUN_CMD = [
     "--same-dir", # Keep current working dir (probably unneeded)
     "--wait", # Wait for it to finish
     "--pty", # Pass through stdio
+    "--pipe", # Pass through file descriptors
     f"--uid={os.getuid()}", # As the current user
     f"--gid={os.getgid()}", # As the current group
     "--slice=nightlies.slice", # Run with the nightly resource limits
