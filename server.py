@@ -10,6 +10,7 @@ import os
 import json
 import signal
 import time
+import shutil
 
 CONF_FILE = "conf/nightlies.conf"
 
@@ -117,6 +118,20 @@ def runnext():
         if repo.name == repo_name:
             try:
                 nightlies.Branch(repo, branch).lastcommit.unlink()
+            except FileNotFoundError:
+                pass
+    bottle.redirect("/")
+
+@bottle.post("/rmbranch")
+def rmbranch():
+    repo_name = bottle.request.forms.get('repo')
+    branch = bottle.request.forms.get('branch')
+    runner = nightlies.NightlyRunner(CONF_FILE)
+    runner.load()
+    for repo in runner.repos:
+        if repo.name == repo_name:
+            try:
+                shutil.rmtree(nightlies.Branch(repo, branch).dir)
             except FileNotFoundError:
                 pass
     bottle.redirect("/")
