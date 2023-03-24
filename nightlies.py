@@ -193,12 +193,14 @@ class NightlyRunner:
                     self.log(0, f"Nightly already running on pid {current_process['pid']}")
             except (OSError, json.decoder.JSONDecodeError):
                 self.log(0, f"Nightly already running")
-            while True:
-                if self.try_lock():
-                    return
-                else:
-                    self.log(1, f"Sleeping for 15 minutes...")
-                    time.sleep(15 * 60)
+
+            if self.config.getboolean("wait", fallback=True):
+                while True:
+                    if self.try_lock():
+                        return
+                    else:
+                        self.log(1, f"Sleeping for 15 minutes...")
+                        time.sleep(15 * 60)
 
 
     def run(self) -> None:
@@ -209,7 +211,8 @@ class NightlyRunner:
         self.log(0, f"Loaded configuration file {self.config_file}")
         self.update()
 
-        self.lock()
+        if not self.lock():
+            return
 
         self.data = {
             "pid": os.getpid(),
