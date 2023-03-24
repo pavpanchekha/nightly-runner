@@ -64,7 +64,7 @@ class NightlyRunner:
         self.self_dir = Path(__file__).resolve().parent
         self.data : Any = None
 
-    def update_system_repo(self, dir : str, repo : str, branch : str) -> bool:
+    def update_system_repo(self, dir : str, repo : str, branch : str) -> None:
         if not Path(dir).is_dir():
             self.log(1, f"Downloading system {repo} repository {dir}")
             self.exec(2, ["git", "-C", dir, "clone", "--recursive",
@@ -123,11 +123,11 @@ class NightlyRunner:
         self.update_system_repo(".", runner_repo, runner_branch)
 
         conf_dir = os.path.dirname(self.config_file)
-        conf_repo = self.config.defaults().get("conf")
+        conf_repo = self.config.defaults()["conf"]
         conf_branch = self.config.defaults().get("confbranch", "main")
         self.update_system_repo(conf_dir, conf_repo, conf_branch)
 
-        sec_repo = self.config.defaults().get("secrets")
+        sec_repo = self.config.defaults()["secrets"]
         sec_branch = self.config.defaults().get("secretsbranch", "main")
         self.update_system_repo("secrets", sec_repo, sec_branch)
 
@@ -238,8 +238,8 @@ class Repository:
         self.config = configuration
 
         if configuration.get("slack"):
-            self.slack_channel = configuration.get("slack")
-            self.slack_token = self.runner.secrets[self.slack_channel]["slack"]
+            self.slack_channel : Optional[str] = configuration.get("slack")
+            self.slack_token : Optional[str] = self.runner.secrets[self.slack_channel]["slack"]
         else:
             self.slack_channel = None
             self.slack_token = None
