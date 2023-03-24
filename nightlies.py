@@ -176,6 +176,31 @@ class NightlyRunner:
         except OSError:
             return
 
+    def try_lock(self) -> bool:
+        try:
+            self.pid_file.touch(exist_ok=False)
+            return True
+        except FileExistsError:
+            return False
+
+    def lock(self):
+        if self.try_lock():
+            return
+        else:
+            try:
+                with self.pid_file.open("r") as f:
+                    current_process = json.load(f)
+                    self.log(0, f"Nightly already running on pid {current_process['pid']}")
+            except (OSError, json.decoder.JSONDecodeError):
+                self.log(0, f"Nightly already running")
+            while True:
+                if self.try_lock():
+                    return
+                else:
+                    self.log(1, f"Sleeping for 15 minutes...")
+                    time.sleep(15 * 60)
+
+
     def run(self) -> None:
         self.start = datetime.now()
         name = f"{self.start:%Y-%m-%d}-{self.start:%H%M%S}.log"
@@ -184,26 +209,15 @@ class NightlyRunner:
         self.log(0, f"Loaded configuration file {self.config_file}")
         self.update()
 
+        self.lock()
+
         self.data = {
             "pid": os.getpid(),
             "start": self.start.isoformat(),
             "config": str(Path(self.config_file).resolve()),
             "log": str(self.log_path),
         }
-
-        try:
-            self.pid_file.touch(exist_ok=False)
-        except FileExistsError:
-            try:
-                with self.pid_file.open("r") as f:
-                    current_process = json.load(f)
-                    self.log(0, f"Nightly already running on pid {current_process['pid']}")
-                    return
-            except (OSError, json.decoder.JSONDecodeError):
-                self.log(0, f"Nightly already running")
-                return
-        else:
-            self.save()
+        self.save()
 
         if self.dryrun:
             self.log(0, "Running in dry-run mode. No nightlies will be executed.")
