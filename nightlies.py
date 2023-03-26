@@ -185,7 +185,7 @@ class NightlyRunner:
 
     def lock(self):
         if self.try_lock():
-            return
+            return True
         else:
             try:
                 with self.pid_file.open("r") as f:
@@ -197,10 +197,12 @@ class NightlyRunner:
             if self.config.getboolean("wait", fallback=True):
                 while True:
                     if self.try_lock():
-                        return
+                        return True
                     else:
                         self.log(1, f"Sleeping for 15 minutes...")
                         time.sleep(15 * 60)
+            else:
+                return False
 
 
     def run(self) -> None:
