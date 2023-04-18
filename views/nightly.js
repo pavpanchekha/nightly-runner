@@ -50,4 +50,4 @@ function init() {
     }
 };
 
-window.addEventListener("load", init);
+requestAnimationFrame(init);
