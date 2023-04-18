@@ -37,7 +37,7 @@ class OpenProjects {
 
 let OPEN_PROJECTS = null;
 
-window.addEventListener("DOMContentLoaded", () => {
+function init() {
     OPEN_PROJECTS = OpenProjects.load();
     OPEN_PROJECTS.read();
 
@@ -48,4 +48,6 @@ window.addEventListener("DOMContentLoaded", () => {
             OPEN_PROJECTS.save();
         });
     }
-});
+};
+
+window.addEventListener("load", init);

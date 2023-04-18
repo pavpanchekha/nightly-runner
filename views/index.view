@@ -8,6 +8,7 @@
 
 <style>
 body { width: 80ex; margin: 1em auto; }
+summary > h2 { display: inline; }
 form.inline { display: inline; }
 .status { margin: 1em 0; padding: 1ex; border: medium solid navy; background: lightblue; }
 .badge { background: #ddd; padding: 0 .5em; border-radius: .5em; margin-left: .25ch; }
