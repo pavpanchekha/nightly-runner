@@ -24,9 +24,9 @@ class OpenProjects {
 
     static load() {
         if (window.localStorage["open-projects"]) {
-            return OpenProjects(window.localStorage["open-projects"].split(" "));
+            return new OpenProjects(window.localStorage["open-projects"].split(" "));
         } else {
-            return OpenProjects([]);
+            return new OpenProjects([]);
         }
     }
 
@@ -35,7 +35,7 @@ class OpenProjects {
     }
 }
 
-const OPEN_PROJECTS = null;
+let OPEN_PROJECTS = null;
 
 window.addEventListener("DOMContentLoaded", () => {
     OPEN_PROJECTS = OpenProjects.load();
@@ -43,7 +43,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     let projects = document.querySelectorAll(".repo");
     for (let project of projects) {
-        project.addEventListener("toggle" () => {
+        project.addEventListener("toggle", () => {
             OPEN_PROJECTS.write();
             OPEN_PROJECTS.save();
         });
