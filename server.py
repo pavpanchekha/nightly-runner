@@ -80,6 +80,10 @@ def disk():
 @bottle.view("robots.txt")
 def robots_txt(): pass
 
+@bottle.route("/nightly.js")
+@bottle.view("nightly.js")
+def nightly_js(): pass
+
 @bottle.post("/dryrun")
 def dryrun():
     runner = nightlies.NightlyRunner(CONF_FILE)

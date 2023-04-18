@@ -13,6 +13,8 @@ form.inline { display: inline; }
 .badge { background: #ddd; padding: 0 .5em; border-radius: .5em; margin-left: .25ch; }
 </style>
 
+<script async src="nightly.js"></script>
+
 %if current:
 <div class="status">
   <div>
@@ -88,10 +90,12 @@ form.inline { display: inline; }
 </div>
 
 %for repo in runner.repos:
-
-<h2><kbd>{{repo.name}}</kbd>
-  (posting to <kbd>#{{repo.slack_channel}}</kbd>)
-</h2>
+<details class="repo">
+  <summary>
+    <h2><kbd class="name">{{repo.name}}</kbd>
+      (posting to <kbd>#{{repo.slack_channel}}</kbd>)
+    </h2>
+  </summary>
 
 <ul class="branches">
   %for branch in sorted(repo.branches.values(), key=lambda b: b.last_run(), reverse=True):
@@ -118,4 +122,5 @@ form.inline { display: inline; }
     </li>
   %end 
 </ul>
+</details>
 %end
