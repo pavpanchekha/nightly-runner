@@ -194,7 +194,7 @@ class NightlyRunner:
             except (OSError, json.decoder.JSONDecodeError):
                 self.log(0, f"Nightly already running")
 
-            if self.config.getboolean("wait", fallback=True):
+            if self.config.getboolean("DEFAULT", "wait", fallback=True):
                 while True:
                     if self.try_lock():
                         return True
