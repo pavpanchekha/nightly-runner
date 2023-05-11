@@ -58,7 +58,7 @@ def server_state():
 def to_html(name, result):
     text, ok = result
     style = "color: red" if not ok else "color: green"
-    return f"<li>{name}: <span style='{style}'>\N{BLACK CIRCLE} {text}</span></li>"
+    return f"<li>{name}: <span style='{style}'>{text}</span></li>"
 
 def disk_state(path):
     df = shutil.disk_usage(path)
