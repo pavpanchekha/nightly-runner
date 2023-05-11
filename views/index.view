@@ -13,8 +13,8 @@ summary > h2 { display: inline; }
 form.inline { display: inline; }
 .badge { background: #ddd; padding: 0 .5em; border-radius: .5em; margin-left: .25ch; }
 #system-state ul {
-    display: flow; flow-direction: row; justify-content: left; list-style: none; gap: 1em;
-    border-bottom: 1px solid #ddd; margin-bottom: 1em; padding: 1ex 0;
+    display: flex; flex-direction: row; justify-content: left; list-style: none; gap: 1em;
+    border-bottom: 1px solid #ddd; margin-bottom: 1em; padding: 1ex 0; font-size: 80%
 }
 </style>
 

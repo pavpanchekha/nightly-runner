@@ -58,7 +58,7 @@ def server_state():
 def to_html(name, result):
     text, ok = result
     style = "color: red" if not ok else "color: green"
-    return f"<li>{name}: <span style='{style}'>\N{BLACK LARGE CIRCLE} {text}</span></li>"
+    return f"<li>{name}: <span style='{style}'>\N{BLACK CIRCLE} {text}</span></li>"
 
 def disk_state(path):
     df = shutil.disk_usage(path)
@@ -70,8 +70,8 @@ def system_state_html():
         to_html("Timer", timer_state()),
         to_html("Service", service_state()),
         to_html("Server", server_state()),
-        to_html("/data/", disk_state("/data/")),
-        to_html("/home/", disk_state("/home")),
+        to_html("<tt>/data</tt>", disk_state("/data/")),
+        to_html("<tt>/home</tt>", disk_state("/home")),
     ]
     return "<ul>" + "".join(pieces) + "</ul>"
         
