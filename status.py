@@ -62,8 +62,8 @@ def to_html(name, result):
 
 def disk_state(path):
     df = shutil.disk_usage(path)
-    pct = usage.free / usage.total * 100
-    return f"{pct:.1f}%", usage.free > (10 << 30)
+    pct = df.used / df.total * 100
+    return f"{pct:.1f}%", df.free > (10 << 30)
 
 def system_state_html():
     pieces = [
