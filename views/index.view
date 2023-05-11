@@ -11,14 +11,19 @@ body { width: 80ex; margin: 1em auto; }
 details { margin: 1em 0; }
 summary > h2 { display: inline; }
 form.inline { display: inline; }
-.status { margin: 1em 0; padding: 1ex; border: medium solid navy; background: lightblue; }
 .badge { background: #ddd; padding: 0 .5em; border-radius: .5em; margin-left: .25ch; }
+#system-state ul {
+    display: flow; flow-direction: row; justify-content: left; list-style: none; gap: 1em;
+    border-bottom: 1px solid #ddd; margin-bottom: 1em; padding: 1ex 0;
+}
 </style>
 
 <script async src="nightly.js"></script>
 
+<header id="system-state">
+  {{! system_state }}
+
 %if current:
-<div class="status">
   <div>
     <form action="{{baseurl}}/logs/{{Path(current['log']).name}}" method="get" class="inline">
       <button>View log</button>
@@ -62,8 +67,8 @@ form.inline { display: inline; }
     Nightly seems dead (PID not found).
   </div>
   %end
-</div>
 %end
+</header>
 
 %if disabled:
   <div>Controls disabled until current nightly ends.</div>

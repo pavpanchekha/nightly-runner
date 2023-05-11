@@ -11,11 +11,11 @@ import json
 import signal
 import time
 import shutil
+import status
 
 CONF_FILE = "conf/nightlies.conf"
 
 RUNNING_NIGHTLIES = []
-
 
 def edit_conf_url(runner):
     if "confedit" in runner.config.defaults():
@@ -57,6 +57,7 @@ def index():
             last_print = time.time() - os.path.getmtime(str(log_file))
         except FileNotFoundError:
             running = False
+    system_state = status.system_state_html()
 
     return {
         "runner": runner,
@@ -64,6 +65,7 @@ def index():
         "running": running,
         "baseurl": runner.base_url,
         "confurl": edit_conf_url(runner),
+        "system_state": system_state,
         "last_print": last_print,
     }
 
