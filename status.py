@@ -71,7 +71,7 @@ def system_state_html():
         to_html("Service", service_state()),
         to_html("Server", server_state()),
         to_html("/data/", disk_state("/data/")),
-        to_html("/home/", disk_state("/hone")),
+        to_html("/home/", disk_state("/home")),
     ]
     return "<ul>" + "".join(pieces) + "</ul>"
         
