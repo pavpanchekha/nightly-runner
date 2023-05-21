@@ -82,7 +82,7 @@ form.inline { display: inline; }
   </form>
 
   <form action="{{baseurl}}/dryrun" method="post" class="inline">
-    <button {{disabled}} >Start a dry run</button>
+    <button {{disabled}} >Sync with Github</button>
   </form>
 
   <form action="{{baseurl}}/fullrun" method="post" class="inline">
