@@ -104,30 +104,41 @@ form.inline { display: inline; }
     </h2>
   </summary>
 
-<ul class="branches">
+<table class="branches">
+  <thead>
+    <tr>
+      <th colspan=2>Run
+  </thead>
+  <tbody>
   %for branch in sorted(repo.branches.values(), key=lambda b: b.last_run(), reverse=True):
-    <li>
+    <tr>
+      <td>
       <form action="{{baseurl}}/runnow" method="post" class="inline">
         <input type="hidden" name="repo" value="{{repo.name}}" />
         <input type="hidden" name="branch" value="{{branch.name}}" />
-        <button {{disabled}}>Run now</button>
+        <button {{disabled}}>Now</button>
       </form>
+      <td>
       <form action="{{baseurl}}/runnext" method="post" class="inline">
         <input type="hidden" name="repo" value="{{repo.name}}" />
         <input type="hidden" name="branch" value="{{branch.name}}" />
-        <button>Run tonight</button>
+        <button>Tonight</button>
       </form>
+      <td>
       <kbd>{{branch.name}}</kbd>
       %for badge in branch.badges:
       <span class="badge">{{badge}}</span>
       %end
+      <td>
       <form action="{{baseurl}}/rmbranch" method="post" class="inline">
         <input type="hidden" name="repo" value="{{repo.name}}" />
         <input type="hidden" name="branch" value="{{branch.name}}" />
         <button>Delete checkout</button>
       </form>
-    </li>
+    </tr>
   %end 
-</ul>
+  </tbody>
+</table>
 </details>
+
 %end
