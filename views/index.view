@@ -10,7 +10,9 @@
 body { width: 80ex; margin: 0 auto 3em; }
 details { margin: 1em 0; }
 summary > h2 { display: inline; }
+table { width: 100%; }
 form.inline { display: inline; }
+th { color: gray; border-bottom: 1px solid gray; text-align: left; }
 .badge { background: #ddd; padding: 0 .5em; border-radius: .5em; margin-left: .25ch; }
 #system-state ul {
     display: flex; flex-direction: row; justify-content: left; list-style: none; gap: 1em;
@@ -107,7 +109,9 @@ form.inline { display: inline; }
 <table class="branches">
   <thead>
     <tr>
-      <th colspan=2>Run
+      <th colspan=2>Run</th>
+      <th>Branch</th>
+      <th>Actions</th>
   </thead>
   <tbody>
   %for branch in sorted(repo.branches.values(), key=lambda b: b.last_run(), reverse=True):
