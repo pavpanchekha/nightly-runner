@@ -410,7 +410,7 @@ class Branch:
         try:
             return os.path.getmtime(str(self.lastcommit))
         except FileNotFoundError:
-            return -1
+            return float("inf")
 
     @classmethod
     def parse_filename(cls, filename):
