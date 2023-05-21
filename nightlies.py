@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Any, Union, Optional, cast
+from typing import Any, Union, Optional, cast, Sequence
 import os, sys, subprocess, time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -19,7 +19,7 @@ def format_time(ts : float) -> str:
     else:
         return f"{t/60/60:.1f}h"
     
-def format_cmd(s : list[Any]) -> str:
+def format_cmd(s : Sequence[Union[str, Path]]) -> str:
     return shlex.join([str(part) for part in s])
 
 def parse_time(to : Optional[str]) -> Optional[float]:
@@ -147,7 +147,7 @@ class NightlyRunner:
         with self.pid_file.open("w") as f:
             json.dump(self.data, f)
 
-    def add_info(self, cmd, *args) -> None:
+    def add_info(self, cmd : str, *args : str) -> None:
         data = shlex.join([cmd] + list(args))
         self.log(3, f"Adding info {data}")
         with self.info_file.open("a") as f:
@@ -183,7 +183,7 @@ class NightlyRunner:
         except FileExistsError:
             return False
 
-    def lock(self):
+    def lock(self) -> bool:
         if self.try_lock():
             return True
         else:
@@ -312,7 +312,7 @@ class Repository:
         if self.config.getboolean("clean", fallback=True):
             self.clean()
 
-    def clean(self):
+    def clean(self) -> None:
         expected_files = self.ignored_files.union(*[
             {b.dir, b.lastcommit} for b in self.branches.values()
         ])
@@ -406,14 +406,14 @@ class Branch:
         self.lastcommit = self.repo.dir / (self.filename + ".last-commit")
         self.badges : list[str] = []
 
-    def last_run(self):
+    def last_run(self) -> float:
         try:
             return os.path.getmtime(str(self.lastcommit))
         except FileNotFoundError:
             return float("inf")
 
-    @classmethod
-    def parse_filename(cls, filename):
+    @staticmethod
+    def parse_filename(filename : str) -> str:
         return filename.replace("%2f", "/").replace("%25", "%")
 
     def load(self) -> None:

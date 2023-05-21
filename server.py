@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from typing import Optional
 import bottle
 from pathlib import Path
 import nightlies
@@ -17,15 +18,15 @@ CONF_FILE = "conf/nightlies.conf"
 
 RUNNING_NIGHTLIES = []
 
-def edit_conf_url(runner):
+def edit_conf_url(runner : nightlies.NightlyRunner) -> Optional[str]:
     if "confedit" in runner.config.defaults():
         return runner.config.defaults()["confedit"]
 
     conf_repo = runner.config.defaults().get("conf")
     conf_branch = runner.config.defaults().get("confbranch", "main")
-    if conf_repo.startswith("http"):
+    if conf_repo and conf_repo.startswith("http"):
         return conf_repo
-    elif ":" in conf_repo:
+    elif not conf_repo or ":" in conf_repo:
         return None
     else:
         return f"https://github.com/{conf_repo}/edit/{conf_branch}/{runner.config_file.name}"
