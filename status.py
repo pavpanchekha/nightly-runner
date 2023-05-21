@@ -16,7 +16,10 @@ class UnitState:
 UNIT = "org.freedesktop.systemd1.Unit"
 
 def get_state(unit):
-    path = manager.GetUnit(unit)
+    try:
+        path = manager.GetUnit(unit)
+    except dbus.exceptions.DBusException:
+        return UnitState("not found", "not found", "not found", "not found")
     obj = bus.get_object("org.freedesktop.systemd1", path)
     iface = dbus.Interface(obj, "org.freedesktop.DBus.Properties")
     load = str(iface.Get(UNIT, "LoadState"))
