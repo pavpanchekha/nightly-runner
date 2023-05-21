@@ -140,7 +140,7 @@ def rmbranch():
                 shutil.rmtree(nightlies.Branch(repo, branch).dir)
             except FileNotFoundError:
                 pass
-    bottle.redirect("/")
+    bottle.redirect("/dryrun")
 
 @bottle.post("/kill")
 def kill():

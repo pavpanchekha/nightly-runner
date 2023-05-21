@@ -137,7 +137,7 @@ th { color: gray; border-bottom: 1px solid gray; text-align: left; }
       <form action="{{baseurl}}/rmbranch" method="post" class="inline">
         <input type="hidden" name="repo" value="{{repo.name}}" />
         <input type="hidden" name="branch" value="{{branch.name}}" />
-        <button>Delete checkout</button>
+        <button>Reset</button>
       </form>
     </tr>
   %end 
