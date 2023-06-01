@@ -14,15 +14,18 @@ table { width: 100%; }
 form.inline { display: inline; }
 th { color: gray; border-bottom: 1px solid gray; text-align: left; }
 .badge { background: #ddd; padding: 0 .5em; border-radius: .5em; margin-left: .25ch; }
-#system-state ul {
-    display: flex; flex-direction: row; justify-content: left; list-style: none; gap: 1em;
-    border-bottom: 1px solid #ddd; margin: 0 0 1em; padding: 1ex 0;
+header { border-bottom: 1px solid #ddd; margin: 0 0 1em; }
+header ul {
+    display: flex; flex-direction: row; justify-content: left; list-style: none; gap: 1em; padding: 0;
+}
+header > * {
+    margin: 1ex 0;
 }
 </style>
 
 <script async src="nightly.js"></script>
 
-<header id="system-state">
+<header>
   {{! system_state }}
 
 %if current:
@@ -41,7 +44,7 @@ th { color: gray; border-bottom: 1px solid gray; text-align: left; }
   <div class="indent">
     %if "branch" in current:
     <form action="{{baseurl}}/logs/{{current['branch_log']}}" method="get" class="inline">
-      <button>View output</button>
+      <button>Output</button>
     </form> 
     <form action="{{baseurl}}/killbranch" method="post" class="inline">
       <button>Kill</button>
@@ -49,15 +52,13 @@ th { color: gray; border-bottom: 1px solid gray; text-align: left; }
     %end
     {{ "Now" if running else "Was" }}
     %if "branch" in current:
-    running <kbd>{{current['branch']}}</kbd> branch
+    running <kbd>{{current['branch']}}</kbd>
     %else:
     doing bookkeeping
     %end
-    for <kbd>{{current["repo"]}}</kbd> repository.
-  </div>
-  <div>
+    for <kbd>{{current["repo"]}}</kbd>
     %if last_print:
-    Last print {{format_time(last_print)}} ago.
+    (last print {{format_time(last_print)}} ago)
     %end
   </div>
   %end
