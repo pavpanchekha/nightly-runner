@@ -274,6 +274,8 @@ class Repository:
         }
         self.fatalerror: Optional[str] = None
 
+        self.env_path = configuration.get("path")
+
     def load(self) -> None:
         self.runner.log(0, "Beginning nightly run for " + self.name)
         self.dir.mkdir(parents=True, exist_ok=True)
@@ -452,10 +454,12 @@ class Branch:
         t = datetime.now()
         try:
             to = parse_time(self.repo.config.get("timeout"))
+            env_path = self.repo.runner.self_dir + ":" + os.getenv('PATH')
+            if self.repo.env_path: env_path += ":" + self.repo.env_path
+
             cmd = SYSTEMD_RUN_CMD + \
                 ["--setenv=NIGHTLY_CONF_FILE=" + str(self.repo.runner.config_file.resolve())] + \
-                [f"--setenv=PATH={self.repo.runner.self_dir}:{os.getenv('PATH')}"] + \
-                ["make", "-C", str(self.dir), "nightly"]
+                [f"--setenv=PATH={env_path}", "make", "-C", str(self.dir), "nightly"]
             self.repo.runner.log(2, f"Executing {format_cmd(cmd)}")
             if not self.repo.runner.dryrun:
                 with (self.repo.runner.log_dir / log_name).open("wt") as fd:
