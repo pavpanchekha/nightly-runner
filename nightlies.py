@@ -455,7 +455,9 @@ class Branch:
         try:
             to = parse_time(self.repo.config.get("timeout"))
             env_path = str(self.repo.runner.self_dir) + ":" + cast(str, os.getenv('PATH'))
-            if self.repo.env_path: env_path += ":" + self.repo.env_path
+            if self.repo.env_path:
+                for dir in self.repo.env_path.split(":"):
+                    env_path += ":" + str(Path(dir).expanduser())
 
             cmd = SYSTEMD_RUN_CMD + \
                 ["--setenv=NIGHTLY_CONF_FILE=" + str(self.repo.runner.config_file.resolve())] + \
