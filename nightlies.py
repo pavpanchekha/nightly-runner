@@ -454,7 +454,7 @@ class Branch:
         t = datetime.now()
         try:
             to = parse_time(self.repo.config.get("timeout"))
-            env_path = self.repo.runner.self_dir + ":" + os.getenv('PATH')
+            env_path = str(self.repo.runner.self_dir) + ":" + cast(str, os.getenv('PATH'))
             if self.repo.env_path: env_path += ":" + self.repo.env_path
 
             cmd = SYSTEMD_RUN_CMD + \
