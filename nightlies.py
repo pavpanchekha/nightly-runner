@@ -405,6 +405,7 @@ class Branch:
         self.dir = self.repo.dir / self.filename
         self.lastcommit = self.repo.dir / (self.filename + ".last-commit")
         self.badges : list[str] = []
+        self.info = {}
 
     def last_run(self) -> float:
         try:
@@ -444,7 +445,6 @@ class Branch:
         date = datetime.now()
         log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{self.repo.name}-{self.filename}.log"
 
-        self.info = {}
         self.repo.runner.data["branch"] = self.name
         self.repo.runner.data["branch_log"] = log_name
         self.repo.runner.save()
