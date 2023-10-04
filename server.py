@@ -78,17 +78,13 @@ def index():
 def docs():
     return load()
 
-@bottle.route("/style.css")
-@bottle.view("style.css")
-def style_css(): pass
+@bottle.route("/static/<filepath:path>")
+def server_static(filepath):
+    return static_file(filepath, root='static/')
 
 @bottle.route("/robots.txt")
-@bottle.view("robots.txt")
-def robots_txt(): pass
-
-@bottle.route("/nightly.js")
-@bottle.view("nightly.js")
-def nightly_js(): pass
+def robots_txt():
+    return static_file("robots.txt", root='static/')
 
 @bottle.post("/dryrun")
 def dryrun():
