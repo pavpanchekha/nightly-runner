@@ -1,78 +1,11 @@
 <!doctype html>
 <title>Nightly runs</title>
-
-% from datetime import datetime, timedelta
-% from pathlib import Path
-% from nightlies import format_time
-% disabled = "disabled" if current else ""
-
-<style>
-body { width: 80ex; margin: 0 auto 3em; }
-details { margin: 1em 0; }
-summary > h2 { display: inline; }
-table { width: 100%; }
-form.inline { display: inline; }
-th { color: gray; border-bottom: 1px solid gray; text-align: left; }
-.badge { background: #ddd; padding: 0 .5em; border-radius: .5em; margin-left: .25ch; }
-header { border-bottom: 1px solid #ddd; margin: 0 0 1em; }
-header ul {
-    display: flex; flex-direction: row; justify-content: left; list-style: none; gap: 1em; padding: 0;
-}
-header > * {
-    margin: 1ex 0;
-}
-</style>
-
+<link type="stylesheet" href="style.css">
 <script async src="nightly.js"></script>
 
-<header>
-  {{! system_state }}
+% include("header.view", current=current, baseurl=baseurl, running=running, system_state=system_state, last_print=last_print)
 
-%if current:
-  <div>
-    <form action="{{baseurl}}/logs/{{Path(current['log']).name}}" method="get" class="inline">
-      <button>View log</button>
-    </form>
-    <form action="{{baseurl}}/kill" method="post" class="inline">
-      <button>Kill</button>
-    </form>
-    Nightly {{ "" if running else "was" }} running
-    for {{format_time((datetime.now() - datetime.fromisoformat(current["start"])).total_seconds())}}
-    on PID <kbd>{{current["pid"]}}</kbd>.
-  </div>
-  %if "repo" in current:
-  <div class="indent">
-    %if "branch" in current:
-    <form action="{{baseurl}}/logs/{{current['branch_log']}}" method="get" class="inline">
-      <button>Output</button>
-    </form> 
-    <form action="{{baseurl}}/killbranch" method="post" class="inline">
-      <button>Kill</button>
-    </form> 
-    %end
-    {{ "Now" if running else "Was" }}
-    %if "branch" in current:
-    running <kbd>{{current['branch']}}</kbd>
-    %else:
-    doing bookkeeping
-    %end
-    for <kbd>{{current["repo"]}}</kbd>
-    %if last_print:
-    (last print {{format_time(last_print)}} ago)
-    %end
-  </div>
-  %end
-  %if not running:
-  <div>
-    <form action="{{baseurl}}/delete_pid" method="post" class="inline">
-      <button>Delete lockfile</button>
-    </form> 
-    Nightly seems dead (PID not found).
-  </div>
-  %end
-%end
-</header>
-
+% disabled = "disabled" if current else ""
 %if disabled:
   <div>Controls disabled until current nightly ends.</div>
 %end
@@ -85,16 +18,16 @@ header > * {
   </form>
 
   <form action="{{baseurl}}/dryrun" method="post" class="inline">
-    <button {{disabled}} >Sync with Github</button>
+    <button {{disabled}}>Sync with Github</button>
   </form>
 
   <form action="{{baseurl}}/fullrun" method="post" class="inline">
-    <button {{disabled}} >Start a full run</button>
+    <button {{disabled}}>Start a full run</button>
   </form>
 
   %if confurl:
   <form action="{{confurl}}" method="get" class="inline">
-    <button >Modify configuration</button>
+    <button>Modify configuration</button>
   </form>
   %end
 </div>

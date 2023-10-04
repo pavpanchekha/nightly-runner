@@ -1,0 +1,14 @@
+body { width: 80ex; margin: 0 auto 3em; }
+details { margin: 1em 0; }
+summary > h2 { display: inline; }
+table { width: 100%; }
+form.inline { display: inline; }
+th { color: gray; border-bottom: 1px solid gray; text-align: left; }
+.badge { background: #ddd; padding: 0 .5em; border-radius: .5em; margin-left: .25ch; }
+header { border-bottom: 1px solid #ddd; margin: 0 0 1em; }
+header ul {
+    display: flex; flex-direction: row; justify-content: left; list-style: none; gap: 1em; padding: 0;
+}
+header > * {
+    margin: 1ex 0;
+}
