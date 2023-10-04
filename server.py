@@ -31,9 +31,7 @@ def edit_conf_url(runner : nightlies.NightlyRunner) -> Optional[str]:
     else:
         return f"https://github.com/{conf_repo}/edit/{conf_branch}/{runner.config_file.name}"
 
-@bottle.route("/")
-@bottle.view("index.view")
-def index():
+def load():
     runner = nightlies.NightlyRunner(CONF_FILE)
     runner.load()
     runner.load_pid()
@@ -70,13 +68,15 @@ def index():
         "last_print": last_print,
     }
 
-@bottle.route("/disk")
-@bottle.view("disk.view")
-def disk():
-    df_proc = subprocess.run(["df", "-h"], capture_output=True, check=True, encoding="ascii")
-    return {
-        "df": df_proc.stdout,
-    }
+@bottle.route("/")
+@bottle.view("index.view")
+def index():
+    return load()
+
+@bottle.route("/docs")
+@bottle.view("docs.view")
+def docs():
+    return load()
 
 
 @bottle.route("/robots.txt")

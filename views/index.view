@@ -30,6 +30,10 @@
     <button>Modify configuration</button>
   </form>
   %end
+
+  <form action="{{baseurl}}/docs" method="get" class="inline">
+    <button>Documentation</button>
+  </form>
 </div>
 
 %for repo in runner.repos:

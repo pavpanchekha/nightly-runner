@@ -1,0 +1,138 @@
+<!doctype html>
+<title>Nightly how-to</title>
+<link type="stylesheet" href="style.css">
+% include("header.view", current=current, baseurl=baseurl, running=running, system_state=system_state, last_print=last_print)
+
+<h1>How to create a nightly</h1>
+
+<p>To create a nightly, you need to configure the nightly, write a
+script, make it produce output, and possibly customize the
+nightly.</p>
+
+<h2>Configuring the nightly</h2>
+
+<p>
+  To make a nightly, first, make sure the code you want to test
+  nightly is in a public Github repository. Add your repository to the
+  %if confurl:
+   <a href="{{confurl}}">
+  %end
+  nightly configuration.
+  %if confurl:
+    </a>
+  %end
+  If you don't have access, ask someone who does.
+</p>
+
+<p>You'll want to add a block like this to your configuration:</p>
+
+<pre>
+[username/reponame]
+slack=channelname
+timeout=1hr
+</pre>
+
+<p>It is polite to make a PR on the nightly configuration repository
+and ping someone who knows nightlies to review it.</p>
+
+<p>If you are using a new channel name, you'll need to get in touch
+with someone who knows the nightly system so they can add a new Slack
+key to the secrets file.</p>
+
+<h2>Scripting the nightly</h2>
+
+<p>Once you have added your repository to the configuration file,
+you'll need to script the nightly itself. To do so, add
+a <code>Makefile</code> to the root of your repository and add a rule
+in it called <code>nightly</code>. This typically means adding this
+code to the file:</p>
+
+<pre>
+nightly:
+	bash infra/nightly.sh
+</pre>
+
+<p>Note that this is a makefile so it's important to use a real TAB
+character to indent the second line. The command on the second line is
+arbitrary, but we usually recommend putting all the actual nightly
+code in a shell script somewhere. That way you're coding in shell, not
+makefile.</p>
+
+<p>We strongly recommend starting that script with</p>
+
+<pre>
+set -e -x
+</pre>
+
+<p>This tells the script to fail if any command files, and to print
+each command that it executes. This helps a lot when debugging.</p>
+
+<p>The script should now run every night if there's been a commit on
+the previous day.</p>
+
+<h2>Producing nightly output</h2>
+
+<p>At first, you might script your nightly to just compile and run
+your code, just checking whether or not it crashes. However, you will
+pretty soon want to measure stuff (run times, results, and so on) so
+you know how well your research is working. Nightlies make that
+easy.</p>
+
+<p>Modify your nightly script to put all output into a single
+directory. Usually this directory is called <code>report</code>. It's
+also recommended to generate an <code>index.html</code> file with the
+main results and linking to any other files. You can also include
+graphs and tables in that file.</p>
+
+<p>Once you have a <code>report</code> directory with
+an <code>index.html</code> inside, add the following line to your
+nightly script:</p>
+
+<pre>
+nightly-results publish report
+</pre>
+
+<p>Now when the nightly runs, that directory will be archived and the
+Slack message will have a button to go to the <code>index.html</code>
+file.</p>
+
+<h2>Customizing the nightly</h2>
+
+<p>Here are some additional properties you can pass in the
+configuration file to change how your nightly behaves.</p>
+
+<dl>
+<dt><code>slack</code></dt>
+<dd>The Slack channel to post your nightly results to. The value of
+this property isn't actually the channel name; instead, it's a key in
+the secrets file. If you need to use a new channel that isn't already
+in use by another nightly, get in touch with the nightly maintainers
+to add it.</dd>
+
+<dt><code>apt</code></dt>
+<dd>You can pass a list of Debian packages to install before running
+your nightly. For example, if your code is written in Rust, you can
+pass <code>apt=cargo</code> to make sure that Cargo is installed.
+Debian packages are the preferred way to manage dependencies. If you
+have some dependency that you absolutely can't install from a package,
+get in touch with the nightly maintainers.</dd>
+
+<dt><code>timeout</code></dt>
+<dd>You can give a timeout (written <code>4hr</code> or similar).
+After the timeout is over, your nightly will be killed. This is
+useful, because if you accidentally make your nightly run forever,
+then other people's nightlies won't run and they will be mad.</dd>
+
+<dt><code>always</code>, <code>never</code></dt>
+<dd>A list of branches to either always or never run, regardless of
+whether they have a recent comment. <code>always</code> is sometimes
+useful for fuzzing projects, while <code>never</code> is sometimes
+useful if you have a project web page or similar on a branch.</dd>
+
+<dt><code>baseline</code></dt>
+<dd>Names a branch that should be run if any other branch is run. This
+helps if you want to do like-with-like comparisons on feature
+branches.</dd>
+
+<dt><code>main</code></dt>
+<dd>The name of the main branch, if it's not <code>main</code>.</dd>

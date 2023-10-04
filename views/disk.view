@@ -1,9 +1,0 @@
-<!doctype html>
-<title>Nightly disk</title>
-
-<style>
-body { width: 80ex; margin: 1em auto; }
-form.inline { display: inline; }
-</style>
-
-<pre>{{df}}</pre>
