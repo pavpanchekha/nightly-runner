@@ -78,6 +78,9 @@ def index():
 def docs():
     return load()
 
+@bottle.route("/style.css")
+@bottle.view("style.css")
+def style_css(): pass
 
 @bottle.route("/robots.txt")
 @bottle.view("robots.txt")
