@@ -80,11 +80,11 @@ def docs():
 
 @bottle.route("/static/<filepath:path>")
 def server_static(filepath):
-    return static_file(filepath, root='static/')
+    return bottle.static_file(filepath, root='static/')
 
 @bottle.route("/robots.txt")
 def robots_txt():
-    return static_file("robots.txt", root='static/')
+    return bottle.static_file("robots.txt", root='static/')
 
 @bottle.post("/dryrun")
 def dryrun():
