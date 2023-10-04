@@ -1,6 +1,6 @@
 <!doctype html>
 <title>Nightly how-to</title>
-<link type="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css">
 % include("header.view", current=current, baseurl=baseurl, running=running, system_state=system_state, last_print=last_print)
 
 <h1>How to create a nightly</h1>
