@@ -405,7 +405,7 @@ class Branch:
         self.dir = self.repo.dir / self.filename
         self.lastcommit = self.repo.dir / (self.filename + ".last-commit")
         self.badges : List[str] = []
-        self.info = {}
+        self.info : Dict[str, str] = {}
 
     def last_run(self) -> float:
         try:
