@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Any, Union, Optional, cast, Sequence
+from typing import Any, List, Dict, Union, Optional, cast, Sequence
 import os, sys, subprocess, time
 from datetime import datetime, timedelta
 from pathlib import Path
