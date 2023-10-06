@@ -135,7 +135,7 @@ class NightlyRunner:
         self.log(0, "Restarting nightly run due to updated system repositories")
         os.execv(sys.executable, ["python3"] + sys.argv)
 
-    def exec(self, level : int, cmd : list[Union[str, Path]]) -> subprocess.CompletedProcess:
+    def exec(self, level : int, cmd : List[Union[str, Path]]) -> subprocess.CompletedProcess:
         self.log(level, f"Executing {format_cmd(cmd)}")
         return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
 
@@ -153,7 +153,7 @@ class NightlyRunner:
         with self.info_file.open("a") as f:
             f.write(data + "\n")
 
-    def load_info(self) -> dict[str, str]:
+    def load_info(self) -> Dict[str, str]:
         out = {}
         try:
             with self.info_file.open("r") as f:
@@ -404,7 +404,7 @@ class Branch:
         self.filename = self.name.replace("%", "%25").replace("/", "%2f")
         self.dir = self.repo.dir / self.filename
         self.lastcommit = self.repo.dir / (self.filename + ".last-commit")
-        self.badges : list[str] = []
+        self.badges : List[str] = []
         self.info = {}
 
     def last_run(self) -> float:

@@ -4,7 +4,7 @@ import json
 import urllib.request, urllib.error
 
 class Block:
-    def to_json(self) -> dict[str, Any]:
+    def to_json(self) -> Dict[str, Any]:
         raise NotImplemented
 
 class Accessory: pass
@@ -12,9 +12,9 @@ class Accessory: pass
 class Response:
     def __init__(self, text: str):
         self.text = text
-        self.blocks : list[Block] = []
+        self.blocks : List[Block] = []
 
-    def to_json(self) -> dict[str, Any]:
+    def to_json(self) -> Dict[str, Any]:
         return {
             "text": self.text,
             "blocks": [block.to_json() for block in self.blocks],
@@ -29,7 +29,7 @@ class TextBlock(Block):
         self.text = text
         self.accessory = None
 
-    def to_json(self) -> dict[str, Any]:
+    def to_json(self) -> Dict[str, Any]:
         block = {
             "type": "section",
             "text": { "type": "mrkdwn", "text": self.text },
@@ -47,7 +47,7 @@ class Fields(Block):
     def __init__(self, fields : Dict[str, str]):
         self.fields = fields
 
-    def to_json(self) -> dict[str, Any]:
+    def to_json(self) -> Dict[str, Any]:
         fields = []
         for k, v in self.fields.items():
             fields.append({
@@ -70,7 +70,7 @@ class Image(Block):
         self.text = text
         self.url = url
 
-    def to_json(self) -> dict[str, Any]:
+    def to_json(self) -> Dict[str, Any]:
         return {
             "type": "image",
             "image_url": self.url,
@@ -86,7 +86,7 @@ class Button(Accessory):
         self.url = url
         self.style = style
 
-    def to_json(self) -> dict[str, Any]:
+    def to_json(self) -> Dict[str, Any]:
         accessory = {
             "type": "button",
             "text": {
