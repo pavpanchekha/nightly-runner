@@ -20,7 +20,13 @@ def format_time(ts : float) -> str:
         return f"{t/60/60:.1f}h"
     
 def format_cmd(s : Sequence[Union[str, Path]]) -> str:
-    return shlex.join([str(part) for part in s])
+    if hasattr(shlex, "join"):
+        return shlex.join([str(part) for part in s])
+    else: # Compatibility with old Python 3
+        return " ".join([
+            str(part) if " " not in str(part) else '"{}"'.format(part)
+            for part in s
+        ])
 
 def parse_time(to : Optional[str]) -> Optional[float]:
     if to is None: return to
@@ -148,7 +154,7 @@ class NightlyRunner:
             json.dump(self.data, f)
 
     def add_info(self, cmd : str, *args : str) -> None:
-        data = shlex.join([cmd] + list(args))
+        data = format_cmd([cmd] + list(args))
         self.log(3, f"Adding info {data}")
         with self.info_file.open("a") as f:
             f.write(data + "\n")
