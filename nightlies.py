@@ -54,7 +54,7 @@ SYSTEMD_RUN_CMD = [
     f"--uid={os.getuid()}", # As the current user
     f"--gid={os.getgid()}", # As the current group
     "--slice=nightlies.slice", # Run with the nightly resource limits
-    "--service-type=exec", # It just execs a program
+    "--service-type=simple", # It just execs a program
 ]
 
 REPO_BADGES = [
