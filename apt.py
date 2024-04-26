@@ -8,7 +8,7 @@ import slack
 APT_LINE_RE = re.compile(r"^(\d+) upgraded, (\d+) newly installed, (\d+) to remove and (\d+) not upgraded\.$", re.MULTILINE)
 
 def check_updates(runner, pkgs : List[str]) -> bool:
-    runner.log(1, f"Checking for updates to apt packages {" ".join(pkgs)}")
+    runner.log(1, f"Checking for updates to apt packages {' '.join(pkgs)}")
     res = runner.exec(2, ["sudo", "apt", "install", "--dry-run"] + pkgs)
 
     # Parse the `apt` output, ugh
@@ -20,7 +20,7 @@ def check_updates(runner, pkgs : List[str]) -> bool:
     return bool(int(num_u) or int(num_i) or int(num_r))
 
 def install(runner, pkgs : List[str]) -> None:
-    runner.log(1, f"Installing apt packages {" ".join(pkgs)}")
+    runner.log(1, f"Installing apt packages {' '.join(pkgs)}")
     runner.exec(2, ["sudo", "apt", "install", "--yes"] + pkgs)
 
 def post(res : slack.Response) -> None:
