@@ -44,6 +44,8 @@ def repo_to_url(repo : str) -> str:
     if repo and ":" in repo: return repo
     return "git@github.com:" + repo + ".git"
 
+SYSTEMD_SLICE = "nightlies.slice"
+
 SYSTEMD_RUN_CMD = [
     "sudo", # There might not be a user session manager, so run using root's
     "systemd-run",
@@ -53,7 +55,7 @@ SYSTEMD_RUN_CMD = [
     "--pipe", # Pass through file descriptors
     f"--uid={os.getuid()}", # As the current user
     f"--gid={os.getgid()}", # As the current group
-    "--slice=nightlies.slice", # Run with the nightly resource limits
+    f"--slice={SYSTEMD_SLICE}", # Run with the nightly resource limits
     "--service-type=simple", # It just execs a program
 ]
 
@@ -474,6 +476,7 @@ class Branch:
                     finally:
                         self.info = self.repo.runner.load_info()
                         process.kill()
+                        self.runner.exec(2, ["sudo", "systemctl", "stop", "nightlies.slice"])
         except subprocess.TimeoutExpired as e:
             self.repo.runner.log(1, f"Run on branch {self.name} timed out after {format_time(e.timeout)}")
             failure = "timeout"
