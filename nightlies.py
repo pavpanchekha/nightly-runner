@@ -114,7 +114,7 @@ class NightlyRunner:
 
         self.secrets = configparser.ConfigParser()
         if defaults.get("secrets"):
-            for file in Path(defaults.get("secrets")).iterdir():
+            for file in Path(defaults["secrets"]).iterdir():
                 if not file.name.endswith(".conf"): continue
                 with file.open() as f:
                     self.secrets.read_file(f, source=f.name)
@@ -476,7 +476,7 @@ class Branch:
                     finally:
                         self.info = self.repo.runner.load_info()
                         process.kill()
-                        self.runner.exec(2, ["sudo", "systemctl", "stop", "nightlies.slice"])
+                        self.repo.runner.exec(2, ["sudo", "systemctl", "stop", "nightlies.slice"])
         except subprocess.TimeoutExpired as e:
             self.repo.runner.log(1, f"Run on branch {self.name} timed out after {format_time(e.timeout)}")
             failure = "timeout"
