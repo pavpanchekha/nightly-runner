@@ -305,7 +305,7 @@ class Repository:
         ]
 
         # filter to branches that have open PRs if only_pr_branches is set
-        if self.config.getboolean("only_pr_branches", fallback=False):
+        if self.config.getboolean("only_open_prs", fallback=False):
             url = "https://api.github.com/repos/" + self.name + "/pulls"
             prs_data = urllib.request.urlopen(url).read()
             prs_json = json.loads(prs_data)
