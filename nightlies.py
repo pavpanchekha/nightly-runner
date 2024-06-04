@@ -306,13 +306,15 @@ class Repository:
         if "branches" in self.config:
             all_branches = self.config["branches"].split()
 
-        self.branches = {default_branch.name: default_branch}
+        self.branches = {}
         for branch_name in all_branches:
             if branch_name.startswith("HEAD"): continue
-            if branch_name == default_branch.name: continue
-            branch = Branch(self, branch_name)
-            self.runner.log(1, f"Fetching branch {branch.name}")
-            branch.load()
+            if branch_name == default_branch.name:
+                branch = default_branch
+            else:
+                branch = Branch(self, branch_name)
+                self.runner.log(1, f"Fetching branch {branch.name}")
+                branch.load()
             self.branches[branch_name] = branch
 
         self.assign_badges()
