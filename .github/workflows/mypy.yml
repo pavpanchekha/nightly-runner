@@ -1,9 +1,6 @@
 name: Type check with mypy
 
-on:
-  push:
-    paths:
-      - '*.py'
+on: ['push']
 
 jobs:
   mypy:
