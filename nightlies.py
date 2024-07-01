@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import configparser
 import json
+import concurrent.futures, threading
 import tempfile
 import shlex, shutil
 import slack, apt
@@ -70,6 +71,7 @@ class NightlyRunner:
         self.config_file = Path(config_file)
         self.self_dir = Path(__file__).resolve().parent
         self.data : Any = None
+        self.lock = threading.Lock()
 
     def update_system_repo(self, dir : str, repo : str, branch : str) -> None:
         if not Path(dir).is_dir():
@@ -147,8 +149,10 @@ class NightlyRunner:
         return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
 
     def log(self, level : int, s : str) -> None:
+        self.lock.acquire()
         with self.log_path.open("at") as f:
             f.write("{}\t{}{}\n".format(datetime.now() - self.start, "    " * level, s))
+        self.lock.release()
 
     def save(self) -> None:
         with self.pid_file.open("w") as f:
@@ -314,8 +318,11 @@ class Repository:
             else:
                 branch = Branch(self, branch_name)
                 self.runner.log(1, f"Fetching branch {branch.name}")
-                branch.load()
             self.branches[branch_name] = branch
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            for branch in self.branches.values():
+                executor.submit(branch.load)
 
         self.assign_badges()
         if self.config.getboolean("clean", fallback=True):
