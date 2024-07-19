@@ -10,6 +10,7 @@ import concurrent.futures, threading
 import tempfile
 import shlex, shutil
 import slack, apt
+import urllib
 
 def format_time(ts : float) -> str:
     t = float(ts)
@@ -306,6 +307,16 @@ class Repository:
             branch.split("/", 1)[-1] for branch
             in git_branch.stdout.decode("utf8").strip().split("\n")
         ]
+
+        # filter to branches that have open PRs if only_pr_branches is set
+        if self.config.getboolean("only_open_prs", fallback=False):
+            url = "https://api.github.com/repos/" + self.name + "/pulls"
+            prs_data = urllib.request.urlopen(url).read()
+            prs_json = json.loads(prs_data)
+            pr_branches = { pr["head"]["ref"] for pr in prs_json}
+            # filter all_branches to only contain branches that have open PRs
+            all_branches = [branch for branch in all_branches if branch in pr_branches]
+
 
         if "branches" in self.config:
             all_branches = self.config["branches"].split()
