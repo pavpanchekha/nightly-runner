@@ -249,6 +249,16 @@ class NightlyRunner:
                 self.save()
                 repo.load()
                 repo.filter()
+            except subprocess.CalledProcessError as e:
+                repo.fatalerror = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
+                self.log(1, repo.fatalerror)
+            finally:
+                del self.data["repo"]
+
+        for repo in self.repos:
+            try:
+                self.data["repo"] = repo.name
+                self.save()
                 repo.run()
             except subprocess.CalledProcessError as e:
                 repo.fatalerror = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
