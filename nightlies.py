@@ -269,7 +269,7 @@ class NightlyRunner:
                     self.log(1, f"Waiting for machine to cool down")
                     time.sleep(30) # To avoid thermal throttling
 
-                repo.run()
+                branch.run()
             except subprocess.CalledProcessError as e:
                 repo.fatalerror = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
                 self.log(1, repo.fatalerror)
@@ -291,6 +291,7 @@ class Repository:
     def __init__(self, runner : NightlyRunner, name : str, configuration : configparser.SectionProxy):
         self.runner = runner
         self.config = configuration
+        self.runnable : list[Branch] = []
 
         if configuration.get("slack"):
             self.slack_channel : Optional[str] = configuration.get("slack")
