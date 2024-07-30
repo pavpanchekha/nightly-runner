@@ -475,7 +475,6 @@ class Branch:
         date = datetime.now()
         log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{self.repo.name}-{self.filename}.log"
 
-        self.repo.runner.data["branch"] = self.name
         self.repo.runner.data["branch_log"] = log_name
         self.repo.runner.save()
 
@@ -518,7 +517,6 @@ class Branch:
         self.info["result"] = f"*{failure}*" if failure else "success"
         self.info["time"] = format_time((datetime.now() - t).seconds)
         self.info["file"] = log_name
-        del self.repo.runner.data["branch"]
         del self.repo.runner.data["branch_log"]
         self.repo.runner.save()
 
