@@ -15,7 +15,10 @@
     </form>
     Nightly {{ "" if running else "was" }} running
     for {{format_time((datetime.now() - datetime.fromisoformat(current["start"])).total_seconds())}}
-    on PID <kbd>{{current["pid"]}}</kbd>.
+    on PID <kbd>{{current["pid"]}}</kbd>
+    %if "runs_done" in current and "runs_total" in current:
+    (on nightly {{current["runs_done"]+1}}/{{current["runs_total"]}})
+    %end
   </div>
   %if "repo" in current:
   <div class="indent">

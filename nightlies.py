@@ -257,12 +257,12 @@ class NightlyRunner:
             finally:
                 del self.data["repo"]
 
-        for i, branch in enumerate(to_run):
+        for i, branch in enumerate(plan):
             try:
                 self.data["repo"] = branch.repo.name
                 self.data["branch"] = branch.name
                 self.data["runs_done"] = i
-                self.data["runs_total"] = len(to_run)
+                self.data["runs_total"] = len(plan)
                 self.save()
 
                 if i and not self.dryrun:
@@ -274,12 +274,14 @@ class NightlyRunner:
                 repo.fatalerror = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
                 self.log(1, repo.fatalerror)
             finally:
-                repo.post()
-                self.log(0, f"Finished nightly run for {repo.name}")
+                if all([idx <= i for idx, b in enumerate(plan) if branch.repo == b.repo]):
+                    self.log(0, f"Finished nightly run for {repo.name}")
+                    branch.repo.post()
+
                 del self.data["repo"]
                 del self.data["branch"]
-                del self.data["runs_done"]
-                del self.data["runs_total"]
+                # del self.data["runs_done"]
+                # del self.data["runs_total"]
                 self.save()
 
         self.pid_file.unlink()
