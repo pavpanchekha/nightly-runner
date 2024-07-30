@@ -189,12 +189,11 @@ def run_nightlies(conf=None):
             fn = f.name
     else:
         fn = CONF_FILE
-    RUNNING_NIGHTLIES.append(
-        subprocess.Popen(
-            [sys.executable, nightlies.__file__, fn],
-            cwd=os.path.dirname(nightlies.__file__),
-            start_new_session=True,
-        ))
+    subprocess.Popen(
+        [sys.executable, nightlies.__file__, fn],
+        cwd=os.path.dirname(nightlies.__file__),
+        start_new_session=True,
+    )
 
 if __name__ == "__main__":
     import argparse
