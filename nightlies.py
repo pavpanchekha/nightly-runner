@@ -454,10 +454,8 @@ class Branch:
     def load(self) -> None:
         if not self.dir.is_dir():
             self.repo.runner.exec(2, ["git", "clone", "--recursive", self.repo.url, self.dir])
-        self.repo.runner.exec(2, ["git", "-C", self.dir, "fetch", "origin", "--prune"])
-        self.repo.runner.exec(2, ["git", "-C", self.dir, "fetch", "origin", self.name])
-        self.repo.runner.exec(2, ["git", "-C", self.dir, "checkout", self.name])
-        self.repo.runner.exec(2, ["git", "-C", self.dir, "reset", "--hard", "origin/" + self.name])
+        self.repo.runner.exec(2, ["git", "-C", self.dir, "fetch", "origin", "--prune", self.name])
+        self.repo.runner.exec(2, ["git", "-C", self.dir, "checkout", "--force", self.name])
         self.repo.runner.exec(2, ["git", "-C", self.dir, "submodule", "update", "--init", "--recursive"])
 
     def plan(self) -> bool:
