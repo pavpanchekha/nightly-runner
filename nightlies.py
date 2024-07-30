@@ -248,7 +248,7 @@ class NightlyRunner:
                 self.data["repo"] = repo.name
                 self.save()
                 repo.load()
-                repo.filter()
+                repo.plan()
             except subprocess.CalledProcessError as e:
                 repo.fatalerror = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
                 self.log(1, repo.fatalerror)
@@ -374,7 +374,7 @@ class Repository:
         if main_branch in self.branches:
             self.branches[main_branch].badges.append("main")
 
-    def filter(self) -> None:
+    def plan(self) -> None:
         if self.run_all:
             self.runnable = list(self.branches.values())
             return
