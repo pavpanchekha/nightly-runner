@@ -243,22 +243,32 @@ class NightlyRunner:
                 for repo in self.repos:
                     f.write(repo.dir.name + "\n")
 
+        plan = []
         for repo in self.repos:
             try:
                 self.data["repo"] = repo.name
                 self.save()
                 repo.load()
                 repo.plan()
+                plan.extend(repo.runnable)
             except subprocess.CalledProcessError as e:
                 repo.fatalerror = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
                 self.log(1, repo.fatalerror)
             finally:
                 del self.data["repo"]
 
-        for repo in self.repos:
+        for i, branch in enumerate(to_run):
             try:
-                self.data["repo"] = repo.name
+                self.data["repo"] = branch.repo.name
+                self.data["branch"] = branch.name
+                self.data["runs_done"] = i
+                self.data["runs_total"] = len(to_run)
                 self.save()
+
+                if i and not self.dryrun:
+                    self.log(1, f"Waiting for machine to cool down")
+                    time.sleep(30) # To avoid thermal throttling
+
                 repo.run()
             except subprocess.CalledProcessError as e:
                 repo.fatalerror = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
@@ -267,6 +277,9 @@ class NightlyRunner:
                 repo.post()
                 self.log(0, f"Finished nightly run for {repo.name}")
                 del self.data["repo"]
+                del self.data["branch"]
+                del self.data["runs_done"]
+                del self.data["runs_total"]
                 self.save()
 
         self.pid_file.unlink()
@@ -380,7 +393,7 @@ class Repository:
             return
 
         self.runner.log(1, "Filtering branches " + ", ".join(self.branches))
-        self.runnable = [branch for name, branch in self.branches.items() if branch.check()]
+        self.runnable = [branch for name, branch in self.branches.items() if branch.plan()]
         for branch in self.branches.values():
             if "always" in branch.badges and branch not in self.runnable:
                 self.runner.log(2, f"Adding always run on branch {branch.name}")
@@ -391,14 +404,6 @@ class Repository:
             if "never" in branch.badges and branch in self.runnable:
                 self.runner.log(2, f"Removing never run on branch {branch.name}")
                 self.runnable.remove(branch)
-
-    def run(self) -> None:
-        if self.runnable:
-            self.runner.log(1, "Running branches " + " ".join([b.name for b in self.runnable]))
-            for branch in self.runnable:
-                branch.run()
-        else:
-            self.runner.log(1, "No branches to run")
 
     def post(self) -> None:
         if not self.slack_token:
@@ -452,7 +457,7 @@ class Branch:
         self.repo.runner.exec(2, ["git", "-C", self.dir, "reset", "--hard", "origin/" + self.name])
         self.repo.runner.exec(2, ["git", "-C", self.dir, "submodule", "update", "--init", "--recursive"])
 
-    def check(self) -> bool:
+    def plan(self) -> bool:
         current_commit = self.repo.runner.exec(2, ["git", "-C", self.dir, "rev-parse", "origin/" + self.name]).stdout
         if self.lastcommit.is_file():
             with self.lastcommit.open("rb") as f:
@@ -463,11 +468,7 @@ class Branch:
         return True
 
     def run(self) -> None:
-        if not self.repo.runner.dryrun:
-            self.repo.runner.log(1, f"Waiting for machine to cool down")
-            time.sleep(30) # To avoid thermal throttling
-
-        self.repo.runner.log(1, f"Running tests on branch {self.name}")
+        self.repo.runner.log(1, f"Running branch {self.name} on repo {self.repo.name}")
         date = datetime.now()
         log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{self.repo.name}-{self.filename}.log"
 
