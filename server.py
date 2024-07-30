@@ -16,8 +16,6 @@ import status
 
 CONF_FILE = "conf/nightlies.conf"
 
-RUNNING_NIGHTLIES = []
-
 def edit_conf_url(runner : nightlies.NightlyRunner) -> Optional[str]:
     if "confedit" in runner.config.defaults():
         return runner.config.defaults()["confedit"]
