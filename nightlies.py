@@ -258,16 +258,16 @@ class NightlyRunner:
                 del self.data["repo"]
 
         for i, branch in enumerate(plan):
+            if i and not self.dryrun:
+                self.log(1, f"Waiting for machine to cool down")
+                time.sleep(30) # To avoid thermal throttling
+
             try:
                 self.data["repo"] = branch.repo.name
                 self.data["branch"] = branch.name
                 self.data["runs_done"] = i
                 self.data["runs_total"] = len(plan)
                 self.save()
-
-                if i and not self.dryrun:
-                    self.log(1, f"Waiting for machine to cool down")
-                    time.sleep(30) # To avoid thermal throttling
 
                 branch.run()
             except subprocess.CalledProcessError as e:
@@ -471,7 +471,7 @@ class Branch:
         return True
 
     def run(self) -> None:
-        self.repo.runner.log(1, f"Running branch {self.name} on repo {self.repo.name}")
+        self.repo.runner.log(0, f"Running branch {self.name} on repo {self.repo.name}")
         date = datetime.now()
         log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{self.repo.name}-{self.filename}.log"
 
@@ -486,7 +486,7 @@ class Branch:
             cmd = SYSTEMD_RUN_CMD + \
                 ["--setenv=NIGHTLY_CONF_FILE=" + str(self.repo.runner.config_file.resolve())] + \
                 [f"--setenv=PATH={env_path}", "make", "-C", str(self.dir), "nightly"]
-            self.repo.runner.log(2, f"Executing {format_cmd(cmd)}")
+            self.repo.runner.log(1, f"Executing {format_cmd(cmd)}")
             if not self.repo.runner.dryrun:
                 with (self.repo.runner.log_dir / log_name).open("wt") as fd:
                     process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
