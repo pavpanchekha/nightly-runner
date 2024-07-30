@@ -275,7 +275,7 @@ class NightlyRunner:
                 self.log(1, repo.fatalerror)
             finally:
                 if all([idx <= i for idx, b in enumerate(plan) if branch.repo == b.repo]):
-                    self.log(0, f"Finished nightly run for {repo.name}")
+                    self.log(0, f"Finished nightly run for {branch.repo.name}")
                     branch.repo.post()
 
                 del self.data["repo"]
