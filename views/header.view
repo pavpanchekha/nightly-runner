@@ -22,7 +22,7 @@
   </div>
   %if "repo" in current:
   <div class="indent">
-    %if "branch" in current:
+    %if "branch_log" in current:
     <form action="{{baseurl}}/logs/{{current['branch_log']}}" method="get" class="inline">
       <button>Output</button>
     </form> 
