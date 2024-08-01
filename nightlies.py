@@ -312,7 +312,8 @@ class Repository:
         self.fatalerror: Optional[str] = None
 
     def list_branches(self, default_branch : "Branch") -> List[str]:
-        git_branch = self.runner.exec(2, ["git", "-C", default_branch.dir, "branch", "-r"])
+        git_branch = self.runner.exec(2, [
+            "git", "-C", default_branch.dir, "branch", "-r", "--format=%(refname:short)"])
         return [
             branch.split("/", 1)[-1] for branch
             in git_branch.stdout.decode("utf8").strip().split("\n")
