@@ -311,6 +311,13 @@ class Repository:
         }
         self.fatalerror: Optional[str] = None
 
+    def list_branches(self):
+        git_branch = self.runner.exec(2, ["git", "-C", default_branch.dir, "branch", "-r"])
+        return [
+            branch.split("/", 1)[-1] for branch
+            in git_branch.stdout.decode("utf8").strip().split("\n")
+        ]
+
     def load(self) -> None:
         self.runner.log(0, "Beginning nightly run for " + self.name)
         self.dir.mkdir(parents=True, exist_ok=True)
@@ -327,14 +334,10 @@ class Repository:
         self.runner.log(1, f"Fetching default branch {default_branch.name}")
         default_branch.load()
 
-        git_branch = self.runner.exec(2, ["git", "-C", default_branch.dir, "branch", "-r"])
-        all_branches = [
-            branch.split("/", 1)[-1] for branch
-            in git_branch.stdout.decode("utf8").strip().split("\n")
-        ]
-
         if "branches" in self.config:
             all_branches = self.config["branches"].split()
+        else:
+            all_branches = self.list_branches()
 
         self.branches = {}
         for branch_name in all_branches:
