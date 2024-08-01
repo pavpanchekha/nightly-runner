@@ -311,11 +311,13 @@ class Repository:
         }
         self.fatalerror: Optional[str] = None
 
-    def list_branches(self):
-        git_branch = self.runner.exec(2, ["git", "-C", default_branch.dir, "branch", "-r"])
+    def list_branches(self) -> List[str]:
+        default_branch = Branch.escape_filename(self.config.get("main", "main"))
+        git_branch = self.runner.exec(2, ["git", "-C", default_branch, "branch", "-r"])
         return [
             branch.split("/", 1)[-1] for branch
             in git_branch.stdout.decode("utf8").strip().split("\n")
+            if branch.split("/", 1)[-1] != "HEAD"
         ]
 
     def load(self) -> None:
@@ -339,21 +341,12 @@ class Repository:
         else:
             all_branches = self.list_branches()
 
-        self.branches = {}
-        for branch_name in all_branches:
-            if branch_name.startswith("HEAD"): continue
-            if branch_name == default_branch.name:
-                branch = default_branch
-            else:
-                branch = Branch(self, branch_name)
-                self.runner.log(1, f"Fetching branch {branch.name}")
-            self.branches[branch_name] = branch
-
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            for branch in self.branches.values():
-                executor.submit(branch.load)
+            for branch in all_branches:
+                executor.submit(Branch(self, branch).load)
 
-        self.assign_badges()
+        self.read()
+
         if self.config.getboolean("clean", fallback=True):
             self.clean()
 
@@ -370,7 +363,6 @@ class Repository:
                         shutil.rmtree(str(fn))
                     else:
                         fn.unlink()
-
 
     def read(self) -> None:
         self.branches = {}
@@ -438,7 +430,7 @@ class Branch:
     def __init__(self, repo : Repository, name : str):
         self.repo = repo
         self.name = name
-        self.filename = self.name.replace("%", "%25").replace("/", "%2f")
+        self.filename = Branch.escape_filename(self.name)
         self.dir = self.repo.dir / self.filename
         self.lastcommit = self.repo.dir / (self.filename + ".last-commit")
         self.badges : List[str] = []
@@ -453,6 +445,10 @@ class Branch:
     @staticmethod
     def parse_filename(filename : str) -> str:
         return filename.replace("%2f", "/").replace("%25", "%")
+
+    @staticmethod
+    def escape_filename(filename : str) -> str:
+        return filename.replace("%", "%25").replace("/", "%2f")
 
     def load(self) -> None:
         # Would be cool to use `git worktree` instead; would save disk space & download time
