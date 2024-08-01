@@ -452,6 +452,7 @@ class Branch:
         return filename.replace("%2f", "/").replace("%25", "%")
 
     def load(self) -> None:
+        # Would be cool to use `git worktree` instead; would save disk space & download time
         if not self.dir.is_dir():
             self.repo.runner.exec(2, ["git", "clone", "--recursive", self.repo.url, self.dir])
         self.repo.runner.exec(2, ["git", "-C", self.dir, "fetch", "origin", "--prune"])
