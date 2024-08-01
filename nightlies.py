@@ -311,9 +311,8 @@ class Repository:
         }
         self.fatalerror: Optional[str] = None
 
-    def list_branches(self) -> List[str]:
-        default_branch = Branch.escape_filename(self.config.get("main", "main"))
-        git_branch = self.runner.exec(2, ["git", "-C", default_branch, "branch", "-r"])
+    def list_branches(self, default_branch : Branch) -> List[str]:
+        git_branch = self.runner.exec(2, ["git", "-C", default_branch.dir, "branch", "-r"])
         return [
             branch.split("/", 1)[-1] for branch
             in git_branch.stdout.decode("utf8").strip().split("\n")
@@ -339,7 +338,7 @@ class Repository:
         if "branches" in self.config:
             all_branches = self.config["branches"].split()
         else:
-            all_branches = self.list_branches()
+            all_branches = self.list_branches(default_branch)
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
             for branch in all_branches:
