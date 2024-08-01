@@ -10,6 +10,7 @@ import concurrent.futures, threading
 import tempfile
 import shlex, shutil
 import slack, apt
+import urllib.request
 
 def format_time(ts : float) -> str:
     t = float(ts)
@@ -319,6 +320,20 @@ class Repository:
             in git_branch.stdout.decode("utf8").strip().split("\n")
             if branch.split("/", 1)[-1] != "HEAD"
         ]
+
+    def list_pr_branches(self, default_branch : "Branch") -> Dict[str, int]:
+        if self.url.startswith("git@github.com:") and self.url.endswith(".git"):
+            gh_name = self.url[len("git@github.com:"):-len(".git")]
+            pulls_url = f"https://api.github.com/repos/{gh_name}/pulls"
+            with urllib.request.urlopen(pulls_url) as data:
+                pr_data = json.load(data)
+            out = {}
+            for pr in pr_data:
+                if pr["head"]["repo"]["full_name"] == gh_name:
+                    out[pr["head"]["ref"]] = pr["number"]
+            return out
+        else:
+            return { branch: 0 for branch in self.list_branches(default_branch)}
 
     def load(self) -> None:
         self.runner.log(0, "Beginning nightly run for " + self.name)
