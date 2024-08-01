@@ -291,7 +291,7 @@ class Repository:
     def __init__(self, runner : NightlyRunner, name : str, configuration : configparser.SectionProxy):
         self.runner = runner
         self.config = configuration
-        self.runnable : list[Branch] = []
+        self.runnable : List[Branch] = []
 
         if configuration.get("slack"):
             self.slack_channel : Optional[str] = configuration.get("slack")
