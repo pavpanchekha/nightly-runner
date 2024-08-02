@@ -430,7 +430,7 @@ class Repository:
         if self.runnable:
             self.runner.log(1, "Found runnable branches " + ", ".join([b.name for b in self.runnable]))
         else:
-            self.runner.log(1, "No runnable branches for " + self.repo.name)
+            self.runner.log(1, "No runnable branches for " + self.name)
 
     def post(self) -> None:
         if not self.slack_token:
