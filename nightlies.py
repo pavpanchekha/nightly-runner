@@ -306,22 +306,23 @@ class Repository:
 
         self.name = name.split("/")[-1]
         self.dir = runner.dir / self.name
+        self.checkout = self.dir / ".checkout"
+        self.status = self.dir / ".status"
         self.ignored_files = {
             self.dir / path
             for path in shlex.split(self.config.get("ignore", ""))
-        }
+        } | set([self.checkout, self.status])
         self.fatalerror: Optional[str] = None
 
-    def list_branches(self, default_branch : "Branch") -> List[str]:
-        git_branch = self.runner.exec(2, [
-            "git", "-C", default_branch.dir, "branch", "-r", "--format=%(refname:short)"])
+    def list_branches(self) -> List[str]:
+        git_branch = self.runner.exec(2, ["git", "-C", self.checkout, "branch", "-r"])
         return [
             branch.split("/", 1)[-1] for branch
             in git_branch.stdout.decode("utf8").strip().split("\n")
-            if branch.split("/", 1)[-1] != "HEAD"
+            if "->" not in branch
         ]
 
-    def list_pr_branches(self, default_branch : "Branch") -> Dict[str, int]:
+    def list_pr_branches(self) -> Dict[str, int]:
         if self.url.startswith("git@github.com:") and self.url.endswith(".git"):
             gh_name = self.url[len("git@github.com:"):-len(".git")]
             pulls_url = f"https://api.github.com/repos/{gh_name}/pulls"
@@ -333,7 +334,7 @@ class Repository:
                     out[pr["head"]["ref"]] = pr["number"]
             return out
         else:
-            return { branch: 0 for branch in self.list_branches(default_branch)}
+            return {}
 
     def load(self) -> None:
         self.runner.log(0, "Beginning nightly run for " + self.name)
@@ -347,29 +348,35 @@ class Repository:
                     apt.install(self.runner, apt_pkgs)
                 self.run_all = True
 
-        default_branch = Branch(self, self.config.get("main", "main"))
-        self.runner.log(1, f"Fetching default branch {default_branch.name}")
-        default_branch.load()
+        if not self.checkout.is_dir():
+            self.runner.log(1, "Checking out base repository for " + self.name)
+            self.runner.exec(2, ["git", "clone", "--recursive", self.url, self.checkout])
+            self.runner.exec(2, ["git", "-C", self.checkout, "checkout", "--detach"])
+
+        self.runner.log(1, "Updating branches for " + self.name)
+        self.runner.exec(2, ["git", "-C", self.checkout, "fetch", "origin", "--prune"])
 
         if "branches" in self.config:
             all_branches = self.config["branches"].split()
         else:
-            all_branches = self.list_branches(default_branch)
+            all_branches = self.list_branches()
+        self.branches = { branch: Branch(self, branch) for branch in all_branches }
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            for branch in all_branches:
-                executor.submit(Branch(self, branch).load)
-
-        self.read()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(all_branches)) as executor:
+            for branch in self.branches.values():
+                executor.submit(branch.load)
 
         if self.config.getboolean("clean", fallback=True):
             self.clean()
+
+        self.assign_badges()
 
     def clean(self) -> None:
         expected_files = self.ignored_files.union(*[
             {b.dir, b.lastcommit} for b in self.branches.values()
         ])
         self.runner.log(1, "Cleaning unnecessary files")
+        deleted = False
         for fn in self.dir.iterdir():
             if fn not in expected_files:
                 self.runner.log(2, f"Deleting unknown file {fn}")
@@ -378,6 +385,9 @@ class Repository:
                         shutil.rmtree(str(fn))
                     else:
                         fn.unlink()
+                    deleted = True
+        if deleted:
+            self.runner.exec(2, ["git", "-C", self.checkout, "worktree", "prune"])
 
     def read(self) -> None:
         self.branches = {}
@@ -417,6 +427,10 @@ class Repository:
             if "never" in branch.badges and branch in self.runnable:
                 self.runner.log(2, f"Removing never run on branch {branch.name}")
                 self.runnable.remove(branch)
+        if self.runnable:
+            self.runner.log(1, "Found runnable branches " + ", ".join([b.name for b in self.runnable]))
+        else:
+            self.runner.log(1, "No runnable branches for " + self.repo.name)
 
     def post(self) -> None:
         if not self.slack_token:
@@ -466,12 +480,10 @@ class Branch:
         return filename.replace("%", "%25").replace("/", "%2f")
 
     def load(self) -> None:
-        # Would be cool to use `git worktree` instead; would save disk space & download time
         if not self.dir.is_dir():
-            self.repo.runner.exec(2, ["git", "clone", "--recursive", self.repo.url, self.dir])
-        self.repo.runner.exec(2, ["git", "-C", self.dir, "fetch", "origin", "--prune"])
-        self.repo.runner.exec(2, ["git", "-C", self.dir, "checkout", "--force", "origin/" + self.name])
-        self.repo.runner.exec(2, ["git", "-C", self.dir, "submodule", "update", "--init", "--recursive"])
+            relpath = self.dir.relative_to(self.repo.checkout, walk_up=True)
+            self.repo.runner.exec(2, ["git", "-C", self.repo.checkout, "worktree", "add", relpath, self.name])
+        self.repo.runner.exec(2, ["git", "-C", self.dir, "checkout", "--force", "--recurse-submodules", "origin/" + self.name])
 
     def plan(self) -> bool:
         current_commit = self.repo.runner.exec(2, ["git", "-C", self.dir, "rev-parse", "origin/" + self.name]).stdout
