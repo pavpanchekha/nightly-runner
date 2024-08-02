@@ -361,7 +361,6 @@ class Repository:
         else:
             all_branches = self.list_branches()
         self.branches = { branch: Branch(self, branch) for branch in all_branches }
-        self.runner.log(2, f"Found {len(self.branches)} branches: {', '.join(self.branches)}")
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(all_branches)) as executor:
             for branch in self.branches.values():
@@ -482,8 +481,8 @@ class Branch:
 
     def load(self) -> None:
         if not self.dir.is_dir():
-            relpath = self.dir.relative_to(self.repo.checkout, walk_up=True)
-            self.repo.runner.exec(2, ["git", "-C", self.repo.checkout, "worktree", "add", relpath, self.name])
+            relpath = self.dir.relative_to(self.repo.dir)
+            self.repo.runner.exec(2, ["git", "-C", self.repo.checkout, "worktree", "add", ".." / relpath, self.name])
         self.repo.runner.exec(2, ["git", "-C", self.dir, "checkout", "--force", "--recurse-submodules", "origin/" + self.name])
 
     def plan(self) -> bool:
