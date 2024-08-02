@@ -362,9 +362,8 @@ class Repository:
             all_branches = self.list_branches()
         self.branches = { branch: Branch(self, branch) for branch in all_branches }
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(all_branches)) as executor:
-            for branch in self.branches.values():
-                executor.submit(branch.load)
+        for branch in self.branches.values():
+            branch.load()
 
         if self.config.getboolean("clean", fallback=True):
             self.clean()
