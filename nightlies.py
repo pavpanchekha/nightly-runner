@@ -361,6 +361,7 @@ class Repository:
         else:
             all_branches = self.list_branches()
         self.branches = { branch: Branch(self, branch) for branch in all_branches }
+        self.runner.log(2, f"Found {len(self.branches)} branches: {', '.join(self.branches)}")
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(all_branches)) as executor:
             for branch in self.branches.values():
