@@ -420,9 +420,11 @@ class Repository:
             if "always" in branch.badges and branch not in self.runnable:
                 self.runner.log(2, f"Adding always run on branch {branch.name}")
                 self.runnable.append(branch)
-            if "baseline" in branch.badges and branch not in self.runnable and self.runnable:
+            if "baseline" in branch.badges and self.runnable:
                 self.runner.log(2, f"Adding baseline branch {branch.name}")
-                self.runnable.append(branch)
+                if branch in self.runnable:
+                    self.runnable.remove(branch)
+                self.runnable.insert(0, branch)
             if "never" in branch.badges and branch in self.runnable:
                 self.runner.log(2, f"Removing never run on branch {branch.name}")
                 self.runnable.remove(branch)

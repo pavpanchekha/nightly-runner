@@ -84,7 +84,7 @@ def server_static(filepath):
 def robots_txt():
     return bottle.static_file("robots.txt", root='static/')
 
-@bottle.route("/dryrun")
+@bottle.route("/dryrun", ["GET", "POST"])
 def dryrun():
     runner = nightlies.NightlyRunner(CONF_FILE)
     runner.load()
