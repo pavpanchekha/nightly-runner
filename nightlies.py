@@ -452,7 +452,7 @@ class Repository:
         if self.run_all:
             apt.post(data)
 
-        if not self.runner.dryrun and not self.fatalerror:
+        if not self.runner.dryrun or self.fatalerror:
             slack.send(self.runner, self.slack_token, data)
 
 class Branch:
