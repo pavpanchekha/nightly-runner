@@ -363,11 +363,11 @@ class Repository:
             all_branches = self.list_branches()
         self.branches = { branch: Branch(self, branch) for branch in all_branches }
 
-        for branch in self.branches.values():
-            branch.load()
-
         if self.config.getboolean("clean", fallback=True):
             self.clean()
+
+        for branch in self.branches.values():
+            branch.load()
 
         self.assign_badges()
 
@@ -386,8 +386,7 @@ class Repository:
                     else:
                         fn.unlink()
                     deleted = True
-        if deleted:
-            self.runner.exec(2, ["git", "-C", self.checkout, "worktree", "prune"])
+        self.runner.exec(2, ["git", "-C", self.checkout, "worktree", "prune"])
 
     def read(self) -> None:
         self.branches = {}
