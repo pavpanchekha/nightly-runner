@@ -136,6 +136,7 @@ def rmbranch():
         if repo.name == repo_name:
             try:
                 shutil.rmtree(nightlies.Branch(repo, branch).dir)
+                runner.exec(2, ["git", "-C", repo.checkout, "worktree", "prune"])
             except FileNotFoundError:
                 pass
     bottle.redirect("/dryrun")
