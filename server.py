@@ -54,6 +54,13 @@ def load():
             last_print = time.time() - os.path.getmtime(str(log_file))
         except FileNotFoundError:
             running = False
+
+    logins = set([
+        line.split()[0].decode("utf8", errors="replace")
+        for line in subprocess.run(["who"], check=True, stdout=subprocess.PIPE)
+    ])
+    
+
     system_state = status.system_state_html()
 
     return {
@@ -64,6 +71,7 @@ def load():
         "confurl": edit_conf_url(runner),
         "system_state": system_state,
         "last_print": last_print,
+        "logins": logins,
     }
 
 @bottle.route("/")

@@ -20,6 +20,13 @@
     (on nightly {{current["runs_done"]+1}}/{{current["runs_total"]}})
     %end
   </div>
+  %if logins:
+  <div>
+    {{len(logins)}} user{{'s' if len(logins) > 1 else ''}} currently logged in:
+    {{', '.join(logins)}}.
+    Perhaps ask them before starting a nightly.
+  </div>
+  %end
   %if "repo" in current:
   <div class="indent">
     %if "branch_log" in current:
