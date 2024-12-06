@@ -5,6 +5,14 @@
 <header>
   {{! system_state }}
 
+%if logins:
+  <div>
+    Currently {{len(logins)}} user{{'s' if len(logins) > 1 else ''}} logged in:
+    {{', '.join(logins)}}.
+    Please avoid starting a nightly.
+  </div>
+%end
+
 %if current:
   <div>
     <form action="{{baseurl}}/logs/{{Path(current['log']).name}}" method="get" class="inline">
@@ -20,13 +28,6 @@
     (on nightly {{current["runs_done"]+1}}/{{current["runs_total"]}})
     %end
   </div>
-  %if logins:
-  <div>
-    Currently {{len(logins)}} user{{'s' if len(logins) > 1 else ''}} logged in:
-    {{', '.join(logins)}}.
-    Please avoid starting a nightly.
-  </div>
-  %end
   %if "repo" in current:
   <div class="indent">
     %if "branch_log" in current:
