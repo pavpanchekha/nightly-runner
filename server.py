@@ -60,6 +60,7 @@ def load():
         for line in subprocess.run(
                 ["who"], check=True, stdout=subprocess.PIPE
         ).stdout.split(b'\n')
+        if line
     ])
     
 
