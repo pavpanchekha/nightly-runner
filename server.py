@@ -59,7 +59,7 @@ def load():
         line.split()[0].decode("utf8", errors="replace")
         for line in subprocess.run(
                 ["who"], check=True, stdout=subprocess.PIPE
-        ).split(b'\n')
+        ).stdout.split(b'\n')
     ])
     
 
