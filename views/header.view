@@ -22,9 +22,9 @@
   </div>
   %if logins:
   <div>
-    {{len(logins)}} user{{'s' if len(logins) > 1 else ''}} currently logged in:
+    Currently {{len(logins)}} user{{'s' if len(logins) > 1 else ''}} logged in:
     {{', '.join(logins)}}.
-    Perhaps ask them before starting a nightly.
+    Please avoid starting a nightly.
   </div>
   %end
   %if "repo" in current:

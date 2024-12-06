@@ -62,7 +62,7 @@ def load():
         ).stdout.split(b'\n')
         if line
     ])
-    
+    print(logins)
 
     system_state = status.system_state_html()
 
