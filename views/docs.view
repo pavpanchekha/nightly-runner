@@ -16,11 +16,9 @@ nightly.</p>
   To make a nightly, first, make sure the code you want to test
   nightly is in a public Github repository. Add your repository to the
   %if confurl:
-   <a href="{{confurl}}">
-  %end
-  nightly configuration.
-  %if confurl:
-    </a>
+   <a href="{{confurl}}">nightly configuration</a>.
+  %else
+   nightly configuration.
   %end
   If you don't have access, ask someone who does.
 </p>
@@ -65,7 +63,7 @@ makefile.</p>
 set -e -x
 </pre>
 
-<p>This tells the script to fail if any command files, and to print
+<p>This tells the script to fail if any command fails, and to print
 each command that it executes. This helps a lot when debugging.</p>
 
 <p>The script should now run every night if there's been a commit on
@@ -79,11 +77,11 @@ pretty soon want to measure stuff (run times, results, and so on) so
 you know how well your research is working. Nightlies make that
 easy.</p>
 
-<p>Modify your nightly script to put all output into a single
-directory. Usually this directory is called <code>report</code>. It's
-also recommended to generate an <code>index.html</code> file with the
-main results and linking to any other files. You can also include
-graphs and tables in that file.</p>
+<p>Modify your nightly script to generate output. Usually the output
+should be a single directory (usually called <code>report</code>) with
+an <code>index.html</code> file. That file can contain the most
+important results, plots, and tables, and also link to any other files
+you might generate as output.</p>
 
 <p>Once you have a <code>report</code> directory with
 an <code>index.html</code> inside, add the following line to your
@@ -94,8 +92,8 @@ nightly-results publish report
 </pre>
 
 <p>Now when the nightly runs, that directory will be archived and the
-Slack message will have a button to go to the <code>index.html</code>
-file.</p>
+nightly Slack message will have a button to go to
+the <code>index.html</code> file.</p>
 
 <h2>Customizing the nightly</h2>
 
