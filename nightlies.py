@@ -295,11 +295,10 @@ class Repository:
         self.config = configuration
         self.runnable : List[Branch] = []
 
-        if configuration.get("slack"):
-            self.slack_channel : Optional[str] = configuration.get("slack")
+        self.slack_channel : Optional[str] = configuration.get("slack")
+        if self.slack_channel:
             self.slack_token : Optional[str] = self.runner.secrets[self.slack_channel]["slack"]
         else:
-            self.slack_channel = None
             self.slack_token = None
         self.run_all = False
 

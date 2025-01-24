@@ -5,7 +5,7 @@ import urllib.request, urllib.error
 
 class Block:
     def to_json(self) -> Dict[str, Any]:
-        raise NotImplemented
+        raise NotImplementedError
 
 class Accessory: pass
 
