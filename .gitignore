@@ -8,3 +8,4 @@ passwords
 conf/
 secrets/
 nightly-test/
+__pycache__
