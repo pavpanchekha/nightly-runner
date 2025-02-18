@@ -256,6 +256,10 @@ class NightlyRunner:
                 repo.fatalerror = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
                 self.log(1, repo.fatalerror)
                 repo.post()
+            except OSError as e:
+                repo.fatalerror = f"Fatal error: {str(e)}"
+                self.log(1, repo.fatalerror)
+                repo.post()
             finally:
                 del self.data["repo"]
 
