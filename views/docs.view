@@ -17,7 +17,7 @@ nightly.</p>
   nightly is in a public Github repository. Add your repository to the
   %if confurl:
    <a href="{{confurl}}">nightly configuration</a>.
-  %else
+  %else:
    nightly configuration.
   %end
   If you don't have access, ask someone who does.
