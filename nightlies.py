@@ -58,6 +58,7 @@ SYSTEMD_RUN_CMD = [
     f"--uid={os.getuid()}", # As the current user
     f"--gid={os.getgid()}", # As the current group
     f"--slice={SYSTEMD_SLICE}", # Run with the nightly resource limits
+    "--property=Delegate=yes", # Spawned Docker instances inherit resource limits
     "--service-type=simple", # It just execs a program
 ]
 
