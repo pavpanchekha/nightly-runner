@@ -8,4 +8,4 @@ IOAccounting=true
 CPUAccounting=true
 
 CPUWeight=idle
-MemoryLimit=98%
+MemoryMax=98%
