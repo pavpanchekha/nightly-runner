@@ -308,7 +308,6 @@ class Repository:
         self.run_all = False
 
         self.url = repo_to_url(self.config.get("url", configuration.get("github", name)))
-        self.report_path = self.dir / configuration.get("report") if configuration.get("report") else None
 
         self.name = name.split("/")[-1]
         self.dir = runner.dir / self.name
@@ -318,6 +317,7 @@ class Repository:
             self.dir / path
             for path in shlex.split(self.config.get("ignore", ""))
         } | set([self.checkout, self.status])
+        self.report_dir = self.dir / configuration["report"] if configuration.get("report") else None
         self.fatalerror: Optional[str] = None
 
     def list_branches(self) -> List[str]:
@@ -534,7 +534,7 @@ class Branch:
                         self.repo.runner.exec(2, ["sudo", "systemctl", "stop", "nightlies.slice"])
 
                         # Auto-publish report if configured
-                        if self.repo.report_path:
+                        if self.repo.report_dir:
                             if self.repo.report_dir.exists():
                                 self.repo.runner.log(2, f"Publishing report directory {self.repo.report_dir}")
                                 from cmdline import publish
