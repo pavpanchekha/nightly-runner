@@ -1,8 +1,10 @@
-from typing import Dict, Any, List, Optional
-import nightlies
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
 import os
 import json
 import urllib.request, urllib.error
+
+if TYPE_CHECKING:
+    import nightlies
 
 class Block:
     def to_json(self) -> Dict[str, Any]:
@@ -142,7 +144,7 @@ def build_fatal(name : str, text : str, baseurl : str) -> Response:
     res.add(TextBlock(text))
     return res
 
-def send(runner : nightlies.NightlyRunner, url : str, res : Response) -> None:
+def send(runner : "nightlies.NightlyRunner", url : str, res : Response) -> None:
     payload = json.dumps(res.to_json()).encode("utf8")
     req = urllib.request.Request(url, data=payload, method="POST")
     req.add_header("Content-Type", "application/json; charset=utf8")
