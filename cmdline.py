@@ -8,12 +8,6 @@ import argparse
 import shutil
 import time
 
-def copything(src : Path, dst : Path):
-    if src.is_dir():
-        shutil.copytree(src, dst)
-    else:
-        shutil.copy2(src, dst)
-
 def info(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None:
     print(f"dir={runner.dir}")
     print(f"config_file={runner.config_file}")
@@ -40,7 +34,7 @@ def publish(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> None
 
     dest_dir : Path = runner.report_dir / repo / name
     runner.log(3, f"Publishing {args.path} to {dest_dir}")
-    copything(args.path, dest_dir)
+    nightlies.copything(args.path, dest_dir)
 
     url_base = runner.base_url + "reports" + "/" + repo + "/" + name
     runner.add_info("url", url_base)
@@ -57,7 +51,7 @@ def download(runner : nightlies.NightlyRunner, args : argparse.Namespace) -> Non
     src = runner.report_dir / repo / args.name
     dst = Path.cwd() / (args.to or args.name)
     runner.log(3, f"Copying {src} to {dst}")
-    copything(src, dst)
+    nightlies.copything(src, dst)
     
 # Command handling code
 

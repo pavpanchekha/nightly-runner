@@ -44,6 +44,12 @@ def repo_to_url(repo : str) -> str:
     if repo and ":" in repo: return repo
     return "git@github.com:" + repo + ".git"
 
+def copything(src : Path, dst : Path) -> None:
+    if src.is_dir():
+        shutil.copytree(src, dst)
+    else:
+        shutil.copy2(src, dst)
+
 SYSTEMD_SLICE = "nightlies.slice"
 
 SYSTEMD_RUN_CMD = [
@@ -313,6 +319,9 @@ class Repository:
             for path in shlex.split(self.config.get("ignore", ""))
         } | set([self.checkout, self.status])
         self.report_dir = self.dir / configuration["report"] if configuration.get("report") else None
+        self.image_file : Optional[Path] = None
+        if self.report_dir and configuration.get("image"):
+            self.image_file = self.report_dir / configuration["image"]
         
         self.branches : Dict[str, Branch] = {}
         self.fatalerror: Optional[str] = None
@@ -515,6 +524,11 @@ class Branch:
                 [f"--setenv=PATH={env_path}", "make", "-C", str(self.dir), "nightly"]
             self.repo.runner.log(1, f"Executing {format_cmd(cmd)}")
             if not self.repo.runner.dryrun:
+                if self.repo.report_dir:
+                    if self.repo.report_dir.exists():
+                        shutil.rmtree(self.repo.report_dir, ignore_errors=True)
+                    self.repo.report_dir.mkdir(exist_ok=True)
+
                 with (self.repo.runner.log_dir / log_name).open("wt") as fd:
                     process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
                     self.repo.runner.data["branch_pid"] = process.pid
@@ -528,19 +542,22 @@ class Branch:
                         process.kill()
                         self.repo.runner.exec(2, ["sudo", "systemctl", "stop", "nightlies.slice"])
 
-                        # Auto-publish report if configured
-                        if self.repo.report_dir:
-                            if self.repo.report_dir.exists():
-                                self.repo.runner.log(2, f"Publishing report directory {self.repo.report_dir}")
-                                from cmdline import publish
-                                import argparse
-                                args = argparse.Namespace()
-                                args.path = self.repo.report_dir
-                                args.name = None
-                                args.image = None
-                                publish(self.repo.runner, args)
-                            else:
-                                self.repo.runner.log(2, f"Report directory {self.repo.report_dir} does not exist")
+                # Auto-publish report if configured
+                if self.repo.report_dir and self.repo.report_dir.exists():
+                    if self.repo.report_dir.exists():
+                        assert self.repo.runner.base_url, f"Cannot publish, no baseurl configured"
+                        self.repo.runner.log(2, f"Publishing report directory {self.repo.report_dir}")
+                        name = str(int(time.time()))
+                        dest_dir = self.repo.runner.report_dir / self.repo.name / name
+                        copything(self.repo.report_dir, dest_dir)
+                        url_base = self.repo.runner.base_url + "reports/" + self.repo.name + "/" + name
+                        self.repo.runner.add_info("url", url_base)
+                        if self.repo.image_file and self.repo.image_file.exists():
+                            self.repo.runner.log(2, f"Linking image file {self.repo.image_file}")
+                            path = self.repo.image_file.relative_to(self.repo.report_dir)
+                            runner.add_info("img", url_base + "/" + str(path))
+                    else:
+                        self.repo.runner.log(2, f"Report directory {self.repo.report_dir} does not exist")
 
         except subprocess.TimeoutExpired as e:
             self.repo.runner.log(1, f"Run on branch {self.name} timed out after {format_time(e.timeout)}")
