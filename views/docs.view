@@ -29,6 +29,7 @@ nightly.</p>
 [username/reponame]
 slack=channelname
 timeout=1hr
+report=report/
 </pre>
 
 <p>It is polite to make a PR on the nightly configuration repository
@@ -78,18 +79,11 @@ you know how well your research is working. Nightlies make that
 easy.</p>
 
 <p>Modify your nightly script to generate output. Usually the output
-should be a single directory (usually called <code>report</code>) with
+should be a single directory (call it <code>report</code>, matching the
+<code>report</code> key in the config file) with
 an <code>index.html</code> file. That file can contain the most
 important results, plots, and tables, and also link to any other files
 you might generate as output.</p>
-
-<p>Once you have a <code>report</code> directory with
-an <code>index.html</code> inside, add the following line to your
-nightly script:</p>
-
-<pre>
-nightly-results publish report
-</pre>
 
 <p>Now when the nightly runs, that directory will be archived and the
 nightly Slack message will have a button to go to
@@ -101,6 +95,12 @@ the <code>index.html</code> file.</p>
 configuration file to change how your nightly behaves.</p>
 
 <dl>
+<dt><code>report</code></dt>
+<dd>The path to the report directory relative to the repository root.
+This directory is published after each nightly run. If for some reason
+the directory name differs between runs, you can use
+<code>nightly-results</code> in your nightly script instead.</dd>
+
 <dt><code>slack</code></dt>
 <dd>The Slack channel to post your nightly results to. The value of
 this property isn't actually the channel name; instead, it's a key in
@@ -135,3 +135,5 @@ branches.</dd>
 
 <dt><code>main</code></dt>
 <dd>The name of the main branch, if it's not <code>main</code>.</dd>
+
+</dl>
