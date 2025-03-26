@@ -313,6 +313,8 @@ class Repository:
             for path in shlex.split(self.config.get("ignore", ""))
         } | set([self.checkout, self.status])
         self.report_dir = self.dir / configuration["report"] if configuration.get("report") else None
+        
+        self.branches : Dict[str, Branch] = {}
         self.fatalerror: Optional[str] = None
 
     def list_branches(self) -> List[str]:
@@ -388,7 +390,7 @@ class Repository:
         self.runner.exec(2, ["git", "-C", self.checkout, "worktree", "prune"])
 
     def read(self) -> None:
-        self.branches : Dict[str, Branch] = {}
+        self.branches = {}
         if self.dir.is_dir():
             for fn in self.dir.iterdir():
                 if not fn.is_dir(): continue
