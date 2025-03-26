@@ -1,13 +1,11 @@
 from typing import List
 import nightlies
-import subprocess
 import re
-import shlex
 import slack
 
 APT_LINE_RE = re.compile(r"^(\d+) upgraded, (\d+) newly installed, (\d+) to remove and (\d+) not upgraded\.$", re.MULTILINE)
 
-def check_updates(runner, pkgs : List[str]) -> bool:
+def check_updates(runner : nightlies.NightlyRunner, pkgs : List[str]) -> bool:
     runner.log(1, f"Checking for updates to apt packages {' '.join(pkgs)}")
     res = runner.exec(2, ["sudo", "apt", "install", "--dry-run"] + pkgs)
 
@@ -16,10 +14,10 @@ def check_updates(runner, pkgs : List[str]) -> bool:
     if not match:
         raise IOError("apt: Could not find package line in `apt` results")
 
-    num_u, num_i, num_r, num_n = match.group(1, 2, 3, 4)
+    num_u, num_i, num_r, _ = match.group(1, 2, 3, 4)
     return bool(int(num_u) or int(num_i) or int(num_r))
 
-def install(runner, pkgs : List[str]) -> None:
+def install(runner : nightlies.NightlyRunner, pkgs : List[str]) -> None:
     runner.log(1, f"Installing apt packages {' '.join(pkgs)}")
     runner.exec(2, ["sudo", "apt", "install", "--yes"] + pkgs)
 

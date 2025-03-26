@@ -2,12 +2,10 @@
 
 from typing import Any, List, Dict, Union, Optional, cast, Sequence
 import os, sys, subprocess, time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 import configparser
 import json
-import concurrent.futures, threading
-import tempfile
 import shlex, shutil
 import slack, apt
 import urllib.request
@@ -73,7 +71,6 @@ class NightlyRunner:
         self.config_file = Path(config_file)
         self.self_dir = Path(__file__).resolve().parent
         self.data : Any = None
-        self.log_lock = threading.Lock()
 
     def update_system_repo(self, dir : str, repo : str, branch : str) -> None:
         if not Path(dir).is_dir():
@@ -103,7 +100,7 @@ class NightlyRunner:
         assert self.config_file.is_file(), f"Configuration file {self.config_file} is not a file"
         self.config = configparser.ConfigParser()
         self.config.read(str(self.config_file))
-        self.repos = []
+        self.repos : List[Repository] = []
 
         defaults = self.config.defaults()
         self.base_url = defaults.get("baseurl")
@@ -146,15 +143,13 @@ class NightlyRunner:
         self.log(0, "Restarting nightly run due to updated system repositories")
         os.execv(sys.executable, ["python3"] + sys.argv)
 
-    def exec(self, level : int, cmd : List[Union[str, Path]]) -> subprocess.CompletedProcess:
+    def exec(self, level : int, cmd : Sequence[Union[str, Path]]) -> subprocess.CompletedProcess[bytes]:
         self.log(level, f"Executing {format_cmd(cmd)}")
         return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
 
     def log(self, level : int, s : str) -> None:
-        self.log_lock.acquire()
         with self.log_path.open("at") as f:
             f.write("{}\t{}{}\n".format(datetime.now() - self.start, "    " * level, s))
-        self.log_lock.release()
 
     def save(self) -> None:
         with self.pid_file.open("w") as f:
@@ -167,7 +162,7 @@ class NightlyRunner:
             f.write(data + "\n")
 
     def load_info(self) -> Dict[str, str]:
-        out = {}
+        out : Dict[str, str] = {}
         try:
             with self.info_file.open("r") as f:
                 for line in f:
@@ -245,7 +240,7 @@ class NightlyRunner:
                 for repo in self.repos:
                     f.write(repo.dir.name + "\n")
 
-        plan = []
+        plan : List[Branch] = []
         for repo in self.repos:
             try:
                 self.data["repo"] = repo.name
@@ -278,8 +273,8 @@ class NightlyRunner:
 
                 branch.run()
             except subprocess.CalledProcessError as e:
-                repo.fatalerror = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
-                self.log(1, repo.fatalerror)
+                branch.repo.fatalerror = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
+                self.log(1, branch.repo.fatalerror)
             finally:
                 if all([idx <= i for idx, b in enumerate(plan) if branch.repo == b.repo]):
                     self.log(0, f"Finished nightly run for {branch.repo.name}")
@@ -334,7 +329,7 @@ class Repository:
             pulls_url = f"https://api.github.com/repos/{gh_name}/pulls"
             with urllib.request.urlopen(pulls_url) as data:
                 pr_data = json.load(data)
-            out = {}
+            out : Dict[str, int] = {}
             for pr in pr_data:
                 if pr["head"]["repo"]["full_name"] == gh_name:
                     out[pr["head"]["ref"]] = pr["number"]
@@ -382,7 +377,6 @@ class Repository:
             {b.dir, b.lastcommit} for b in self.branches.values()
         ])
         self.runner.log(1, "Cleaning unnecessary files")
-        deleted = False
         for fn in self.dir.iterdir():
             if fn not in expected_files:
                 self.runner.log(2, f"Deleting unknown file {fn}")
@@ -391,11 +385,10 @@ class Repository:
                         shutil.rmtree(str(fn))
                     else:
                         fn.unlink()
-                    deleted = True
         self.runner.exec(2, ["git", "-C", self.checkout, "worktree", "prune"])
 
     def read(self) -> None:
-        self.branches = {}
+        self.branches : Dict[str, Branch] = {}
         if self.dir.is_dir():
             for fn in self.dir.iterdir():
                 if not fn.is_dir(): continue
@@ -421,7 +414,7 @@ class Repository:
             return
 
         self.runner.log(1, "Filtering branches " + ", ".join(self.branches))
-        self.runnable = [branch for name, branch in self.branches.items() if branch.plan()]
+        self.runnable = [branch for branch in self.branches.values() if branch.plan()]
         for branch in self.branches.values():
             if "always" in branch.badges and branch not in self.runnable:
                 self.runner.log(2, f"Adding always run on branch {branch.name}")

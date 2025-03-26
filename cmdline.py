@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import typing
-import sys
 import os
 import nightlies
 from pathlib import Path
@@ -9,7 +8,7 @@ import argparse
 import shutil
 import time
 
-def copything(src, dst):
+def copything(src : Path, dst : Path):
     if src.is_dir():
         shutil.copytree(src, dst)
     else:

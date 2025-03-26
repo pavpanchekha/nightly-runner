@@ -1,4 +1,5 @@
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Optional
+import nightlies
 import os
 import json
 import urllib.request, urllib.error
@@ -7,7 +8,9 @@ class Block:
     def to_json(self) -> Dict[str, Any]:
         raise NotImplementedError
 
-class Accessory: pass
+class Accessory:
+    def to_json(self) -> Dict[str, Any]:
+        raise NotImplementedError
 
 class Response:
     def __init__(self, text: str):
@@ -25,9 +28,9 @@ class Response:
         self.blocks.append(block)
 
 class TextBlock(Block):
-    def __init__(self, text):
+    def __init__(self, text : str):
         self.text = text
-        self.accessory = None
+        self.accessory : Optional[Accessory] = None
 
     def to_json(self) -> Dict[str, Any]:
         block = {
@@ -48,7 +51,7 @@ class Fields(Block):
         self.fields = fields
 
     def to_json(self) -> Dict[str, Any]:
-        fields = []
+        fields : List[Dict[str, Any]] = []
         for k, v in self.fields.items():
             fields.append({
                 "type": "mrkdwn",
@@ -66,7 +69,7 @@ class Fields(Block):
         return block
         
 class Image(Block):
-    def __init__(self, text, url):
+    def __init__(self, text : str, url : str):
         self.text = text
         self.url = url
 
@@ -80,7 +83,7 @@ class Image(Block):
 class Button(Accessory):
     key = "accessory"
 
-    def __init__(self, text, url, style=None):
+    def __init__(self, text : str, url : str, style : Optional[str] = None):
         assert style in { None, "primary", "danger" }
         self.text = text
         self.url = url
@@ -139,7 +142,7 @@ def build_fatal(name : str, text : str, baseurl : str) -> Response:
     res.add(TextBlock(text))
     return res
 
-def send(runner, url: str, res: Response) -> None:
+def send(runner : nightlies.NightlyRunner, url : str, res : Response) -> None:
     payload = json.dumps(res.to_json()).encode("utf8")
     req = urllib.request.Request(url, data=payload, method="POST")
     req.add_header("Content-Type", "application/json; charset=utf8")
