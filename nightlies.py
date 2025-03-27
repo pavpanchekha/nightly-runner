@@ -475,7 +475,7 @@ class Branch:
         self.info : Dict[str, str] = {}
 
         self.report_dir = self.dir / self.repo.report_dir_name if self.repo.report_dir_name else None
-        self.report_file = self.report_dir / self.repo.image_file_name if self.report_dir and self.repo.image_file_name else None
+        self.image_file = self.report_dir / self.repo.image_file_name if self.report_dir and self.repo.image_file_name else None
 
     def last_run(self) -> float:
         try:
