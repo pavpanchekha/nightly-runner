@@ -318,10 +318,8 @@ class Repository:
             self.dir / path
             for path in shlex.split(self.config.get("ignore", ""))
         } | set([self.checkout, self.status])
-        self.report_dir = self.dir / configuration["report"] if configuration.get("report") else None
-        self.image_file : Optional[Path] = None
-        if self.report_dir and configuration.get("image"):
-            self.image_file = self.report_dir / configuration["image"]
+        self.report_dir_name = configuration.get("report")
+        self.image_file_name = configuration.get("image")
         
         self.branches : Dict[str, Branch] = {}
         self.fatalerror: Optional[str] = None
@@ -476,6 +474,9 @@ class Branch:
         self.badges : List[str] = []
         self.info : Dict[str, str] = {}
 
+        self.report_dir = self.dir / self.repo.report_dir_name if self.repo.report_dir_name else None
+        self.report_file = self.report_dir / self.repo.image_file_name if self.report_dir and self.repo.image_file_name else None
+
     def last_run(self) -> float:
         try:
             return os.path.getmtime(str(self.lastcommit))
@@ -524,10 +525,10 @@ class Branch:
                 [f"--setenv=PATH={env_path}", "make", "-C", str(self.dir), "nightly"]
             self.repo.runner.log(1, f"Executing {format_cmd(cmd)}")
             if not self.repo.runner.dryrun:
-                if self.repo.report_dir:
-                    if self.repo.report_dir.exists():
-                        shutil.rmtree(self.repo.report_dir, ignore_errors=True)
-                    self.repo.report_dir.mkdir(exist_ok=True)
+                if self.report_dir:
+                    if self.report_dir.exists():
+                        shutil.rmtree(self.report_dir, ignore_errors=True)
+                    self.report_dir.mkdir(exist_ok=True)
 
                 with (self.repo.runner.log_dir / log_name).open("wt") as fd:
                     process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
@@ -543,24 +544,24 @@ class Branch:
                         self.repo.runner.exec(2, ["sudo", "systemctl", "stop", "nightlies.slice"])
 
                 # Auto-publish report if configured
-                if self.repo.report_dir and self.repo.report_dir.exists():
+                if self.report_dir and self.report_dir.exists():
                     assert self.repo.runner.base_url, f"Cannot publish, no baseurl configured"
                     name = str(int(time.time()))
                     dest_dir = self.repo.runner.report_dir / self.repo.name / name
 
-                    if self.repo.report_dir.exists() and not dest_dir.exists():
-                        self.repo.runner.log(2, f"Publishing report directory {self.repo.report_dir} to {dest_dir}")
-                        copything(self.repo.report_dir, dest_dir)
+                    if self.report_dir.exists() and not dest_dir.exists():
+                        self.repo.runner.log(2, f"Publishing report directory {self.report_dir} to {dest_dir}")
+                        copything(self.report_dir, dest_dir)
                         url_base = self.repo.runner.base_url + "reports/" + self.repo.name + "/" + name
                         self.info["url"] = url_base
-                        if self.repo.image_file and self.repo.image_file.exists():
-                            self.repo.runner.log(2, f"Linking image file {self.repo.image_file}")
-                            path = self.repo.image_file.relative_to(self.repo.report_dir)
+                        if self.image_file and self.image_file.exists():
+                            self.repo.runner.log(2, f"Linking image file {self.image_file}")
+                            path = self.image_file.relative_to(self.report_dir)
                             self.info["img"] = url_base + "/" + str(path)
                     elif dest_dir.exists():
                         self.repo.runner.log(2, f"Destination directory {dest_dir} already exists, skipping")
                     else:
-                        self.repo.runner.log(2, f"Report directory {self.repo.report_dir} does not exist")
+                        self.repo.runner.log(2, f"Report directory {self.report_dir} does not exist")
 
         except subprocess.TimeoutExpired as e:
             self.repo.runner.log(1, f"Run on branch {self.name} timed out after {format_time(e.timeout)}")
