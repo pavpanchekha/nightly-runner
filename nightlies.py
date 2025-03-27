@@ -544,18 +544,21 @@ class Branch:
 
                 # Auto-publish report if configured
                 if self.repo.report_dir and self.repo.report_dir.exists():
-                    if self.repo.report_dir.exists():
-                        assert self.repo.runner.base_url, f"Cannot publish, no baseurl configured"
-                        self.repo.runner.log(2, f"Publishing report directory {self.repo.report_dir}")
-                        name = str(int(time.time()))
-                        dest_dir = self.repo.runner.report_dir / self.repo.name / name
+                    assert self.repo.runner.base_url, f"Cannot publish, no baseurl configured"
+                    name = str(int(time.time()))
+                    dest_dir = self.repo.runner.report_dir / self.repo.name / name
+
+                    if self.repo.report_dir.exists() and not dest_dir.exists():
+                        self.repo.runner.log(2, f"Publishing report directory {self.repo.report_dir} to {dest_dir}")
                         copything(self.repo.report_dir, dest_dir)
                         url_base = self.repo.runner.base_url + "reports/" + self.repo.name + "/" + name
-                        self.repo.runner.add_info("url", url_base)
+                        self.info["url"] = url_base
                         if self.repo.image_file and self.repo.image_file.exists():
                             self.repo.runner.log(2, f"Linking image file {self.repo.image_file}")
                             path = self.repo.image_file.relative_to(self.repo.report_dir)
-                            runner.add_info("img", url_base + "/" + str(path))
+                            self.info["img"] = url_base + "/" + str(path)
+                    elif dest_dir.exists():
+                        self.repo.runner.log(2, f"Destination directory {dest_dir} already exists, skipping")
                     else:
                         self.repo.runner.log(2, f"Report directory {self.repo.report_dir} does not exist")
 
