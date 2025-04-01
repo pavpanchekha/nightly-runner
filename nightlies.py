@@ -499,11 +499,11 @@ class Branch:
         self.repo.runner.exec(2, ["git", "-C", self.dir, "reset", "--hard", "--recurse-submodules", "origin/" + self.name])
 
     def plan(self) -> bool:
-        current_commit = self.repo.runner.exec(2, ["git", "-C", self.dir, "rev-parse", "origin/" + self.name]).stdout
+        self.current_commit = self.repo.runner.exec(2, ["git", "-C", self.dir, "rev-parse", "origin/" + self.name]).stdout
         if self.lastcommit.is_file():
             with self.lastcommit.open("rb") as f:
                 last_commit = f.read()
-            if last_commit == current_commit:
+            if last_commit == self.current_commit:
                 self.repo.runner.log(2, "Branch " + self.name + " has not changed since last run; skipping")
                 return False
         return True
@@ -543,26 +543,6 @@ class Branch:
                         process.kill()
                         self.repo.runner.exec(2, ["sudo", "systemctl", "stop", "nightlies.slice"])
 
-                # Auto-publish report if configured
-                if self.report_dir and self.report_dir.exists():
-                    assert self.repo.runner.base_url, f"Cannot publish, no baseurl configured"
-                    name = str(int(time.time()))
-                    dest_dir = self.repo.runner.report_dir / self.repo.name / name
-
-                    if self.report_dir.exists() and not dest_dir.exists():
-                        self.repo.runner.log(2, f"Publishing report directory {self.report_dir} to {dest_dir}")
-                        copything(self.report_dir, dest_dir)
-                        url_base = self.repo.runner.base_url + "reports/" + self.repo.name + "/" + name
-                        self.info["url"] = url_base
-                        if self.image_file and self.image_file.exists():
-                            self.repo.runner.log(2, f"Linking image file {self.image_file}")
-                            path = self.image_file.relative_to(self.report_dir)
-                            self.info["img"] = url_base + "/" + str(path)
-                    elif dest_dir.exists():
-                        self.repo.runner.log(2, f"Destination directory {dest_dir} already exists, skipping")
-                    else:
-                        self.repo.runner.log(2, f"Report directory {self.report_dir} does not exist")
-
         except subprocess.TimeoutExpired as e:
             self.repo.runner.log(1, f"Run on branch {self.name} timed out after {format_time(e.timeout)}")
             failure = "timeout"
@@ -577,6 +557,27 @@ class Branch:
             out = self.repo.runner.exec(2, ["git", "-C", self.dir, "rev-parse", f"origin/{self.name}"])
             with self.lastcommit.open("wb") as last_commit_fd:
                 last_commit_fd.write(out.stdout)
+
+            # Auto-publish report if configured
+            if self.report_dir and self.report_dir.exists():
+                assert self.repo.runner.base_url, f"Cannot publish, no baseurl configured"
+                name = f"{int(time.time())}:{self.filename}:{out.stdout[:8].decode('ascii')}"
+                dest_dir = self.repo.runner.report_dir / self.repo.name / name
+
+                if self.report_dir.exists() and not dest_dir.exists():
+                    self.repo.runner.log(2, f"Publishing report directory {self.report_dir} to {dest_dir}")
+                    copything(self.report_dir, dest_dir)
+                    url_base = self.repo.runner.base_url + "reports/" + self.repo.name + "/" + name
+                    self.info["url"] = url_base
+                    if self.image_file and self.image_file.exists():
+                        self.repo.runner.log(2, f"Linking image file {self.image_file}")
+                        path = self.image_file.relative_to(self.report_dir)
+                        self.info["img"] = url_base + "/" + str(path)
+                elif dest_dir.exists():
+                    self.repo.runner.log(2, f"Destination directory {dest_dir} already exists, skipping")
+                else:
+                    self.repo.runner.log(2, f"Report directory {self.report_dir} does not exist")
+
 
         self.info["result"] = f"*{failure}*" if failure else "success"
         self.info["time"] = format_time((datetime.now() - t).seconds)
