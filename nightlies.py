@@ -559,7 +559,7 @@ class Branch:
                 last_commit_fd.write(out.stdout)
 
             # Auto-publish report if configured
-            if self.report_dir and self.report_dir.exists():
+            if self.report_dir and self.report_dir.exists() and "url" not in self.info:
                 assert self.repo.runner.base_url, f"Cannot publish, no baseurl configured"
                 name = f"{int(time.time())}:{self.filename}:{out.stdout[:8].decode('ascii')}"
                 dest_dir = self.repo.runner.report_dir / self.repo.name / name
