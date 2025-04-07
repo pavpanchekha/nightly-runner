@@ -495,7 +495,7 @@ class Branch:
         if not self.dir.is_dir():
             relpath = self.dir.relative_to(self.repo.dir)
             self.repo.runner.exec(2, ["git", "-C", self.repo.checkout, "worktree", "add", ".." / relpath, self.name])
-            self.repo.runner.exec(2, ["git", "-C", self.dir, "submodule", "update", "--init"])
+        self.repo.runner.exec(2, ["git", "-C", self.dir, "submodule", "update", "--init", "--recursive"])
         self.repo.runner.exec(2, ["git", "-C", self.dir, "reset", "--hard", "--recurse-submodules", "origin/" + self.name])
 
     def plan(self) -> bool:
