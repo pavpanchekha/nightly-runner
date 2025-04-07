@@ -161,26 +161,6 @@ class NightlyRunner:
         with self.pid_file.open("w") as f:
             json.dump(self.data, f)
 
-    def add_info(self, cmd : str, *args : str) -> None:
-        data = format_cmd([cmd] + list(args))
-        self.log(3, f"Adding info {data}")
-        with self.info_file.open("a") as f:
-            f.write(data + "\n")
-
-    def load_info(self) -> Dict[str, str]:
-        out : Dict[str, str] = {}
-        try:
-            with self.info_file.open("r") as f:
-                for line in f:
-                    if not line.strip(): continue
-                    cmd, *args = shlex.split(line)
-                    out[cmd] = " ".join(args)
-            # Clear the info file file
-            self.info_file.open("w").close()
-        except OSError as e:
-            self.log(2, f"Error loading info file: {e}")
-        return out
-
     def load_pid(self) -> None:
         try:
             with self.pid_file.open("r") as f:
@@ -519,10 +499,7 @@ class Branch:
         t = datetime.now()
         try:
             to = parse_time(self.repo.config.get("timeout"))
-            env_path = str(self.repo.runner.self_dir) + ":" + cast(str, os.getenv('PATH'))
-            cmd = SYSTEMD_RUN_CMD + \
-                ["--setenv=NIGHTLY_CONF_FILE=" + str(self.repo.runner.config_file.resolve())] + \
-                [f"--setenv=PATH={env_path}", "make", "-C", str(self.dir), "nightly"]
+            cmd = SYSTEMD_RUN_CMD + ["make", "-C", str(self.dir), "nightly"]
             self.repo.runner.log(1, f"Executing {format_cmd(cmd)}")
             if not self.repo.runner.dryrun:
                 if self.report_dir:
@@ -539,7 +516,6 @@ class Branch:
                         p = process.poll()
                         if p: raise subprocess.CalledProcessError(p, cmd)
                     finally:
-                        self.info = self.repo.runner.load_info()
                         process.kill()
                         self.repo.runner.exec(2, ["sudo", "systemctl", "stop", "nightlies.slice"])
 
