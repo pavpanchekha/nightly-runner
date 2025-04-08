@@ -528,7 +528,7 @@ class Branch:
                 if self.report_dir:
                     if self.report_dir.exists():
                         shutil.rmtree(self.report_dir, ignore_errors=True)
-                    self.report_dir.mkdir(exist_ok=True)
+                    self.report_dir.mkdir(parents=True, exist_ok=True)
 
                 with (self.repo.runner.log_dir / log_name).open("wt") as fd:
                     process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
