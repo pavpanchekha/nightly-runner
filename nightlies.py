@@ -58,7 +58,6 @@ SYSTEMD_RUN_CMD = [
     "--collect", # If it fails, throw it away
     "--wait", # Wait for it to finish
     "--pty", # Pass through stdio
-    "--pipe", # Pass through file descriptors
     f"--uid={os.getuid()}", # As the current user
     f"--gid={os.getgid()}", # As the current group
     f"--slice={SYSTEMD_SLICE}", # Run with the nightly resource limits
