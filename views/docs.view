@@ -97,9 +97,7 @@ configuration file to change how your nightly behaves.</p>
 <dl>
 <dt><code>report</code></dt>
 <dd>The path to the report directory relative to the repository root.
-This directory is published after each nightly run. If for some reason
-the directory name differs between runs, you can use
-<code>nightly-results</code> in your nightly script instead.</dd>
+This directory is published after each nightly run.</dd>
 
 <dt><code>image</code></dt>
 <dd>The path to an image relative to the <em>report directory</em>.
