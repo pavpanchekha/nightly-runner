@@ -106,6 +106,14 @@ the directory name differs between runs, you can use
 This image is attached to any Slack message when the branch finishes
 running.</dd>
 
+<dt><code>gzip</code></dt>
+<dd>A space-separated list of globs, like <code>*.json</code>, which
+identify files in the report directory that can be compressed before
+storage. The web server is configured to unzip those files before
+serving them, so you don't need to adjust links or do anything else.
+Typically projects zip JSON, log, and CSV files, but not HTML/CSS/JS
+or images.</dd>
+
 <dt><code>slack</code></dt>
 <dd>The Slack channel to post your nightly results to. The value of
 this property isn't actually the channel name; instead, it's a key in
