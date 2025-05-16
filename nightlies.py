@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from typing import Any, List, Dict, Union, Optional, cast, Sequence
-import os, sys, subprocess, time
+import os, sys, subprocess, time, gzip
 from datetime import datetime
 from pathlib import Path
 import configparser
@@ -49,6 +49,15 @@ def copything(src : Path, dst : Path) -> None:
         shutil.copytree(src, dst)
     else:
         shutil.copy2(src, dst)
+
+def gzip_matching_files(directory : Path, globs : List[str]) -> None:
+    # Authored by ChatGPT 4o
+    for path in directory.rglob("*"):
+        if path.is_file() and any(path.match(g) for g in globs):
+            gz_path = path.with_suffix(path.suffix + ".gz")
+            with path.open("rb") as f_in, gzip.open(gz_path, "wb", compresslevel=9) as f_out:
+                shutil.copyfileobj(f_in, f_out)
+            path.unlink()  # Remove original file
 
 SYSTEMD_SLICE = "nightlies.slice"
 
@@ -562,6 +571,9 @@ class Branch:
                 assert self.repo.runner.base_url, f"Cannot publish, no baseurl configured"
                 name = f"{int(time.time())}:{self.filename}:{out.stdout[:8].decode('ascii')}"
                 dest_dir = self.repo.runner.report_dir / self.repo.name / name
+
+                if self.repo.config.get("gzip", ""):
+                    gzip_matching_files(self.report_dir, shlex.split(self.repo.config.get("gzip", "")))
 
                 if self.report_dir.exists() and not dest_dir.exists():
                     self.repo.runner.log(2, f"Publishing report directory {self.report_dir} to {dest_dir}")
