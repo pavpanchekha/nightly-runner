@@ -9,7 +9,7 @@
   <div>
     Currently {{len(logins)}} user{{'s' if len(logins) > 1 else ''}} logged in:
     {{', '.join(logins)}}.
-    Please avoid starting a nightly.
+    Please ask them before starting a nightly.
   </div>
 %end
 
