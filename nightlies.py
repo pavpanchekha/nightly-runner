@@ -8,7 +8,7 @@ import configparser
 import json
 import shlex, shutil
 import slack, apt
-import urllib.request
+import urllib.request, urllib.error
 
 def format_time(ts : float) -> str:
     t = float(ts)
@@ -344,8 +344,11 @@ class Repository:
         if self.url.startswith("git@github.com:") and self.url.endswith(".git"):
             gh_name = self.url[len("git@github.com:"):-len(".git")]
             pulls_url = f"https://api.github.com/repos/{gh_name}/pulls"
-            with urllib.request.urlopen(pulls_url) as data:
-                pr_data = json.load(data)
+            try:
+                with urllib.request.urlopen(pulls_url) as data:
+                    pr_data = json.load(data)
+            except urllib.error.HTTPError:
+                return {}
             out : Dict[str, int] = {}
             for pr in pr_data:
                 if pr["head"]["repo"]["full_name"] == gh_name:
