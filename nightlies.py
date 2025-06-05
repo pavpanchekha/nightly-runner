@@ -359,7 +359,7 @@ class Repository:
             gh_name = self.url[len("git@github.com:"):-len(".git")]
             return f"https://github.com/{gh_name}/pull/{pr}"       
         else:
-            raise ArgumentError("Not a Github repository")
+            raise ValueError("Not a Github repository")
 
     def load(self) -> None:
         self.runner.log(0, "Beginning nightly run for " + self.name)
