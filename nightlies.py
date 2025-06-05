@@ -354,6 +354,13 @@ class Repository:
         else:
             return {}
 
+    def get_pr_link(self, pr : int) -> str:
+        if self.url.startswith("git@github.com:") and self.url.endswith(".git"):
+            gh_name = self.url[len("git@github.com:"):-len(".git")]
+            return f"https://github.com/{gh_name}/pull/{pr}"       
+        else:
+            raise ArgumentError("Not a Github repository")
+
     def load(self) -> None:
         self.runner.log(0, "Beginning nightly run for " + self.name)
         self.dir.mkdir(parents=True, exist_ok=True)
