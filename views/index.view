@@ -71,7 +71,7 @@
       %for badge in branch.badges:
       %if badge.startswith("pr#"):
       <a class="badge" href="{{repo.get_pr_link(int(badge.removeprefix('pr#')))}}">{{badge}}</span>
-      %else
+      %else:
       <span class="badge">{{badge}}</span>
       %end
       %end
