@@ -425,6 +425,14 @@ class Repository:
         if main_branch in self.branches:
             self.branches[main_branch].badges.append("main")
 
+        # Mark branches that correspond to open pull requests
+        try:
+            for branch_name, pr_num in self.list_pr_branches().items():
+                if branch_name in self.branches:
+                    self.branches[branch_name].badges.append(f"pr#{pr_num}")
+        except Exception as e:
+            self.runner.log(1, f"Failed to read PR info: {e}")
+
     def plan(self) -> None:
         if self.run_all:
             self.runnable = list(self.branches.values())
