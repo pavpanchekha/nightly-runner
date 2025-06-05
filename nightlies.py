@@ -564,6 +564,7 @@ class Branch:
                 dest_dir = self.repo.runner.report_dir / self.repo.name / name
 
                 if self.repo.config.get("gzip", ""):
+                    self.repo.runner.log(2, f"GZipping all {self.repo.config.get('gzip', '')} files")
                     gzip_matching_files(self.report_dir, shlex.split(self.repo.config.get("gzip", "")))
 
                 if self.report_dir.exists() and not dest_dir.exists():
