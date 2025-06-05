@@ -113,6 +113,14 @@ def runnow():
     branch = bottle.request.forms.get('branch')
     runner = nightlies.NightlyRunner(CONF_FILE)
     runner.load()
+    runner.load_pid()
+    if runner.data and "pid" in runner.data:
+        try:
+            os.kill(runner.data["pid"], 0)
+        except OSError:
+            pass
+        else:
+            raise bottle.HTTPError(409, "Nightly already running")
     for section in runner.config.sections():
         if repo == section or section.endswith("/" + repo):
             runner.config[section]["branches"] = branch
