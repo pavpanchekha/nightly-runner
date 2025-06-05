@@ -4,7 +4,7 @@ summary > h2 { display: inline; }
 table { width: 100%; }
 form.inline { display: inline; }
 th { color: gray; border-bottom: 1px solid gray; text-align: left; }
-.badge { background: #ddd; padding: 0 .5em; border-radius: .5em; margin-left: .25ch; }
+.badge { background: #ddd; padding: 1px .5em; border-radius: .5em; margin-left: .25ch; font-family: monospace; color: #444; }
 header { border-bottom: 1px solid #ddd; margin: 0 0 1em; }
 header ul {
     display: flex; flex-direction: row; justify-content: space-between;
