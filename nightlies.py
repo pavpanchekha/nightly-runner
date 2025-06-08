@@ -488,11 +488,11 @@ class Branch:
 
     @staticmethod
     def parse_filename(filename : str) -> str:
-        return filename.replace("%2f", "/").replace("%25", "%")
+        return filename.replace("_2f", "/").replace("_25", "%")
 
     @staticmethod
     def escape_filename(filename : str) -> str:
-        return filename.replace("%", "%25").replace("/", "%2f")
+        return filename.replace("%", "_25").replace("/", "_2f")
 
     def load(self) -> None:
         if not self.dir.is_dir():
