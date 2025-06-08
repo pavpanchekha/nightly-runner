@@ -1,6 +1,7 @@
 % from datetime import datetime
 % from pathlib import Path
 % from nightlies import format_time
+% from urllib.parse import quote
 
 <header>
   {{! system_state }}
@@ -31,7 +32,7 @@
   %if "repo" in current:
   <div class="indent">
     %if "branch_log" in current:
-    <form action="{{baseurl}}/logs/{{current['branch_log']}}" method="get" class="inline">
+    <form action="{{baseurl}}/logs/{{quote(current['branch_log'])}}" method="get" class="inline">
       <button>Output</button>
     </form> 
     <form action="{{baseurl}}/killbranch" method="post" class="inline">
