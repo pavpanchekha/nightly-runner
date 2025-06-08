@@ -1,7 +1,7 @@
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
 import os
 import json
-import urllib.request, urllib.error
+import urllib.request, urllib.error, urllib.parse
 
 if TYPE_CHECKING:
     import nightlies
@@ -116,7 +116,7 @@ def build_runs(name : str, runs : Dict[str, Dict[str, str]], baseurl : str) -> R
 
         if "success" != result:
             file = os.path.basename(info["file"])
-            url = baseurl + "logs/" + file
+            url = baseurl + "logs/" + urllib.parse.quote(file)
             btn = Button("Error log", url, style="primary")
             block.add(btn)
         elif "url" in info:
