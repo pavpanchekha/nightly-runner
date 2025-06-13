@@ -473,7 +473,7 @@ class Branch:
         self.name = name
         self.filename = Branch.escape_filename(self.name)
         self.dir = self.repo.dir / self.filename
-        self.lastcommit = self.repo.dir / (self.filename + ".last-commit")
+        self.lastcommit = self.repo.dir / (self.filename + ".json")
         self.badges : List[str] = []
         self.info : Dict[str, str] = {}
 
@@ -500,9 +500,13 @@ class Branch:
             self.repo.runner.exec(2, ["git", "-C", self.repo.checkout, "worktree", "add", ".." / relpath, self.name])
         self.repo.runner.exec(2, ["git", "-C", self.dir, "submodule", "update", "--init", "--recursive"])
         self.repo.runner.exec(2, ["git", "-C", self.dir, "reset", "--hard", "--recurse-submodules", "origin/" + self.name])
-        self.config = configparser.ConfigParser()
+        self.config = {}
         if self.lastcommit.exists():
-            self.config.read(self.lastcommit)
+            with self.lastcommit.open() as f:
+                try:
+                    self.config = json.load(f)
+                except json.JSONDecodeError:
+                    self.config = {}
 
     def plan(self) -> bool:
         self.current_commit = (
@@ -510,7 +514,7 @@ class Branch:
                 2, ["git", "-C", self.dir, "rev-parse", "origin/" + self.name]
             ).stdout.decode("ascii").strip()
         )
-        if self.config["DEFAULT"].get("commit", "") == self.current_commit:
+        if self.config.get("commit", "") == self.current_commit:
             self.repo.runner.log(2, "Branch " + self.name + " has not changed since last run; skipping")
             return False
         return True
@@ -562,9 +566,9 @@ class Branch:
                     2, ["git", "-C", self.dir, "rev-parse", f"origin/{self.name}"]
                 ).stdout.decode("ascii").strip()
             )
-            self.config["DEFAULT"]["commit"] = out
+            self.config["commit"] = out
             with self.lastcommit.open("w") as last_commit_fd:
-                self.config.write(last_commit_fd)
+                json.dump(self.config, last_commit_fd)
 
             # Auto-publish report if configured
             if self.report_dir and self.report_dir.exists() and "url" not in self.info:
