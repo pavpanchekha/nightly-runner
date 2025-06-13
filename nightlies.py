@@ -500,15 +500,19 @@ class Branch:
             self.repo.runner.exec(2, ["git", "-C", self.repo.checkout, "worktree", "add", ".." / relpath, self.name])
         self.repo.runner.exec(2, ["git", "-C", self.dir, "submodule", "update", "--init", "--recursive"])
         self.repo.runner.exec(2, ["git", "-C", self.dir, "reset", "--hard", "--recurse-submodules", "origin/" + self.name])
+        self.config = configparser.ConfigParser()
+        if self.lastcommit.exists():
+            self.config.read(self.lastcommit)
 
     def plan(self) -> bool:
-        self.current_commit = self.repo.runner.exec(2, ["git", "-C", self.dir, "rev-parse", "origin/" + self.name]).stdout
-        if self.lastcommit.is_file():
-            with self.lastcommit.open("rb") as f:
-                last_commit = f.read()
-            if last_commit == self.current_commit:
-                self.repo.runner.log(2, "Branch " + self.name + " has not changed since last run; skipping")
-                return False
+        self.current_commit = (
+            self.repo.runner.exec(
+                2, ["git", "-C", self.dir, "rev-parse", "origin/" + self.name]
+            ).stdout.decode("ascii").strip()
+        )
+        if self.config["DEFAULT"].get("commit", "") == self.current_commit:
+            self.repo.runner.log(2, "Branch " + self.name + " has not changed since last run; skipping")
+            return False
         return True
 
     def run(self) -> None:
@@ -553,14 +557,19 @@ class Branch:
             failure = ""
 
         if not self.repo.runner.dryrun:
-            out = self.repo.runner.exec(2, ["git", "-C", self.dir, "rev-parse", f"origin/{self.name}"])
-            with self.lastcommit.open("wb") as last_commit_fd:
-                last_commit_fd.write(out.stdout)
+            out = (
+                self.repo.runner.exec(
+                    2, ["git", "-C", self.dir, "rev-parse", f"origin/{self.name}"]
+                ).stdout.decode("ascii").strip()
+            )
+            self.config["DEFAULT"]["commit"] = out
+            with self.lastcommit.open("w") as last_commit_fd:
+                self.config.write(last_commit_fd)
 
             # Auto-publish report if configured
             if self.report_dir and self.report_dir.exists() and "url" not in self.info:
                 assert self.repo.runner.base_url, f"Cannot publish, no baseurl configured"
-                name = f"{int(time.time())}:{self.filename}:{out.stdout[:8].decode('ascii')}"
+                name = f"{int(time.time())}:{self.filename}:{out[:8]}"
                 dest_dir = self.repo.runner.report_dir / self.repo.name / name
 
                 if self.repo.config.get("gzip", ""):
