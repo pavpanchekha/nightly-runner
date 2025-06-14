@@ -377,6 +377,14 @@ class Repository:
         for branch in self.branches.values():
             branch.load()
 
+        pr_map = self.list_pr_branches()
+        for name, branch in self.branches.items():
+            if name in pr_map:
+                branch.config["pr"] = pr_map[name]
+            else:
+                branch.config.pop("pr", None)
+            branch.save_metadata()
+
         self.assign_badges()
 
     def clean(self) -> None:
@@ -401,7 +409,9 @@ class Repository:
                 if not fn.is_dir(): continue
                 if fn in self.ignored_files: continue
                 name = Branch.parse_filename(fn.name)
-                self.branches[name] = Branch(self, name)
+                branch = Branch(self, name)
+                branch.read_metadata()
+                self.branches[name] = branch
             self.assign_badges()
 
     def assign_badges(self) -> None:
@@ -416,9 +426,10 @@ class Repository:
             self.branches[main_branch].badges.append("main")
 
         # Mark branches that correspond to open pull requests
-        for branch_name, pr_num in self.list_pr_branches().items():
-            if branch_name in self.branches:
-                self.branches[branch_name].badges.append(f"pr#{pr_num}")
+        for branch in self.branches.values():
+            pr = branch.config.get("pr")
+            if pr:
+                branch.badges.append(f"pr#{pr}")
 
     def plan(self) -> None:
         if self.run_all:
@@ -476,6 +487,7 @@ class Branch:
         self.lastcommit = self.repo.dir / (self.filename + ".json")
         self.badges : List[str] = []
         self.info : Dict[str, str] = {}
+        self.config : Dict[str, Any] = {}
 
         self.report_dir = self.dir / self.repo.report_dir_name if self.repo.report_dir_name else None
         self.image_file = self.report_dir / self.repo.image_file_name if self.report_dir and self.repo.image_file_name else None
@@ -500,6 +512,9 @@ class Branch:
             self.repo.runner.exec(2, ["git", "-C", self.repo.checkout, "worktree", "add", ".." / relpath, self.name])
         self.repo.runner.exec(2, ["git", "-C", self.dir, "submodule", "update", "--init", "--recursive"])
         self.repo.runner.exec(2, ["git", "-C", self.dir, "reset", "--hard", "--recurse-submodules", "origin/" + self.name])
+        self.read_metadata()
+
+    def read_metadata(self) -> None:
         self.config = {}
         if self.lastcommit.exists():
             with self.lastcommit.open() as f:
@@ -507,6 +522,10 @@ class Branch:
                     self.config = json.load(f)
                 except json.JSONDecodeError:
                     self.config = {}
+
+    def save_metadata(self) -> None:
+        with self.lastcommit.open("w") as last_commit_fd:
+            json.dump(self.config, last_commit_fd)
 
     def plan(self) -> bool:
         self.current_commit = (
@@ -567,8 +586,7 @@ class Branch:
                 ).stdout.decode("ascii").strip()
             )
             self.config["commit"] = out
-            with self.lastcommit.open("w") as last_commit_fd:
-                json.dump(self.config, last_commit_fd)
+            self.save_metadata()
 
             # Auto-publish report if configured
             if self.report_dir and self.report_dir.exists() and "url" not in self.info:
