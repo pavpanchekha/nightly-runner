@@ -583,7 +583,7 @@ class Branch:
                 ).stdout.decode("ascii").strip()
             )
             self.config["commit"] = out
-            self.config["time"] = int(time.time())
+            self.config["time"] = time.time()
             self.save_metadata()
 
             # Auto-publish report if configured
