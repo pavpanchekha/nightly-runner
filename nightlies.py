@@ -493,6 +493,9 @@ class Branch:
         self.image_file = self.report_dir / self.repo.image_file_name if self.report_dir and self.repo.image_file_name else None
 
     def last_run(self) -> float:
+        t = self.config.get("time")
+        if t is not None:
+            return float(t)
         try:
             return os.path.getmtime(str(self.lastcommit))
         except FileNotFoundError:
@@ -586,6 +589,7 @@ class Branch:
                 ).stdout.decode("ascii").strip()
             )
             self.config["commit"] = out
+            self.config["time"] = int(time.time())
             self.save_metadata()
 
             # Auto-publish report if configured
