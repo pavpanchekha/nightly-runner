@@ -494,12 +494,9 @@ class Branch:
 
     def last_run(self) -> float:
         t = self.config.get("time")
-        if t is not None:
-            return float(t)
-        try:
-            return os.path.getmtime(str(self.lastcommit))
-        except FileNotFoundError:
+        if t is None:
             return float("inf")
+        return float(t)
 
     @staticmethod
     def parse_filename(filename : str) -> str:
