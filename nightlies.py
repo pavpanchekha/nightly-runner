@@ -493,7 +493,7 @@ class Branch:
         self.image_file = self.report_dir / self.repo.image_file_name if self.report_dir and self.repo.image_file_name else None
 
     def last_run(self) -> float:
-        return float(self.config.get("time", float("inf")))
+        return float(self.config.get("time", "inf"))
 
     @staticmethod
     def parse_filename(filename : str) -> str:
