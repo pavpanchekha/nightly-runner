@@ -72,6 +72,7 @@ SYSTEMD_RUN_CMD = [
     f"--slice={SYSTEMD_SLICE}", # Run with the nightly resource limits
     "--property=Delegate=yes", # Spawned Docker instances inherit resource limits
     "--service-type=simple", # It just execs a program
+    "--setenv=TERM=dumb", # Disable color codes in logs
 ]
 
 REPO_BADGES = [
