@@ -312,6 +312,7 @@ class Repository:
         
         self.branches : Dict[str, Branch] = {}
         self.fatalerror: Optional[str] = None
+        self.warnings: Dict[str, str] = {}
 
     def list_branches(self) -> List[str]:
         git_branch = self.runner.exec(2, ["git", "-C", self.checkout, "branch", "-r"])
@@ -470,8 +471,9 @@ class Repository:
             data = slack.build_fatal(self.name, self.fatalerror, self.runner.base_url)
         else:
             runs = { branch.name : branch.info for branch in self.runnable if branch.info }
-            if not runs: return
-            data = slack.build_runs(self.name, runs, self.runner.base_url)
+            if not runs and not self.warnings:
+                return
+            data = slack.build_runs(self.name, runs, self.runner.base_url, self.warnings)
 
         if self.run_all:
             apt.post(data)
@@ -495,6 +497,9 @@ class Branch:
 
     def last_run(self) -> float:
         return float(self.config.get("time", "inf"))
+
+    def add_warning(self, key: str, message: str) -> None:
+        self.repo.warnings[key] = message
 
     @staticmethod
     def parse_filename(filename : str) -> str:
