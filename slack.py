@@ -104,8 +104,16 @@ class Button(Accessory):
             accessory["style"] = self.style
         return accessory
 
-def build_runs(name : str, runs : Dict[str, Dict[str, str]], baseurl : str) -> Response:
+def build_runs(
+    name : str,
+    runs : Dict[str, Dict[str, str]],
+    baseurl : str,
+    warnings : Optional[Dict[str, str]] = None,
+) -> Response:
     res = Response(f"Nightly data for {name}")
+    if warnings:
+        for key in sorted(warnings):
+            res.add(TextBlock(f":warning: {warnings[key]}"))
     for branch, info in runs.items():
         result = info["result"]
         time = info["time"]
