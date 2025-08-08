@@ -620,6 +620,17 @@ class Branch:
         self.info["result"] = f"*{failure}*" if failure else "success"
         self.info["time"] = format_time((datetime.now() - t).seconds)
         self.info["file"] = log_name
+
+        log_file = self.repo.runner.log_dir / log_name
+        if log_file.exists() and log_file.stat().st_size > 10 * 1024 * 1024:
+            size = log_file.stat().st_size
+            msg = (
+                f"Log file for branch {self.name} in {self.repo.name} "
+                f"seems too big at {size/1024/1024:.1f}MB"
+            )
+            self.repo.runner.log(1, msg)
+            self.add_warning("log-size", msg)
+
         del self.repo.runner.data["branch_log"]
         self.repo.runner.save()
 
