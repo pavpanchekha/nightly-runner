@@ -40,6 +40,27 @@ def parse_time(to : Optional[str]) -> Optional[float]:
             return float(to[:-len(unit)]) * multiplier
     return float(to)
 
+def parse_size(size: Optional[str]) -> Optional[int]:
+    if size is None: return size
+    units = {
+        "kb": 1024, "k": 1024,
+        "mb": 1024**2, "m": 1024**2,
+        "gb": 1024**3, "g": 1024**3,
+    }
+    size = size.lower()
+    for unit, multiplier in units.items():
+        if size.endswith(unit):
+            return int(float(size.removesuffix(unit)) * multiplier)
+    return int(size)
+
+def format_size(size: int) -> str:
+    units = ["KB", "MB", "GB", "TB", "PB"]
+    s = float(size) / 1024
+    for unit in units:
+        if s < 1024 or unit == units[-1]:
+            return f"{s:.2f}{unit}"
+        s /= 1024
+
 def repo_to_url(repo : str) -> str:
     if repo and ":" in repo: return repo
     return "git@github.com:" + repo + ".git"
@@ -591,6 +612,28 @@ class Branch:
             self.config["commit"] = out
             self.config["time"] = time.time()
             self.save_metadata()
+
+            if self.report_dir and self.report_dir.exists():
+                warn_size = parse_size(self.repo.config.get("warn_size", "1gb"))
+                total = 0
+                biggest = None
+                biggest_size = 0
+                for root, _, files in self.report_dir.walk():
+                    for name in files:
+                        path = root / name
+                        size = path.stat().st_size
+                        total += size
+                        if size > biggest_size:
+                            biggest_size = size
+                            biggest = path
+                if warn_size and total > warn_size:
+                    assert biggest is not None
+                    rel = biggest.relative_to(self.report_dir)
+                    self.repo.runner.log(1, f"Report `{self.name}` is {format_size(total)}; largest file `{rel}`")
+                    self.add_warning(
+                        "report-size",
+                        f"Report size {format_size(total)} exceeds limit {format_size(warn_size)}; largest file `{rel}`",
+                    )
 
             # Auto-publish report if configured
             if self.report_dir and self.report_dir.exists() and "url" not in self.info:
