@@ -20,7 +20,7 @@
       <button>View log</button>
     </form>
     <form action="{{baseurl}}/kill" method="post" class="inline">
-      <button>Kill</button>
+      <button {{ "" if running else "disabled" }}>Kill</button>
     </form>
     Nightly {{ "" if running else "was" }} running
     for {{format_time((datetime.now() - datetime.fromisoformat(current["start"])).total_seconds())}}
