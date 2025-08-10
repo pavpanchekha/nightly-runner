@@ -57,9 +57,10 @@ def format_size(size: int) -> str:
     units = ["KB", "MB", "GB", "TB", "PB"]
     s = float(size) / 1024
     for unit in units:
-        if s < 1024 or unit == units[-1]:
-            return f"{s:.2f}{unit}"
+        if s < 1024:
+            break
         s /= 1024
+    return f"{s:.2f}{unit}"
 
 def repo_to_url(repo : str) -> str:
     if repo and ":" in repo: return repo
