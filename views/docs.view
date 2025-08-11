@@ -113,11 +113,11 @@ Typically projects zip JSON, log, and CSV files, but not HTML/CSS/JS
 or images.</dd>
 
 <dt><code>warn_size</code></dt>
-<dd>Warn if the report directory exceeds this size (default
-<code>1GB</code>). The warning includes the largest file and its
-location in the report directory. Sizes may use units like
-<code>500MB</code> or <code>2GB</code>. Use <code>0</code> to disable
-warnings (not recommended).</dd>
+<dd>Warn if the report directory (after gzipping configured files)
+exceeds this size (default <code>1GB</code>). The warning includes the
+largest file and its location in the report directory. Sizes may use
+units like <code>500MB</code> or <code>2GB</code>. Use <code>0</code> to
+disable warnings (not recommended).</dd>
 
 <dt><code>slack</code></dt>
 <dd>The Slack channel to post your nightly results to. The value of
