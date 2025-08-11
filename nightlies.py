@@ -615,6 +615,10 @@ class Branch:
             self.save_metadata()
 
             if self.report_dir and self.report_dir.exists():
+                if self.repo.config.get("gzip", ""):
+                    self.repo.runner.log(2, f"GZipping all {self.repo.config.get('gzip', '')} files")
+                    gzip_matching_files(self.report_dir, shlex.split(self.repo.config.get("gzip", "")))
+
                 warn_size = parse_size(self.repo.config.get("warn_size", "1gb"))
                 total = 0
                 biggest = None
@@ -636,29 +640,25 @@ class Branch:
                         f"Report size {format_size(total)} exceeds limit {format_size(warn_size)}; largest file `{rel}`",
                     )
 
-            # Auto-publish report if configured
-            if self.report_dir and self.report_dir.exists() and "url" not in self.info:
-                assert self.repo.runner.base_url, f"Cannot publish, no baseurl configured"
-                name = f"{int(time.time())}:{self.filename}:{out[:8]}"
-                dest_dir = self.repo.runner.report_dir / self.repo.name / name
+                # Auto-publish report if configured
+                if "url" not in self.info:
+                    assert self.repo.runner.base_url, f"Cannot publish, no baseurl configured"
+                    name = f"{int(time.time())}:{self.filename}:{out[:8]}"
+                    dest_dir = self.repo.runner.report_dir / self.repo.name / name
 
-                if self.repo.config.get("gzip", ""):
-                    self.repo.runner.log(2, f"GZipping all {self.repo.config.get('gzip', '')} files")
-                    gzip_matching_files(self.report_dir, shlex.split(self.repo.config.get("gzip", "")))
-
-                if self.report_dir.exists() and not dest_dir.exists():
-                    self.repo.runner.log(2, f"Publishing report directory {self.report_dir} to {dest_dir}")
-                    copything(self.report_dir, dest_dir)
-                    url_base = self.repo.runner.base_url + "reports/" + self.repo.name + "/" + name
-                    self.info["url"] = url_base
-                    if self.image_file and self.image_file.exists():
-                        self.repo.runner.log(2, f"Linking image file {self.image_file}")
-                        path = self.image_file.relative_to(self.report_dir)
-                        self.info["img"] = url_base + "/" + str(path)
-                elif dest_dir.exists():
-                    self.repo.runner.log(2, f"Destination directory {dest_dir} already exists, skipping")
-                else:
-                    self.repo.runner.log(2, f"Report directory {self.report_dir} does not exist")
+                    if self.report_dir.exists() and not dest_dir.exists():
+                        self.repo.runner.log(2, f"Publishing report directory {self.report_dir} to {dest_dir}")
+                        copything(self.report_dir, dest_dir)
+                        url_base = self.repo.runner.base_url + "reports/" + self.repo.name + "/" + name
+                        self.info["url"] = url_base
+                        if self.image_file and self.image_file.exists():
+                            self.repo.runner.log(2, f"Linking image file {self.image_file}")
+                            path = self.image_file.relative_to(self.report_dir)
+                            self.info["img"] = url_base + "/" + str(path)
+                    elif dest_dir.exists():
+                        self.repo.runner.log(2, f"Destination directory {dest_dir} already exists, skipping")
+                    else:
+                        self.repo.runner.log(2, f"Report directory {self.report_dir} does not exist")
 
 
         self.info["result"] = f"*{failure}*" if failure else "success"
