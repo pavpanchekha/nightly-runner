@@ -317,7 +317,6 @@ class Repository:
             self.slack_token : Optional[str] = self.runner.secrets[self.slack_channel]["slack"]
         else:
             self.slack_token = None
-        self.run_all = False
 
         self.url = repo_to_url(self.config.get("url", configuration.get("github", name)))
 
@@ -372,13 +371,11 @@ class Repository:
         self.runner.log(0, "Beginning nightly run for " + self.name)
         self.dir.mkdir(parents=True, exist_ok=True)
 
-        apt_pkgs = self.config.get("apt", "").split()
-        if apt_pkgs:
-            updates = apt.check_updates(self.runner, apt_pkgs)
-            if updates:
-                if not self.runner.dryrun:
-                    apt.install(self.runner, apt_pkgs)
-                self.run_all = True
+        pkgs = self.config.get("apt", "").split()
+        if pkgs and apt.check_updates(self.runner, pkgs):
+            if not self.runner.dryrun:
+                apt.install(self.runner, pkgs)
+            self.warnings["apt"] = "Updated an apt package"
 
         if not self.checkout.is_dir():
             self.runner.log(1, "Checking out base repository for " + self.name)
@@ -456,9 +453,6 @@ class Repository:
                 branch.badges.append(f"pr#{pr}")
 
     def plan(self) -> None:
-        if self.run_all:
-            self.runnable = list(self.branches.values())
-            return
 
         self.runner.log(1, "Filtering branches " + ", ".join(self.branches))
         self.runnable = [branch for branch in self.branches.values() if branch.plan()]
@@ -497,8 +491,6 @@ class Repository:
                 return
             data = slack.build_runs(self.name, runs, self.runner.base_url, self.warnings)
 
-        if self.run_all:
-            apt.post(data)
 
         if not self.runner.dryrun or self.fatalerror:
             slack.send(self.runner, self.slack_token, data)

@@ -1,6 +1,5 @@
 from typing import List, TYPE_CHECKING
 import re
-import slack
 
 if TYPE_CHECKING:
     import nightlies
@@ -22,7 +21,4 @@ def check_updates(runner : "nightlies.NightlyRunner", pkgs : List[str]) -> bool:
 def install(runner : "nightlies.NightlyRunner", pkgs : List[str]) -> None:
     runner.log(1, f"Installing apt packages {' '.join(pkgs)}")
     runner.exec(2, ["sudo", "apt", "install", "--yes"] + pkgs)
-
-def post(res : slack.Response) -> None:
-    res.add(slack.TextBlock("`apt`: Reran all branches because a package updated"))
 
