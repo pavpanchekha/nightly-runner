@@ -73,7 +73,7 @@
       <form action="{{baseurl}}/runnext" method="post" class="inline">
         <input type="hidden" name="repo" value="{{repo.name}}" />
         <input type="hidden" name="branch" value="{{branch.name}}" />
-        <button>Tonight</button>
+        <button>Queue</button>
       </form>
       <form action="{{baseurl}}/rmbranch" method="post" class="inline">
         <input type="hidden" name="repo" value="{{repo.name}}" />
