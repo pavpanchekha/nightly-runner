@@ -15,6 +15,7 @@
 %end
 
 %if current:
+  %if "pid" in current and "start" in current and "log" in current:
   <div>
     <form action="{{baseurl}}/logs/{{Path(current['log']).name}}" method="get" class="inline">
       <button>View log</button>
@@ -50,6 +51,7 @@
     (last print {{format_time(last_print)}} ago)
     %end
   </div>
+  %end
   %end
   %if not running:
   <div>
