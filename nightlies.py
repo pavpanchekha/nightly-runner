@@ -486,12 +486,12 @@ class Repository:
             runner.log(1, f"Posting results of run to slack!")
 
         if self.fatalerror:
-            data = slack.build_fatal(self.name, self.fatalerror, self.runner.base_url)
+            data = slack.build_fatal(self.name, self.fatalerror)
         else:
             runs = { branch.name : branch.info for branch in self.runnable if branch.info }
             if not runs and not self.warnings:
                 return
-            data = slack.build_runs(self.name, runs, self.runner.base_url, self.warnings)
+            data = slack.build_runs(self.name, runs, self.warnings)
 
 
         if not self.runner.dryrun or self.fatalerror:
@@ -564,6 +564,11 @@ class Branch:
 
         self.repo.runner.data["branch_log"] = log_name
         self.repo.runner.save()
+
+        # Store log URL for slack notifications
+        if self.repo.runner.base_url:
+            import urllib.parse
+            self.info["logurl"] = self.repo.runner.base_url + "logs/" + urllib.parse.quote(log_name)
 
         t = datetime.now()
         try:
@@ -658,7 +663,6 @@ class Branch:
 
         self.info["result"] = f"*{failure}*" if failure else "success"
         self.info["time"] = format_time((datetime.now() - t).seconds)
-        self.info["file"] = log_name
 
         log_file = self.repo.runner.log_dir / log_name
         if log_file.exists() and log_file.stat().st_size > 10 * 1024 * 1024:
@@ -672,6 +676,7 @@ class Branch:
 
         del self.repo.runner.data["branch_log"]
         self.repo.runner.save()
+
 
 if __name__ == "__main__":
     import sys

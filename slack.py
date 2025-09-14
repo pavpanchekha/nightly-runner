@@ -107,7 +107,6 @@ class Button(Accessory):
 def build_runs(
     name : str,
     runs : Dict[str, Dict[str, str]],
-    baseurl : str,
     warnings : Optional[Dict[str, str]] = None,
 ) -> Response:
     res = Response(f"Nightly data for {name}")
@@ -122,10 +121,8 @@ def build_runs(
             text += " " + info["emoji"]
         block = TextBlock(text)
 
-        if "success" != result:
-            file = os.path.basename(info["file"])
-            url = baseurl + "logs/" + urllib.parse.quote(file)
-            btn = Button("Error log", url, style="primary")
+        if "success" != result and info.get("logurl"):
+            btn = Button("Error log", info["logurl"], style="primary")
             block.add(btn)
         elif "url" in info:
             btn = Button("View Report", info["url"])
@@ -147,7 +144,7 @@ def build_runs(
             res.add(img)
     return res
     
-def build_fatal(name : str, text : str, baseurl : str) -> Response:
+def build_fatal(name : str, text : str) -> Response:
     res = Response(f"Fatal error running nightlies for {name}")
     res.add(TextBlock(text))
     return res
