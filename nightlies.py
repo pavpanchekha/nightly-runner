@@ -268,13 +268,9 @@ class NightlyRunner:
                 repo.plan()
                 plan.extend(repo.runnable)
             except subprocess.CalledProcessError as e:
-                repo.fatalerror = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
-                self.log(1, repo.fatalerror)
-                repo.post()
+                repo.post_fatal(f"Process {format_cmd(e.cmd)} returned error code {e.returncode}")
             except OSError as e:
-                repo.fatalerror = f"Fatal error: {str(e)}"
-                self.log(1, repo.fatalerror)
-                repo.post()
+                repo.post_fatal(f"Fatal error: {str(e)}")
             finally:
                 del self.data["repo"]
 
@@ -474,6 +470,18 @@ class Repository:
             self.runner.log(1, "Found runnable branches " + ", ".join([b.name for b in self.runnable]))
         else:
             self.runner.log(1, "No runnable branches for " + self.name)
+
+    def post_fatal(self, msg: str) -> None:
+        if not self.slack_token:
+            return self.runner.log(1, f"Not posting to Slack, slack not configured")
+        elif not self.runner.base_url:
+            return self.runner.log(1, f"Not posting to Slack, baseurl not configured")
+        else:
+            self.runner.log(1, msg)
+
+        data = slack.build_fatal(self.name, msg)
+        if not self.runner.dryrun:
+            slack.send(self.runner, self.slack_token, data)
 
     def post(self) -> None:
         if not self.slack_token:
