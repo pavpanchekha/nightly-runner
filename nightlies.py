@@ -146,7 +146,6 @@ class NightlyRunner:
         self.log_dir = Path(defaults.get("logs", "logs")).resolve()
         self.dryrun = "dryrun" in defaults
         self.pid_file = Path(defaults.get("pid", "running.pid")).resolve()
-        self.info_file = Path(defaults.get("info", "running.info")).resolve()
         self.config_file = Path(defaults.get("conffile", str(self.config_file))).resolve()
         self.report_dir = Path(defaults.get("reports", "reports")).resolve()
 
@@ -676,8 +675,7 @@ class Branch:
 
         if not info and not self.repo.warnings:
             return
-        runs = { self.name : info }
-        data = slack.build_runs(self.repo.name, runs, self.repo.warnings)
+        data = slack.build_runs(self.repo.name, self.name, info, self.repo.warnings)
 
         if not self.repo.runner.dryrun:
             slack.send(self.repo.runner, self.repo.slack_token, data)
