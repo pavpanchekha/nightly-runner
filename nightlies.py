@@ -287,14 +287,7 @@ class NightlyRunner:
                 self.save()
 
                 branch.run()
-            except subprocess.CalledProcessError as e:
-                branch.repo.fatalerror = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
-                self.log(1, branch.repo.fatalerror)
             finally:
-                if all([idx <= i for idx, b in enumerate(plan) if branch.repo == b.repo]):
-                    self.log(0, f"Finished nightly run for {branch.repo.name}")
-                    branch.repo.post()
-
                 del self.data["repo"]
                 del self.data["branch"]
                 # del self.data["runs_done"]
@@ -330,7 +323,6 @@ class Repository:
         self.image_file_name = configuration.get("image")
         
         self.branches : Dict[str, Branch] = {}
-        self.fatalerror: Optional[str] = None
         self.warnings: Dict[str, str] = {}
 
     def list_branches(self) -> List[str]:
@@ -451,7 +443,6 @@ class Repository:
                 branch.badges.append(f"pr#{pr}")
 
     def plan(self) -> None:
-
         self.runner.log(1, "Filtering branches " + ", ".join(self.branches))
         self.runnable = [branch for branch in self.branches.values() if branch.plan()]
         for branch in self.branches.values():
@@ -480,30 +471,8 @@ class Repository:
             self.runner.log(1, msg)
 
         data = slack.build_fatal(self.name, msg)
-        if not self.runner.dryrun:
-            slack.send(self.runner, self.slack_token, data)
+        slack.send(self.runner, self.slack_token, data)
 
-    def post(self) -> None:
-        if not self.slack_token:
-            return self.runner.log(1, f"Not posting to Slack, slack not configured")
-        elif not self.runner.base_url:
-            return self.runner.log(1, f"Not posting to Slack, baseurl not configured")
-        elif not hasattr(self, "runnable"):
-            return self.runner.log(1, f"Not posting to Slack, some kind of error occurred")
-        else:
-            runner.log(1, f"Posting results of run to slack!")
-
-        if self.fatalerror:
-            data = slack.build_fatal(self.name, self.fatalerror)
-        else:
-            runs = { branch.name : branch.info for branch in self.runnable if branch.info }
-            if not runs and not self.warnings:
-                return
-            data = slack.build_runs(self.name, runs, self.warnings)
-
-
-        if not self.runner.dryrun or self.fatalerror:
-            slack.send(self.runner, self.slack_token, data)
 
 class Branch:
     def __init__(self, repo : Repository, name : str):
@@ -513,7 +482,6 @@ class Branch:
         self.dir = self.repo.dir / self.filename
         self.lastcommit = self.repo.dir / (self.filename + ".json")
         self.badges : List[str] = []
-        self.info : Dict[str, str] = {}
         self.config : Dict[str, Any] = {}
 
         self.report_dir = self.dir / self.repo.report_dir_name if self.repo.report_dir_name else None
@@ -569,6 +537,7 @@ class Branch:
         self.repo.runner.log(0, f"Running branch {self.name} on repo {self.repo.name}")
         date = datetime.now()
         log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{self.repo.name}-{self.filename}.log"
+        info : Dict[str, str] = {}
 
         self.repo.runner.data["branch_log"] = log_name
         self.repo.runner.save()
@@ -576,7 +545,7 @@ class Branch:
         # Store log URL for slack notifications
         if self.repo.runner.base_url:
             import urllib.parse
-            self.info["logurl"] = self.repo.runner.base_url + "logs/" + urllib.parse.quote(log_name)
+            info["logurl"] = self.repo.runner.base_url + "logs/" + urllib.parse.quote(log_name)
 
         t = datetime.now()
         try:
@@ -605,7 +574,7 @@ class Branch:
             self.repo.runner.log(1, f"Run on branch {self.name} timed out after {format_time(e.timeout)}")
             failure = "timeout"
         except subprocess.CalledProcessError as e:
-            self.repo.runner.log(1, f"Run on branch {self.name} failed with error code {e.returncode}")
+            self.post_fatal(f"Process {format_cmd(e.cmd)} returned error code {e.returncode}")
             failure = "failure"
         else:
             self.repo.runner.log(1, f"Successfully ran on branch {self.name}")
@@ -648,7 +617,7 @@ class Branch:
                     )
 
                 # Auto-publish report if configured
-                if "url" not in self.info:
+                if "url" not in info:
                     assert self.repo.runner.base_url, f"Cannot publish, no baseurl configured"
                     name = f"{int(time.time())}:{self.filename}:{out[:8]}"
                     dest_dir = self.repo.runner.report_dir / self.repo.name / name
@@ -657,11 +626,11 @@ class Branch:
                         self.repo.runner.log(2, f"Publishing report directory {self.report_dir} to {dest_dir}")
                         copything(self.report_dir, dest_dir)
                         url_base = self.repo.runner.base_url + "reports/" + self.repo.name + "/" + name
-                        self.info["url"] = url_base
+                        info["url"] = url_base
                         if self.image_file and self.image_file.exists():
                             self.repo.runner.log(2, f"Linking image file {self.image_file}")
                             path = self.image_file.relative_to(self.report_dir)
-                            self.info["img"] = url_base + "/" + str(path)
+                            info["img"] = url_base + "/" + str(path)
                         shutil.rmtree(self.report_dir, ignore_errors=True)
                     elif dest_dir.exists():
                         self.repo.runner.log(2, f"Destination directory {dest_dir} already exists, skipping")
@@ -669,8 +638,8 @@ class Branch:
                         self.repo.runner.log(2, f"Report directory {self.report_dir} does not exist")
 
 
-        self.info["result"] = f"*{failure}*" if failure else "success"
-        self.info["time"] = format_time((datetime.now() - t).seconds)
+        info["result"] = f"*{failure}*" if failure else "success"
+        info["time"] = format_time((datetime.now() - t).seconds)
 
         log_file = self.repo.runner.log_dir / log_name
         if log_file.exists() and log_file.stat().st_size > 10 * 1024 * 1024:
@@ -684,6 +653,34 @@ class Branch:
 
         del self.repo.runner.data["branch_log"]
         self.repo.runner.save()
+        self.post(info)
+
+    def post_fatal(self, msg: str) -> None:
+        if not self.repo.slack_token:
+            return self.repo.runner.log(1, f"Not posting to Slack, slack not configured")
+        elif not self.repo.runner.base_url:
+            return self.repo.runner.log(1, f"Not posting to Slack, baseurl not configured")
+        else:
+            self.repo.runner.log(1, msg)
+
+        data = slack.build_fatal(self.repo.name, msg)
+        slack.send(self.repo.runner, self.repo.slack_token, data)
+
+    def post(self, info: Dict[str, str]) -> None:
+        if not self.repo.slack_token:
+            return self.repo.runner.log(1, f"Not posting to Slack, slack not configured")
+        elif not self.repo.runner.base_url:
+            return self.repo.runner.log(1, f"Not posting to Slack, baseurl not configured")
+        else:
+            self.repo.runner.log(1, f"Posting results of run to slack!")
+
+        if not info and not self.repo.warnings:
+            return
+        runs = { self.name : info }
+        data = slack.build_runs(self.repo.name, runs, self.repo.warnings)
+
+        if not self.repo.runner.dryrun:
+            slack.send(self.repo.runner, self.repo.slack_token, data)
 
 
 if __name__ == "__main__":
