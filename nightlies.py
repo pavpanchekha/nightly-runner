@@ -200,6 +200,8 @@ class NightlyRunner:
             self.start = datetime.fromisoformat(cast(str, self.data["start"]))
         except OSError:
             return
+        except json.decoder.JSONDecodeError:
+            self.data = {"dead": True}
 
     def try_lock(self) -> bool:
         try:
