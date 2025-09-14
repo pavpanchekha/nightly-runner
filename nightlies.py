@@ -649,6 +649,7 @@ class Branch:
                             self.repo.runner.log(2, f"Linking image file {self.image_file}")
                             path = self.image_file.relative_to(self.report_dir)
                             self.info["img"] = url_base + "/" + str(path)
+                        shutil.rmtree(self.report_dir, ignore_errors=True)
                     elif dest_dir.exists():
                         self.repo.runner.log(2, f"Destination directory {dest_dir} already exists, skipping")
                     else:
