@@ -286,6 +286,8 @@ class NightlyRunner:
                 self.save()
 
                 branch.run()
+            except subprocess.CalledProcessError as e:
+                repo.post_fatal(f"Process {format_cmd(e.cmd)} returned error code {e.returncode}")
             finally:
                 del self.data["repo"]
                 del self.data["branch"]
