@@ -564,9 +564,8 @@ class Branch:
                     self.repo.runner.data["branch_pid"] = process.pid
                     self.repo.runner.save()
                     try:
-                        process.wait(timeout=to)
-                        p = process.poll()
-                        if p: raise subprocess.CalledProcessError(p, cmd)
+                        returncode = process.wait(timeout=to)
+                        if returncode: raise subprocess.CalledProcessError(returncode, cmd)
                     finally:
                         process.kill()
                         self.repo.runner.exec(2, ["sudo", "systemctl", "stop", "nightlies.slice"])
