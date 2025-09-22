@@ -362,6 +362,17 @@ class Repository:
         self.runner.log(0, "Beginning nightly run for " + self.name)
         self.dir.mkdir(parents=True, exist_ok=True)
 
+        ppas = self.config.get("ppa", "").split()
+        if ppas:
+            failed_ppas = apt.add_repositories(self.runner, ppas)
+            if failed_ppas:
+                joined = ", ".join(failed_ppas)
+                self.warnings["ppa"] = (
+                    f"Failed to add apt repository {joined}"
+                    if len(failed_ppas) == 1
+                    else f"Failed to add apt repositories {joined}"
+                )
+
         pkgs = self.config.get("apt", "").split()
         if pkgs and apt.check_updates(self.runner, pkgs):
             if not self.runner.dryrun:

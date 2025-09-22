@@ -134,6 +134,11 @@ Debian packages are the preferred way to manage dependencies. If you
 have some dependency that you absolutely can't install from a package,
 get in touch with the nightly maintainers.</dd>
 
+<dt><code>ppa</code></dt>
+<dd>A space-separated list of PPA repositories (like
+<code>ppa:owner/name</code>) to enable before installing Debian
+packages. Invalid repositories are skipped and reported as warnings.</dd>
+
 <dt><code>timeout</code></dt>
 <dd>You can give a timeout (written <code>4hr</code> or similar).
 After the timeout is over, your nightly will be killed. This is
