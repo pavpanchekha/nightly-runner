@@ -635,7 +635,7 @@ class Branch:
                 name = f"{int(time.time())}:{self.filename}:{out[:8]}"
                 dest_dir = self.repo.runner.report_dir / self.repo.name / name
 
-                if self.report_dir.exists() and not dest_dir.exists():
+                if self.report_dir.exists():
                     self.repo.runner.log(2, f"Publishing report directory {self.report_dir} to {dest_dir}")
                     copything(self.report_dir, dest_dir)
                     url_base = self.repo.runner.base_url + "reports/" + self.repo.name + "/" + name
@@ -645,8 +645,6 @@ class Branch:
                         path = self.image_file.relative_to(self.report_dir)
                         info["img"] = url_base + "/" + str(path)
                     shutil.rmtree(self.report_dir, ignore_errors=True)
-                elif dest_dir.exists():
-                    self.repo.runner.log(2, f"Destination directory {dest_dir} already exists, skipping")
                 else:
                     self.repo.runner.log(2, f"Report directory {self.report_dir} does not exist")
 
