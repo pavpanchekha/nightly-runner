@@ -285,6 +285,10 @@ class NightlyRunner:
                 self.data["runs_total"] = len(plan)
                 self.save()
 
+                if self.dryrun:
+                    self.log(0, f"Dry-run: skipping branch {branch.name} on repo {branch.repo.name}")
+                    continue
+
                 branch.run()
             except subprocess.CalledProcessError as e:
                 repo.post_fatal(f"Process {format_cmd(e.cmd)} returned error code {e.returncode}")
@@ -361,6 +365,17 @@ class Repository:
     def load(self) -> None:
         self.runner.log(0, "Beginning nightly run for " + self.name)
         self.dir.mkdir(parents=True, exist_ok=True)
+
+        ppas = self.config.get("ppa", "").split()
+        if ppas:
+            failed_ppas = apt.add_repositories(self.runner, ppas)
+            if failed_ppas:
+                joined = ", ".join(failed_ppas)
+                self.warnings["ppa"] = (
+                    f"Failed to add apt repository {joined}"
+                    if len(failed_ppas) == 1
+                    else f"Failed to add apt repositories {joined}"
+                )
 
         pkgs = self.config.get("apt", "").split()
         if pkgs and apt.check_updates(self.runner, pkgs):
@@ -553,22 +568,21 @@ class Branch:
             to = parse_time(self.repo.config.get("timeout"))
             cmd = SYSTEMD_RUN_CMD + ["make", "-C", str(self.dir), "nightly"]
             self.repo.runner.log(1, f"Executing {format_cmd(cmd)}")
-            if not self.repo.runner.dryrun:
-                if self.report_dir:
-                    if self.report_dir.exists():
-                        shutil.rmtree(self.report_dir, ignore_errors=True)
-                    self.report_dir.mkdir(parents=True, exist_ok=True)
+            if self.report_dir:
+                if self.report_dir.exists():
+                    shutil.rmtree(self.report_dir, ignore_errors=True)
+                self.report_dir.mkdir(parents=True, exist_ok=True)
 
-                with (self.repo.runner.log_dir / log_name).open("wt") as fd:
-                    process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
-                    self.repo.runner.data["branch_pid"] = process.pid
-                    self.repo.runner.save()
-                    try:
-                        returncode = process.wait(timeout=to)
-                        if returncode: raise subprocess.CalledProcessError(returncode, cmd)
-                    finally:
-                        process.kill()
-                        self.repo.runner.exec(2, ["sudo", "systemctl", "stop", "nightlies.slice"])
+            with (self.repo.runner.log_dir / log_name).open("wt") as fd:
+                process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+                self.repo.runner.data["branch_pid"] = process.pid
+                self.repo.runner.save()
+                try:
+                    returncode = process.wait(timeout=to)
+                    if returncode: raise subprocess.CalledProcessError(returncode, cmd)
+                finally:
+                    process.kill()
+                    self.repo.runner.exec(2, ["sudo", "systemctl", "stop", "nightlies.slice"])
 
         except subprocess.TimeoutExpired as e:
             self.repo.runner.log(1, f"Run on branch {self.name} timed out after {format_time(e.timeout)}")
@@ -580,60 +594,59 @@ class Branch:
             self.repo.runner.log(1, f"Successfully ran on branch {self.name}")
             failure = ""
 
-        if not self.repo.runner.dryrun:
-            out = (
-                self.repo.runner.exec(
-                    2, ["git", "-C", self.dir, "rev-parse", f"origin/{self.name}"]
-                ).stdout.decode("ascii").strip()
-            )
-            self.config["commit"] = out
-            self.config["time"] = time.time()
-            self.save_metadata()
+        out = (
+            self.repo.runner.exec(
+                2, ["git", "-C", self.dir, "rev-parse", f"origin/{self.name}"]
+            ).stdout.decode("ascii").strip()
+        )
+        self.config["commit"] = out
+        self.config["time"] = time.time()
+        self.save_metadata()
 
-            if self.report_dir and self.report_dir.exists():
-                if self.repo.config.get("gzip", ""):
-                    self.repo.runner.log(2, f"GZipping all {self.repo.config.get('gzip', '')} files")
-                    gzip_matching_files(self.report_dir, shlex.split(self.repo.config.get("gzip", "")))
+        if self.report_dir and self.report_dir.exists():
+            if self.repo.config.get("gzip", ""):
+                self.repo.runner.log(2, f"GZipping all {self.repo.config.get('gzip', '')} files")
+                gzip_matching_files(self.report_dir, shlex.split(self.repo.config.get("gzip", "")))
 
-                warn_size = parse_size(self.repo.config.get("warn_size", "1gb"))
-                total = 0
-                biggest = None
-                biggest_size = 0
-                for root, _, files in self.report_dir.walk():
-                    for name in files:
-                        path = root / name
-                        size = path.stat().st_size
-                        total += size
-                        if size > biggest_size:
-                            biggest_size = size
-                            biggest = path
-                if warn_size and total > warn_size:
-                    assert biggest is not None
-                    rel = biggest.relative_to(self.report_dir)
-                    self.repo.runner.log(1, f"Report `{self.name}` is {format_size(total)}; largest file `{rel}`")
-                    self.add_warning(
-                        "report-size",
-                        f"Report size {format_size(total)} exceeds limit {format_size(warn_size)}; largest file `{rel}`",
-                    )
+            warn_size = parse_size(self.repo.config.get("warn_size", "1gb"))
+            total = 0
+            biggest = None
+            biggest_size = 0
+            for root, _, files in self.report_dir.walk():
+                for name in files:
+                    path = root / name
+                    size = path.stat().st_size
+                    total += size
+                    if size > biggest_size:
+                        biggest_size = size
+                        biggest = path
+            if warn_size and total > warn_size:
+                assert biggest is not None
+                rel = biggest.relative_to(self.report_dir)
+                self.repo.runner.log(1, f"Report `{self.name}` is {format_size(total)}; largest file `{rel}`")
+                self.add_warning(
+                    "report-size",
+                    f"Report size {format_size(total)} exceeds limit {format_size(warn_size)}; largest file `{rel}`",
+                )
 
-                # Auto-publish report if configured
-                if "url" not in info:
-                    assert self.repo.runner.base_url, f"Cannot publish, no baseurl configured"
-                    name = f"{int(time.time())}:{self.filename}:{out[:8]}"
-                    dest_dir = self.repo.runner.report_dir / self.repo.name / name
+            # Auto-publish report if configured
+            if "url" not in info:
+                assert self.repo.runner.base_url, f"Cannot publish, no baseurl configured"
+                name = f"{int(time.time())}:{self.filename}:{out[:8]}"
+                dest_dir = self.repo.runner.report_dir / self.repo.name / name
 
-                    if self.report_dir.exists():
-                        self.repo.runner.log(2, f"Publishing report directory {self.report_dir} to {dest_dir}")
-                        copything(self.report_dir, dest_dir)
-                        url_base = self.repo.runner.base_url + "reports/" + self.repo.name + "/" + name
-                        info["url"] = url_base
-                        if self.image_file and self.image_file.exists():
-                            self.repo.runner.log(2, f"Linking image file {self.image_file}")
-                            path = self.image_file.relative_to(self.report_dir)
-                            info["img"] = url_base + "/" + str(path)
-                        shutil.rmtree(self.report_dir, ignore_errors=True)
-                    else:
-                        self.repo.runner.log(2, f"Report directory {self.report_dir} does not exist")
+                if self.report_dir.exists():
+                    self.repo.runner.log(2, f"Publishing report directory {self.report_dir} to {dest_dir}")
+                    copything(self.report_dir, dest_dir)
+                    url_base = self.repo.runner.base_url + "reports/" + self.repo.name + "/" + name
+                    info["url"] = url_base
+                    if self.image_file and self.image_file.exists():
+                        self.repo.runner.log(2, f"Linking image file {self.image_file}")
+                        path = self.image_file.relative_to(self.report_dir)
+                        info["img"] = url_base + "/" + str(path)
+                    shutil.rmtree(self.report_dir, ignore_errors=True)
+                else:
+                    self.repo.runner.log(2, f"Report directory {self.report_dir} does not exist")
 
 
         info["result"] = f"*{failure}*" if failure else "success"
