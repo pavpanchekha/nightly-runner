@@ -422,11 +422,12 @@ class Repository:
         for fn in self.dir.iterdir():
             if fn not in expected_files:
                 self.runner.log(2, f"Deleting unknown file {fn}")
-                if not self.runner.dryrun:
-                    if fn.is_dir():
-                        shutil.rmtree(str(fn))
-                    else:
-                        fn.unlink()
+                if fn.is_dir():
+                    # Dry runs should still delete obsolete branch directories so
+                    # that the checkout stays in sync with Github.
+                    shutil.rmtree(str(fn))
+                elif not self.runner.dryrun:
+                    fn.unlink()
         self.runner.exec(2, ["git", "-C", self.checkout, "worktree", "prune"])
 
     def read(self) -> None:
