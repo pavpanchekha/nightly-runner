@@ -1,10 +1,35 @@
-from typing import List, TYPE_CHECKING
+from typing import List, Sequence, TYPE_CHECKING
 import re
+import subprocess
 
 if TYPE_CHECKING:
     import nightlies
 
 APT_LINE_RE = re.compile(r"^(\d+) upgraded, (\d+) newly installed, (\d+) to remove and (\d+) not upgraded\.$", re.MULTILINE)
+
+def _format_cmd(cmd: Sequence[object]) -> str:
+    return " ".join(str(part) for part in cmd)
+
+
+def add_repositories(runner: "nightlies.NightlyRunner", repos: Sequence[str]) -> List[str]:
+    failed: List[str] = []
+    for repo in repos:
+        runner.log(1, f"Adding apt repository {repo}")
+        if runner.dryrun:
+            continue
+        try:
+            runner.exec(2, ["sudo", "add-apt-repository", "--yes", repo])
+        except subprocess.CalledProcessError as e:
+            failed.append(repo)
+            runner.log(
+                1,
+                f"Failed to add apt repository {repo}: process {_format_cmd(e.cmd)} returned error code {e.returncode}",
+            )
+        except OSError as e:
+            failed.append(repo)
+            runner.log(1, f"Failed to add apt repository {repo}: {e}")
+    return failed
+
 
 def check_updates(runner : "nightlies.NightlyRunner", pkgs : List[str]) -> bool:
     runner.log(1, f"Checking for updates to apt packages {' '.join(pkgs)}")
