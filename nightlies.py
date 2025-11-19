@@ -390,7 +390,6 @@ class Repository:
 
         self.runner.log(1, "Updating branches for " + self.name)
         self.runner.exec(2, ["git", "-C", self.checkout, "fetch", "origin", "--prune", "--recurse-submodules"])
-        self.runner.exec(2, ["git", "-C", self.checkout, "submodule", "update", "--init", "--recursive"])
 
         if "branches" in self.config:
             all_branches = self.config["branches"].split()
@@ -522,8 +521,8 @@ class Branch:
         if not self.dir.is_dir():
             relpath = self.dir.relative_to(self.repo.dir)
             self.repo.runner.exec(2, ["git", "-C", self.repo.checkout, "worktree", "add", ".." / relpath, self.name])
-        self.repo.runner.exec(2, ["git", "-C", self.dir, "submodule", "update", "--init", "--recursive"])
-        self.repo.runner.exec(2, ["git", "-C", self.dir, "reset", "--hard", "--recurse-submodules", "origin/" + self.name])
+        self.repo.runner.exec(2, ["git", "-C", self.dir, "reset", "--hard", "origin/" + self.name])
+        self.repo.runner.exec(2, ["git", "-C", self.dir, "submodule", "update", "--init", "--recursive", "--force"])
         self.read_metadata()
 
     def read_metadata(self) -> None:
