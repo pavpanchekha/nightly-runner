@@ -63,7 +63,6 @@ def format_size(size: int) -> str:
     return f"{s:.2f}{unit}"
 
 def repo_to_url(repo : str) -> str:
-    if repo and ":" in repo: return repo
     return "git@github.com:" + repo + ".git"
 
 def copything(src : Path, dst : Path) -> None:
@@ -314,7 +313,12 @@ class Repository:
         else:
             self.slack_token = None
 
-        self.url = repo_to_url(self.config.get("url", configuration.get("github", name)))
+        if self.config.get("url"): # Reserved for local testing
+            self.url = self.config["url"]
+            self.gh_name : Optional[str] = None
+        else:
+            self.url = "git@github.com:" + name + ".git"
+            self.gh_name = name
 
         self.name = name.split("/")[-1]
         self.dir = runner.dir / self.name
@@ -339,28 +343,22 @@ class Repository:
         ]
 
     def list_pr_branches(self) -> Dict[str, int]:
-        if self.url.startswith("git@github.com:") and self.url.endswith(".git"):
-            gh_name = self.url[len("git@github.com:"):-len(".git")]
-            pulls_url = f"https://api.github.com/repos/{gh_name}/pulls"
-            try:
-                with urllib.request.urlopen(pulls_url) as data:
-                    pr_data = json.load(data)
-            except urllib.error.HTTPError:
-                return {}
-            out : Dict[str, int] = {}
-            for pr in pr_data:
-                if pr["head"]["repo"]["full_name"] == gh_name:
-                    out[pr["head"]["ref"]] = pr["number"]
-            return out
-        else:
+        if not self.gh_name: return {}
+        pulls_url = f"https://api.github.com/repos/{self.gh_name}/pulls"
+        try:
+            with urllib.request.urlopen(pulls_url) as data:
+                pr_data = json.load(data)
+        except urllib.error.HTTPError:
             return {}
+        out : Dict[str, int] = {}
+        for pr in pr_data:
+            if pr["head"]["repo"]["full_name"] == self.gh_name:
+                out[pr["head"]["ref"]] = pr["number"]
+        return out
 
     def get_pr_link(self, pr : int) -> str:
-        if self.url.startswith("git@github.com:") and self.url.endswith(".git"):
-            gh_name = self.url[len("git@github.com:"):-len(".git")]
-            return f"https://github.com/{gh_name}/pull/{pr}"       
-        else:
-            raise ValueError("Not a Github repository")
+        if not self.gh_name: raise ValueError("Not a Github repository")
+        return f"https://github.com/{self.gh_name}/pull/{pr}"
 
     def load(self) -> None:
         self.runner.log(0, "Beginning nightly run for " + self.name)
