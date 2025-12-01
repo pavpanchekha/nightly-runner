@@ -588,7 +588,6 @@ class Branch:
             self.repo.runner.log(1, f"Run on branch {self.name} timed out after {format_time(e.timeout)}")
             failure = "timeout"
         except subprocess.CalledProcessError as e:
-            self.post_fatal(f"Process {format_cmd(e.cmd)} returned error code {e.returncode}")
             failure = "failure"
         else:
             self.repo.runner.log(1, f"Successfully ran on branch {self.name}")
