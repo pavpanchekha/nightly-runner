@@ -1,10 +1,9 @@
-from typing import Dict, Any, List, Optional, TYPE_CHECKING
-import os
+from typing import Dict, Any, List, Optional
 import json
-import urllib.request, urllib.error, urllib.parse
+import urllib.request, urllib.error
 
-if TYPE_CHECKING:
-    import nightlies
+class SlackError(Exception):
+    pass
 
 class Block:
     def to_json(self) -> Dict[str, Any]:
@@ -119,15 +118,49 @@ def build_fatal(name : str, text : str) -> Response:
     res.add(TextBlock(text))
     return res
 
-def send(runner : "nightlies.NightlyRunner", url : str, res : Response) -> None:
+def send(url: str, res: Response) -> None:
     payload = json.dumps(res.to_json()).encode("utf8")
     req = urllib.request.Request(url, data=payload, method="POST")
     req.add_header("Content-Type", "application/json; charset=utf8")
 
     try:
         with urllib.request.urlopen(req, timeout=10) as response:
-            runner.log(2, f"Slack returned response {response.status} {response.reason}, because {response.read()}")
+            pass
     except urllib.error.HTTPError as exc:
         reason = exc.read().decode('utf-8')
-        runner.log(2, f"Slack error: {exc.code} {exc.reason}, because {reason}")
-        runner.log(2, repr(payload))
+        raise SlackError(f"{exc.code} {exc.reason}: {reason}")
+
+
+class SlackOutput:
+    def __init__(self, token: str, base_url: str, name: str):
+        self.token = token
+        self.base_url = base_url
+        self.name = name
+        self.warnings: Dict[str, str] = {}
+
+    def warn(self, key: str, message: str) -> None:
+        self.warnings[key] = message
+
+    def fatal(self, message: str) -> None:
+        data = build_fatal(self.name, message)
+        send(self.token, data)
+
+    def post(self, branch: str, info: Dict[str, str]) -> None:
+        data = build_runs(self.name, branch, info, self.warnings if self.warnings else None)
+        send(self.token, data)
+        self.warnings.clear()
+
+    def post_warnings(self) -> None:
+        if not self.warnings:
+            return
+        res = Response(f"Warnings for {self.name}")
+        for key in sorted(self.warnings):
+            res.add(TextBlock(f":warning: {self.warnings[key]}"))
+        send(self.token, res)
+        self.warnings.clear()
+
+
+def make_output(token: Optional[str], base_url: Optional[str], name: str) -> Optional[SlackOutput]:
+    if not token or not base_url:
+        return None
+    return SlackOutput(token, base_url, name)
