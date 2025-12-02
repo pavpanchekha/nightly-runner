@@ -63,7 +63,6 @@ def format_size(size: int) -> str:
     return f"{s:.2f}{unit}"
 
 def repo_to_url(repo : str) -> str:
-    if repo and ":" in repo: return repo
     return "git@github.com:" + repo + ".git"
 
 def copything(src : Path, dst : Path) -> None:
@@ -291,8 +290,12 @@ class NightlyRunner:
                 time.sleep(30) # To avoid thermal throttling
 
             try:
+                date = datetime.now()
+                log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{branch.repo.name}-{branch.filename}.log"
+
                 self.data["repo"] = branch.repo.name
                 self.data["branch"] = branch.name
+                self.data["branch_log"] = log_name
                 self.data["runs_done"] = i
                 self.data["runs_total"] = len(plan)
                 self.save()
@@ -301,7 +304,7 @@ class NightlyRunner:
                     self.log(0, f"Dry-run: skipping branch {branch.name} on repo {branch.repo.name}")
                     continue
 
-                branch.run()
+                branch.run(log_name)
             except subprocess.CalledProcessError as e:
                 msg = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
                 self.log(1, msg)
@@ -313,6 +316,8 @@ class NightlyRunner:
             finally:
                 del self.data["repo"]
                 del self.data["branch"]
+                if "branch_log" in self.data: del self.data["branch_log"]
+                if "branch_pid" in self.data: del self.data["branch_pid"]
                 # del self.data["runs_done"]
                 # del self.data["runs_total"]
                 self.save()
@@ -330,7 +335,12 @@ class Repository:
         slack_token = self.runner.secrets[slack_channel]["slack"] if slack_channel else None
         self.slack = slack.make_output(slack_token, self.runner.base_url, name.split("/")[-1])
 
-        self.url = repo_to_url(self.config.get("url", configuration.get("github", name)))
+        if self.config.get("url"): # Reserved for local testing
+            self.url = self.config["url"]
+            self.gh_name : Optional[str] = None
+        else:
+            self.url = "git@github.com:" + name + ".git"
+            self.gh_name = name
 
         self.name = name.split("/")[-1]
         self.dir = runner.dir / self.name
@@ -354,28 +364,22 @@ class Repository:
         ]
 
     def list_pr_branches(self) -> Dict[str, int]:
-        if self.url.startswith("git@github.com:") and self.url.endswith(".git"):
-            gh_name = self.url[len("git@github.com:"):-len(".git")]
-            pulls_url = f"https://api.github.com/repos/{gh_name}/pulls"
-            try:
-                with urllib.request.urlopen(pulls_url) as data:
-                    pr_data = json.load(data)
-            except urllib.error.HTTPError:
-                return {}
-            out : Dict[str, int] = {}
-            for pr in pr_data:
-                if pr["head"]["repo"]["full_name"] == gh_name:
-                    out[pr["head"]["ref"]] = pr["number"]
-            return out
-        else:
+        if not self.gh_name: return {}
+        pulls_url = f"https://api.github.com/repos/{self.gh_name}/pulls"
+        try:
+            with urllib.request.urlopen(pulls_url) as data:
+                pr_data = json.load(data)
+        except urllib.error.HTTPError:
             return {}
+        out : Dict[str, int] = {}
+        for pr in pr_data:
+            if pr["head"]["repo"]["full_name"] == self.gh_name:
+                out[pr["head"]["ref"]] = pr["number"]
+        return out
 
     def get_pr_link(self, pr : int) -> str:
-        if self.url.startswith("git@github.com:") and self.url.endswith(".git"):
-            gh_name = self.url[len("git@github.com:"):-len(".git")]
-            return f"https://github.com/{gh_name}/pull/{pr}"       
-        else:
-            raise ValueError("Not a Github repository")
+        if not self.gh_name: raise ValueError("Not a Github repository")
+        return f"https://github.com/{self.gh_name}/pull/{pr}"
 
     def load(self) -> None:
         self.runner.log(0, "Beginning nightly run for " + self.name)
@@ -562,14 +566,9 @@ class Branch:
             return False
         return True
 
-    def run(self) -> None:
+    def run(self, log_name: str) -> None:
         self.repo.runner.log(0, f"Running branch {self.name} on repo {self.repo.name}")
-        date = datetime.now()
-        log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{self.repo.name}-{self.filename}.log"
         info : Dict[str, str] = {}
-
-        self.repo.runner.data["branch_log"] = log_name
-        self.repo.runner.save()
 
         # Store log URL for slack notifications
         if self.repo.runner.base_url:
@@ -601,13 +600,6 @@ class Branch:
             self.repo.runner.log(1, f"Run on branch {self.name} timed out after {format_time(e.timeout)}")
             failure = "timeout"
         except subprocess.CalledProcessError as e:
-            msg = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
-            self.repo.runner.log(1, msg)
-            if self.slack:
-                try:
-                    self.slack.fatal(msg)
-                except slack.SlackError as e:
-                    self.repo.runner.log(2, f"Slack error: {e}")
             failure = "failure"
         else:
             self.repo.runner.log(1, f"Successfully ran on branch {self.name}")
@@ -686,9 +678,6 @@ class Branch:
             self.repo.runner.log(1, msg)
             if self.slack:
                 self.slack.warn("log-size", msg)
-
-        del self.repo.runner.data["branch_log"]
-        self.repo.runner.save()
 
         if self.slack:
             self.repo.runner.log(1, "Posting results of run to slack!")
