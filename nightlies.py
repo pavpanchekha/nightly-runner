@@ -279,8 +279,12 @@ class NightlyRunner:
                 time.sleep(30) # To avoid thermal throttling
 
             try:
+                date = datetime.now()
+                log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{branch.repo.name}-{branch.filename}.log"
+
                 self.data["repo"] = branch.repo.name
                 self.data["branch"] = branch.name
+                self.data["branch_log"] = log_name
                 self.data["runs_done"] = i
                 self.data["runs_total"] = len(plan)
                 self.save()
@@ -289,12 +293,14 @@ class NightlyRunner:
                     self.log(0, f"Dry-run: skipping branch {branch.name} on repo {branch.repo.name}")
                     continue
 
-                branch.run()
+                branch.run(log_name)
             except subprocess.CalledProcessError as e:
                 repo.post_fatal(f"Process {format_cmd(e.cmd)} returned error code {e.returncode}")
             finally:
                 del self.data["repo"]
                 del self.data["branch"]
+                if "branch_log" in self.data: del self.data["branch_log"]
+                if "branch_pid" in self.data: del self.data["branch_pid"]
                 # del self.data["runs_done"]
                 # del self.data["runs_total"]
                 self.save()
@@ -549,14 +555,9 @@ class Branch:
             return False
         return True
 
-    def run(self) -> None:
+    def run(self, log_name: str) -> None:
         self.repo.runner.log(0, f"Running branch {self.name} on repo {self.repo.name}")
-        date = datetime.now()
-        log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{self.repo.name}-{self.filename}.log"
         info : Dict[str, str] = {}
-
-        self.repo.runner.data["branch_log"] = log_name
-        self.repo.runner.save()
 
         # Store log URL for slack notifications
         if self.repo.runner.base_url:
@@ -666,8 +667,6 @@ class Branch:
             self.repo.runner.log(1, msg)
             self.add_warning("log-size", msg)
 
-        del self.repo.runner.data["branch_log"]
-        self.repo.runner.save()
         self.post(info)
 
     def post_fatal(self, msg: str) -> None:
