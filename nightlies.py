@@ -398,9 +398,8 @@ class Repository:
                     self.slack.warn("ppa", msg)
 
         pkgs = self.config.get("apt", "").split()
-        if pkgs and apt.check_updates(self.runner, pkgs):
-            if not self.runner.dryrun:
-                apt.install(self.runner, pkgs)
+        if pkgs and not self.runner.dryrun and apt.check_updates(self.runner, pkgs):
+            apt.install(self.runner, pkgs)
             self.runner.log(1, "Updated an apt package")
             if self.slack:
                 self.slack.warn("apt", "Updated an apt package")
