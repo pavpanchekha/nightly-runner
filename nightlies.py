@@ -333,7 +333,7 @@ class Repository:
 
         slack_channel = configuration.get("slack")
         slack_token = self.runner.secrets[slack_channel]["slack"] if slack_channel else None
-        self.slack = slack.make_output(slack_token, self.runner.base_url, name.split("/")[-1])
+        self.slack = slack.make_output(slack_token, name)
 
         if self.config.get("url"): # Reserved for local testing
             self.url = self.config["url"]
@@ -520,7 +520,7 @@ class Branch:
 
         slack_channel = repo.config.get("slack")
         slack_token = repo.runner.secrets[slack_channel]["slack"] if slack_channel else None
-        self.slack = slack.make_output(slack_token, repo.runner.base_url, repo.name)
+        self.slack = slack.make_output(slack_token, repo.name)
 
     def last_run(self) -> float:
         return float(self.config.get("time", "inf"))

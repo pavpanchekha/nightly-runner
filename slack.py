@@ -132,9 +132,8 @@ def send(url: str, res: Response) -> None:
 
 
 class SlackOutput:
-    def __init__(self, token: str, base_url: str, name: str):
+    def __init__(self, token: str, name: str):
         self.token = token
-        self.base_url = base_url
         self.name = name
         self.warnings: Dict[str, str] = {}
 
@@ -160,7 +159,7 @@ class SlackOutput:
         self.warnings.clear()
 
 
-def make_output(token: Optional[str], base_url: Optional[str], name: str) -> Optional[SlackOutput]:
-    if not token or not base_url:
+def make_output(token: Optional[str], name: str) -> Optional[SlackOutput]:
+    if not token:
         return None
-    return SlackOutput(token, base_url, name)
+    return SlackOutput(token, name)
