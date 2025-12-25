@@ -266,9 +266,21 @@ class NightlyRunner:
                 repo.plan()
                 plan.extend(repo.runnable)
             except subprocess.CalledProcessError as e:
-                repo.post_fatal(f"Process {format_cmd(e.cmd)} returned error code {e.returncode}")
+                msg = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
+                self.log(1, msg)
+                if repo.slack:
+                    try:
+                        repo.slack.fatal(msg)
+                    except slack.SlackError as e:
+                        self.log(2, f"Slack error: {e}")
             except OSError as e:
-                repo.post_fatal(f"Fatal error: {str(e)}")
+                msg = f"Fatal error: {str(e)}"
+                self.log(1, msg)
+                if repo.slack:
+                    try:
+                        repo.slack.fatal(msg)
+                    except slack.SlackError as e:
+                        self.log(2, f"Slack error: {e}")
             finally:
                 del self.data["repo"]
 
@@ -294,7 +306,13 @@ class NightlyRunner:
 
                 branch.run(log_name)
             except subprocess.CalledProcessError as e:
-                repo.post_fatal(f"Process {format_cmd(e.cmd)} returned error code {e.returncode}")
+                msg = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
+                self.log(1, msg)
+                if branch.slack:
+                    try:
+                        branch.slack.fatal(msg)
+                    except slack.SlackError as e:
+                        self.log(2, f"Slack error: {e}")
             finally:
                 del self.data["repo"]
                 del self.data["branch"]
@@ -313,11 +331,9 @@ class Repository:
         self.config = configuration
         self.runnable : List[Branch] = []
 
-        self.slack_channel : Optional[str] = configuration.get("slack")
-        if self.slack_channel:
-            self.slack_token : Optional[str] = self.runner.secrets[self.slack_channel]["slack"]
-        else:
-            self.slack_token = None
+        slack_channel = configuration.get("slack")
+        slack_token = self.runner.secrets[slack_channel]["slack"] if slack_channel else None
+        self.slack = slack.make_output(slack_token, name)
 
         if self.config.get("url"): # Reserved for local testing
             self.url = self.config["url"]
@@ -338,7 +354,6 @@ class Repository:
         self.image_file_name = configuration.get("image")
         
         self.branches : Dict[str, Branch] = {}
-        self.warnings: Dict[str, str] = {}
 
     def list_branches(self) -> List[str]:
         git_branch = self.runner.exec(2, ["git", "-C", self.checkout, "branch", "-r"])
@@ -375,17 +390,19 @@ class Repository:
             failed_ppas = apt.add_repositories(self.runner, ppas)
             if failed_ppas:
                 joined = ", ".join(failed_ppas)
-                self.warnings["ppa"] = (
-                    f"Failed to add apt repository {joined}"
-                    if len(failed_ppas) == 1
-                    else f"Failed to add apt repositories {joined}"
-                )
+                msg = (f"Failed to add apt repository {joined}"
+                       if len(failed_ppas) == 1
+                       else f"Failed to add apt repositories {joined}")
+                self.runner.log(1, msg)
+                if self.slack:
+                    self.slack.warn("ppa", msg)
 
         pkgs = self.config.get("apt", "").split()
-        if pkgs and apt.check_updates(self.runner, pkgs):
-            if not self.runner.dryrun:
-                apt.install(self.runner, pkgs)
-            self.warnings["apt"] = "Updated an apt package"
+        if pkgs and not self.runner.dryrun and apt.check_updates(self.runner, pkgs):
+            apt.install(self.runner, pkgs)
+            self.runner.log(1, "Updated an apt package")
+            if self.slack:
+                self.slack.warn("apt", "Updated an apt package")
 
         if not self.checkout.is_dir():
             self.runner.log(1, "Checking out base repository for " + self.name)
@@ -482,17 +499,11 @@ class Repository:
         else:
             self.runner.log(1, "No runnable branches for " + self.name)
 
-    def post_fatal(self, msg: str) -> None:
-        if not self.slack_token:
-            return self.runner.log(1, f"Not posting to Slack, slack not configured")
-        elif not self.runner.base_url:
-            return self.runner.log(1, f"Not posting to Slack, baseurl not configured")
-        else:
-            self.runner.log(1, msg)
-
-        data = slack.build_fatal(self.name, msg)
-        slack.send(self.runner, self.slack_token, data)
-
+        if self.slack:
+            try:
+                self.slack.post_warnings()
+            except slack.SlackError as e:
+                self.runner.log(2, f"Slack error: {e}")
 
 class Branch:
     def __init__(self, repo : Repository, name : str):
@@ -507,11 +518,12 @@ class Branch:
         self.report_dir = self.dir / self.repo.report_dir_name if self.repo.report_dir_name else None
         self.image_file = self.report_dir / self.repo.image_file_name if self.report_dir and self.repo.image_file_name else None
 
+        slack_channel = repo.config.get("slack")
+        slack_token = repo.runner.secrets[slack_channel]["slack"] if slack_channel else None
+        self.slack = slack.make_output(slack_token, repo.name)
+
     def last_run(self) -> float:
         return float(self.config.get("time", "inf"))
-
-    def add_warning(self, key: str, message: str) -> None:
-        self.repo.warnings[key] = message
 
     @staticmethod
     def parse_filename(filename : str) -> str:
@@ -622,11 +634,10 @@ class Branch:
                 if warn_size and total > warn_size:
                     assert biggest is not None
                     rel = biggest.relative_to(self.report_dir)
+                    msg = f"Report size {format_size(total)} exceeds limit {format_size(warn_size)}; largest file `{rel}`"
                     self.repo.runner.log(1, f"Report `{self.name}` is {format_size(total)}; largest file `{rel}`")
-                    self.add_warning(
-                        "report-size",
-                        f"Report size {format_size(total)} exceeds limit {format_size(warn_size)}; largest file `{rel}`",
-                    )
+                    if self.slack:
+                        self.slack.warn("report-size", msg)
 
                 # Auto-publish report if configured
                 if "url" not in info:
@@ -647,8 +658,10 @@ class Branch:
                     else:
                         self.repo.runner.log(2, f"Report directory {self.report_dir} does not exist")
             except OSError as e:
+                msg = f"Error saving report: {e}"
                 self.repo.runner.log(1, f"Error saving report for `{self.name}`: {e}")
-                self.add_warning("broken-report", f"Error saving report: {e}")
+                if self.slack:
+                    self.slack.warn("broken-report", msg)
 
 
         info["result"] = f"*{failure}*" if failure else "success"
@@ -662,35 +675,15 @@ class Branch:
                 f"seems too big at {size/1024/1024:.1f}MB"
             )
             self.repo.runner.log(1, msg)
-            self.add_warning("log-size", msg)
+            if self.slack:
+                self.slack.warn("log-size", msg)
 
-        self.post(info)
-
-    def post_fatal(self, msg: str) -> None:
-        if not self.repo.slack_token:
-            return self.repo.runner.log(1, f"Not posting to Slack, slack not configured")
-        elif not self.repo.runner.base_url:
-            return self.repo.runner.log(1, f"Not posting to Slack, baseurl not configured")
-        else:
-            self.repo.runner.log(1, msg)
-
-        data = slack.build_fatal(self.repo.name, msg)
-        slack.send(self.repo.runner, self.repo.slack_token, data)
-
-    def post(self, info: Dict[str, str]) -> None:
-        if not self.repo.slack_token:
-            return self.repo.runner.log(1, f"Not posting to Slack, slack not configured")
-        elif not self.repo.runner.base_url:
-            return self.repo.runner.log(1, f"Not posting to Slack, baseurl not configured")
-        else:
-            self.repo.runner.log(1, f"Posting results of run to slack!")
-
-        if not info and not self.repo.warnings:
-            return
-        data = slack.build_runs(self.repo.name, self.name, info, self.repo.warnings)
-
-        if not self.repo.runner.dryrun:
-            slack.send(self.repo.runner, self.repo.slack_token, data)
+        if self.slack:
+            self.repo.runner.log(1, "Posting results of run to slack!")
+            try:
+                self.slack.post(self.name, info)
+            except slack.SlackError as e:
+                self.repo.runner.log(2, f"Slack error: {e}")
 
 
 if __name__ == "__main__":
