@@ -7,7 +7,7 @@ from pathlib import Path
 import configparser
 import json
 import shlex, shutil
-import slack, apt
+import slack, apt, runner
 import urllib.request, urllib.error
 
 def format_time(ts : float) -> str:
@@ -304,7 +304,7 @@ class NightlyRunner:
                     self.log(0, f"Dry-run: skipping branch {branch.name} on repo {branch.repo.name}")
                     continue
 
-                branch.run(log_name)
+                runner.run_branch(branch, log_name)
             except subprocess.CalledProcessError as e:
                 msg = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
                 self.log(1, msg)
@@ -565,130 +565,9 @@ class Branch:
             return False
         return True
 
-    def run(self, log_name: str) -> None:
-        self.repo.runner.log(0, f"Running branch {self.name} on repo {self.repo.name}")
-        info : Dict[str, str] = {}
-
-        # Store log URL for slack notifications
-        if self.repo.runner.base_url:
-            import urllib.parse
-            info["logurl"] = self.repo.runner.base_url + "logs/" + urllib.parse.quote(log_name)
-
-        t = datetime.now()
-        try:
-            to = parse_time(self.repo.config.get("timeout"))
-            cmd = SYSTEMD_RUN_CMD + ["make", "-C", str(self.dir), "nightly"]
-            self.repo.runner.log(1, f"Executing {format_cmd(cmd)}")
-            if self.report_dir:
-                if self.report_dir.exists():
-                    shutil.rmtree(self.report_dir, ignore_errors=True)
-                self.report_dir.mkdir(parents=True, exist_ok=True)
-
-            with (self.repo.runner.log_dir / log_name).open("wt") as fd:
-                process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
-                self.repo.runner.data["branch_pid"] = process.pid
-                self.repo.runner.save()
-                try:
-                    returncode = process.wait(timeout=to)
-                    if returncode: raise subprocess.CalledProcessError(returncode, cmd)
-                finally:
-                    process.kill()
-                    self.repo.runner.exec(2, ["sudo", "systemctl", "stop", "nightlies.slice"])
-
-        except subprocess.TimeoutExpired as e:
-            self.repo.runner.log(1, f"Run on branch {self.name} timed out after {format_time(e.timeout)}")
-            failure = "timeout"
-        except subprocess.CalledProcessError as e:
-            failure = "failure"
-        else:
-            self.repo.runner.log(1, f"Successfully ran on branch {self.name}")
-            failure = ""
-
-        out = (
-            self.repo.runner.exec(
-                2, ["git", "-C", self.dir, "rev-parse", f"origin/{self.name}"]
-            ).stdout.decode("ascii").strip()
-        )
-        self.config["commit"] = out
-        self.config["time"] = time.time()
-        self.save_metadata()
-
-        if self.report_dir and self.report_dir.exists():
-            try:
-                if self.repo.config.get("gzip", ""):
-                    self.repo.runner.log(2, f"GZipping all {self.repo.config.get('gzip', '')} files")
-                    gzip_matching_files(self.report_dir, shlex.split(self.repo.config.get("gzip", "")))
-
-                warn_size = parse_size(self.repo.config.get("warn_size", "1gb"))
-                total = 0
-                biggest = None
-                biggest_size = 0
-                for root, _, files in self.report_dir.walk():
-                    for name in files:
-                        path = root / name
-                        size = path.stat().st_size
-                        total += size
-                        if size > biggest_size:
-                            biggest_size = size
-                            biggest = path
-                if warn_size and total > warn_size:
-                    assert biggest is not None
-                    rel = biggest.relative_to(self.report_dir)
-                    msg = f"Report size {format_size(total)} exceeds limit {format_size(warn_size)}; largest file `{rel}`"
-                    self.repo.runner.log(1, f"Report `{self.name}` is {format_size(total)}; largest file `{rel}`")
-                    if self.slack:
-                        self.slack.warn("report-size", msg)
-
-                # Auto-publish report if configured
-                if "url" not in info:
-                    assert self.repo.runner.base_url, f"Cannot publish, no baseurl configured"
-                    name = f"{int(time.time())}:{self.filename}:{out[:8]}"
-                    dest_dir = self.repo.runner.report_dir / self.repo.name / name
-
-                    if self.report_dir.exists():
-                        self.repo.runner.log(2, f"Publishing report directory {self.report_dir} to {dest_dir}")
-                        copything(self.report_dir, dest_dir)
-                        url_base = self.repo.runner.base_url + "reports/" + self.repo.name + "/" + name
-                        info["url"] = url_base
-                        if self.image_file and self.image_file.exists():
-                            self.repo.runner.log(2, f"Linking image file {self.image_file}")
-                            path = self.image_file.relative_to(self.report_dir)
-                            info["img"] = url_base + "/" + str(path)
-                        shutil.rmtree(self.report_dir, ignore_errors=True)
-                    else:
-                        self.repo.runner.log(2, f"Report directory {self.report_dir} does not exist")
-            except OSError as e:
-                msg = f"Error saving report: {e}"
-                self.repo.runner.log(1, f"Error saving report for `{self.name}`: {e}")
-                if self.slack:
-                    self.slack.warn("broken-report", msg)
-
-
-        info["result"] = f"*{failure}*" if failure else "success"
-        info["time"] = format_time((datetime.now() - t).seconds)
-
-        log_file = self.repo.runner.log_dir / log_name
-        if log_file.exists() and log_file.stat().st_size > 10 * 1024 * 1024:
-            size = log_file.stat().st_size
-            msg = (
-                f"Log file for branch {self.name} in {self.repo.name} "
-                f"seems too big at {size/1024/1024:.1f}MB"
-            )
-            self.repo.runner.log(1, msg)
-            if self.slack:
-                self.slack.warn("log-size", msg)
-
-        if self.slack:
-            self.repo.runner.log(1, "Posting results of run to slack!")
-            try:
-                self.slack.post(self.name, info)
-            except slack.SlackError as e:
-                self.repo.runner.log(2, f"Slack error: {e}")
-
-
 if __name__ == "__main__":
     import sys
     conf_file = sys.argv[1] if len(sys.argv) > 1 else "conf/nightlies.conf"
-    runner = NightlyRunner(conf_file)
-    runner.load()
-    runner.run()
+    nightly_runner = NightlyRunner(conf_file)
+    nightly_runner.load()
+    nightly_runner.run()
