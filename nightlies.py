@@ -25,7 +25,7 @@ def repo_to_url(repo : str) -> str:
 SRUN_CMD = [
     "srun",
     "--exclusive", # Full node, mimic current systemd behavior
-    "--export=TERM=dumb", # Disable color codes in logs
+    "--export=ALL,TERM=dumb", # Inherit env, disable color codes in logs
 ]
 
 REPO_BADGES = [
