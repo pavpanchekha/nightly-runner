@@ -47,13 +47,35 @@ def load():
         else:
             running = True
 
-    last_print = None
-    if runner.data and "branch_log" in runner.data:
-        log_file = runner.log_dir / runner.data["branch_log"]
-        try:
-            last_print = time.time() - os.path.getmtime(str(log_file))
-        except FileNotFoundError:
-            running = False
+    current = dict(runner.data) if runner.data else None
+
+    if current and "repo" in current:
+        current["nr_action"] = "waiting" if current.get("branch") else "syncing"
+        current["nr_repo"] = current["repo"]
+        if "branch_log" in current:
+            last_print = None
+            try:
+                log_file = runner.log_dir / current["branch_log"]
+                last_print = time.time() - os.path.getmtime(str(log_file))
+            except FileNotFoundError:
+                running = False
+            br_pid = current.get("branch_pid")
+            br_running = False
+            if br_pid:
+                try:
+                    os.kill(br_pid, 0)
+                    br_running = True
+                except OSError:
+                    pass
+            current["branches"] = [{
+                "repo": current["repo"],
+                "branch": current.get("branch", ""),
+                "pid": br_pid,
+                "log": current["branch_log"],
+                "start": current.get("start"),
+                "last_print": last_print,
+                "running": br_running,
+            }]
 
     logins = set([
         line.split()[0].decode("utf8", errors="replace")
@@ -67,12 +89,11 @@ def load():
 
     return {
         "runner": runner,
-        "current": runner.data,
+        "current": current,
         "running": running,
         "baseurl": runner.base_url,
         "confurl": edit_conf_url(runner),
         "system_state": system_state,
-        "last_print": last_print,
         "logins": logins,
     }
 
@@ -176,16 +197,14 @@ def kill():
 
 @bottle.post("/killbranch")
 def killbranch():
-    runner = nightlies.NightlyRunner(CONF_FILE)
-    runner.load()
-    runner.load_pid()
-    if runner.data and "branch_pid" in runner.data:
+    pid = bottle.request.forms.get('pid')
+    if pid:
         try:
-            os.kill(runner.data["branch_pid"], signal.SIGTERM)
-        except OSError as e:
-            print("/killbranch: OSError:", str(e))
+            os.kill(int(pid), signal.SIGTERM)
+        except (OSError, ValueError) as e:
+            print("/killbranch: error:", str(e))
     else:
-        print("/killbranch: no PID file")
+        print("/killbranch: no PID provided")
 
     bottle.redirect("/")
     
