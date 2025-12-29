@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 from pathlib import Path
 import configparser
 
@@ -18,6 +18,7 @@ class Config:
             self.base_url += "/"
         self.repos_dir = Path(defaults.get("repos", ".")).resolve()
         self.reports_dir = Path(defaults.get("reports", "reports")).resolve()
+        self.logs_dir = Path(defaults.get("logs", "logs")).resolve()
         
         self.secrets = configparser.ConfigParser()
         if defaults.get("secrets"):
@@ -67,4 +68,5 @@ class BranchConfig:
         
         self.base_url = config.base_url
         self.reports_dir = config.reports_dir
+        self.logs_dir = config.logs_dir
         self.slack_token = config.get_slack_token(repo_name)

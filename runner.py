@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Any, Dict, List, Sequence, Union
+from typing import Any, Dict, List, Sequence
 from datetime import datetime
 from pathlib import Path
 import gzip, json, shlex, shutil, subprocess, sys, time
@@ -15,7 +15,7 @@ def format_time(ts: float) -> str:
     else:
         return f"{t/60/60:.1f}h"
 
-def format_cmd(s: Sequence[Union[str, Path]]) -> str:
+def format_cmd(s: Sequence[str | Path]) -> str:
     if hasattr(shlex, "join"):
         return shlex.join([str(part) for part in s])
     else:
@@ -70,7 +70,8 @@ def read_metadata(metadata_file: Path) -> Dict[str, Any]:
     if metadata_file.exists():
         with metadata_file.open() as f:
             try:
-                return json.load(f)
+                data: Dict[str, Any] = json.load(f)
+                return data
             except json.JSONDecodeError:
                 pass
     return {}
@@ -172,6 +173,14 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
 
     info["result"] = f"*{failure}*" if failure else "success"
     info["time"] = format_time((datetime.now() - start).seconds)
+
+    log_file = bc.logs_dir / log_name
+    if log_file.exists() and log_file.stat().st_size > 10 * 1024 * 1024:
+        size = log_file.stat().st_size
+        msg = f"Log file for branch {bc.branch_name} in {bc.repo_name} seems too big at {size/1024/1024:.1f}MB"
+        print(msg)
+        if slack_output:
+            slack_output.warn("log-size", msg)
 
     if slack_output:
         print("Posting results of run to slack!")
