@@ -19,7 +19,7 @@ CONF_FILE = "conf/nightlies.conf"
 def get_nightly_jobs() -> list[tuple[str, str, str]]:
     """Query slurm for running nightly jobs, returns list of (job_id, job_name, stdout_path)."""
     result = subprocess.run(
-        ["squeue", "--name=nightly-*", "--format=%i %j %o", "--noheader"],
+        ["squeue", "--format=%j %i %o", "--noheader"],
         capture_output=True, text=True
     )
     if result.returncode != 0:
@@ -27,11 +27,13 @@ def get_nightly_jobs() -> list[tuple[str, str, str]]:
         return []
     jobs = []
     for line in result.stdout.splitlines():
+        if not line.startswith("nightly-"):
+            continue
         parts = line.strip().split(None, 2)
         if not parts:
             continue
         assert len(parts) == 3, f"unexpected squeue output: {line!r}"
-        jobs.append((parts[0], parts[1], parts[2]))
+        jobs.append((parts[1], parts[0], parts[2]))
     return jobs
 
 def edit_conf_url(runner : nightlies.NightlyRunner) -> Optional[str]:
