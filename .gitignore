@@ -10,3 +10,4 @@ conf/
 secrets/
 nightly-test/
 __pycache__
+.worktrees
