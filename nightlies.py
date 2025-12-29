@@ -308,7 +308,7 @@ class NightlyRunner:
                 to = parse_time(branch.repo.config.get("timeout"))
                 cmd = SYSTEMD_RUN_CMD + [
                     "python3", "runner.py",
-                    str(self.config_file), repo_full_name, branch.name
+                    str(self.config_file), repo_full_name, branch.name, log_name
                 ]
                 self.log(1, f"Executing {format_cmd(cmd)}")
                 
@@ -350,6 +350,9 @@ class Repository:
         self.runnable : List[Branch] = []
 
         slack_channel = configuration.get("slack")
+        if slack_channel and slack_channel not in self.runner.secrets:
+            self.runner.log(1, f"Unknown slack channel `{slack_channel}` for repo `{name}`")
+            slack_channel = None
         slack_token = self.runner.secrets[slack_channel]["slack"] if slack_channel else None
         self.slack = slack.make_output(slack_token, name)
 
@@ -536,9 +539,7 @@ class Branch:
         self.report_dir = self.dir / self.repo.report_dir_name if self.repo.report_dir_name else None
         self.image_file = self.report_dir / self.repo.image_file_name if self.report_dir and self.repo.image_file_name else None
 
-        slack_channel = repo.config.get("slack")
-        slack_token = repo.runner.secrets[slack_channel]["slack"] if slack_channel else None
-        self.slack = slack.make_output(slack_token, repo.name)
+        self.slack = repo.slack
 
     def last_run(self) -> float:
         return float(self.config.get("time", "inf"))

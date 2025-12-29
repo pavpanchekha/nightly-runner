@@ -33,7 +33,7 @@ class Config:
     def get_slack_token(self, repo_name: str) -> Optional[str]:
         repo_config = self.config[repo_name]
         slack_channel = repo_config.get("slack")
-        if not slack_channel:
+        if not slack_channel or slack_channel not in self.secrets:
             return None
         return self.secrets[slack_channel]["slack"]
 

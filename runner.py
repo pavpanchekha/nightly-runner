@@ -79,10 +79,19 @@ def save_metadata(metadata_file: Path, data: Dict[str, Any]) -> None:
     with metadata_file.open("w") as f:
         json.dump(data, f)
 
-def run_branch(bc: config.BranchConfig) -> int:
+def run_branch(bc: config.BranchConfig, log_name: str) -> int:
     print(f"Running branch {bc.branch_name} on repo {bc.repo_name}")
     info: Dict[str, str] = {}
     slack_output = slack.make_output(bc.slack_token, bc.repo_name)
+
+    if bc.base_url:
+        import urllib.parse
+        info["logurl"] = bc.base_url + "logs/" + urllib.parse.quote(log_name)
+
+    out = subprocess.run(
+        ["git", "-C", bc.branch_dir, "rev-parse", f"origin/{bc.branch_name}"],
+        capture_output=True, check=True
+    ).stdout.decode("ascii").strip()
 
     start = datetime.now()
     try:
@@ -107,11 +116,6 @@ def run_branch(bc: config.BranchConfig) -> int:
     else:
         print(f"Successfully ran on branch {bc.branch_name}")
         failure = ""
-
-    out = subprocess.run(
-        ["git", "-C", bc.branch_dir, "rev-parse", f"origin/{bc.branch_name}"],
-        capture_output=True, check=True
-    ).stdout.decode("ascii").strip()
 
     metadata = read_metadata(bc.metadata_file)
     metadata["commit"] = out
@@ -180,14 +184,14 @@ def run_branch(bc: config.BranchConfig) -> int:
 
 
 def main() -> int:
-    if len(sys.argv) != 4:
-        print(f"Usage: {sys.argv[0]} <config_file> <repo> <branch>", file=sys.stderr)
+    if len(sys.argv) != 5:
+        print(f"Usage: {sys.argv[0]} <config_file> <repo> <branch> <log_name>", file=sys.stderr)
         return 2
-    
-    config_file, repo, branch = sys.argv[1], sys.argv[2], sys.argv[3]
+
+    config_file, repo, branch, log_name = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
     cfg = config.Config(config_file)
     bc = config.BranchConfig(cfg, repo, branch)
-    return run_branch(bc)
+    return run_branch(bc, log_name)
 
 
 if __name__ == "__main__":
