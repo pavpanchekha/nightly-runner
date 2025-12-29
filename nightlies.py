@@ -248,12 +248,9 @@ class NightlyRunner:
                 self.log(1, f"Executing {format_cmd(cmd)}")
 
                 process = subprocess.Popen(cmd, stdin=subprocess.DEVNULL)
-                try:
-                    returncode = process.wait()
-                    if returncode:
-                        raise subprocess.CalledProcessError(returncode, cmd)
-                finally:
-                    subprocess.run(["scancel", f"--name={job_name}"], check=False)
+                returncode = process.wait()
+                if returncode:
+                    raise subprocess.CalledProcessError(returncode, cmd)
             except subprocess.CalledProcessError as e:
                 msg = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
                 self.log(1, msg)
