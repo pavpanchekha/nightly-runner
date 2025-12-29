@@ -15,6 +15,7 @@
 %end
 
 %if current:
+  %# NR (Nightly Runner) section
   %if "pid" in current and "start" in current and "log" in current:
   <div>
     <form action="{{baseurl}}/logs/{{Path(current['log']).name}}" method="get" class="inline">
@@ -26,33 +27,41 @@
     Nightly {{ "" if running else "was" }} running
     for {{format_time((datetime.now() - datetime.fromisoformat(current["start"])).total_seconds())}}
     on PID <kbd>{{current["pid"]}}</kbd>
-    %if "runs_done" in current and "runs_total" in current:
-    (on nightly {{current["runs_done"]+1}}/{{current["runs_total"]}})
+    %if "nr_action" in current:
+    ({{current["nr_action"]}} <kbd>{{current.get("nr_repo", "")}}</kbd>)
     %end
   </div>
-  %if "repo" in current:
+  %end
+
+  %# BR (Branch Run) section - list of running branches
+  %for br in current.get("branches", []):
   <div class="indent">
-    %if "branch_log" in current:
-    <form action="{{baseurl}}/logs/{{quote(current['branch_log'])}}" method="get" class="inline">
+    %if "log" in br:
+    <form action="{{baseurl}}/logs/{{quote(br['log'])}}" method="get" class="inline">
       <button>Output</button>
-    </form> 
+    </form>
     <form action="{{baseurl}}/killbranch" method="post" class="inline">
+      <input type="hidden" name="pid" value="{{br.get('pid', '')}}">
       <button>Kill</button>
-    </form> 
+    </form>
     %end
-    {{ "Now" if running else "Was" }}
-    %if "branch" in current:
-    running <kbd>{{current['branch']}}</kbd>
-    %else:
-    doing bookkeeping
+    {{ "Running" if br.get("running") else "Was running" }} <kbd>{{br["repo"]}}#{{br["branch"]}}</kbd>
+    %if "start" in br:
+    for {{format_time((datetime.now() - datetime.fromisoformat(br["start"])).total_seconds())}}
     %end
-    for <kbd>{{current["repo"]}}</kbd>
-    %if last_print:
-    (last print {{format_time(last_print)}} ago)
+    %if br.get("last_print"):
+    (last print {{format_time(br["last_print"])}} ago)
     %end
   </div>
   %end
+
+  %# Progress section
+  %if "runs_done" in current and "runs_total" in current:
+  <div class="indent">
+    {{current["runs_done"]}}/{{current["runs_total"]}} done.
+  </div>
   %end
+
   %if not running:
   <div>
     <form action="{{baseurl}}/delete_pid" method="post" class="inline">
@@ -63,4 +72,3 @@
   %end
 %end
 </header>
-
