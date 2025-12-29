@@ -305,19 +305,18 @@ class NightlyRunner:
                     continue
 
                 repo_full_name = branch.repo.gh_name or branch.repo.name
-                to = parse_time(branch.repo.config.get("timeout"))
                 cmd = SYSTEMD_RUN_CMD + [
                     "python3", "runner.py",
                     str(self.config_file), repo_full_name, branch.name, log_name
                 ]
                 self.log(1, f"Executing {format_cmd(cmd)}")
-                
+
                 with (self.log_dir / log_name).open("wt") as fd:
                     process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
                     self.data["branch_pid"] = process.pid
                     self.save()
                     try:
-                        returncode = process.wait(timeout=to)
+                        returncode = process.wait()
                         if returncode:
                             raise subprocess.CalledProcessError(returncode, cmd)
                     finally:

@@ -16,13 +16,7 @@ def format_time(ts: float) -> str:
         return f"{t/60/60:.1f}h"
 
 def format_cmd(s: Sequence[str | Path]) -> str:
-    if hasattr(shlex, "join"):
-        return shlex.join([str(part) for part in s])
-    else:
-        return " ".join([
-            str(part) if " " not in str(part) else '"{}"'.format(part)
-            for part in s
-        ])
+    return shlex.join([str(part) for part in s])
 
 def parse_time(to: str | None) -> float | None:
     if to is None:
