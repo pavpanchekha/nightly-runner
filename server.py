@@ -197,16 +197,14 @@ def kill():
 
 @bottle.post("/killbranch")
 def killbranch():
-    runner = nightlies.NightlyRunner(CONF_FILE)
-    runner.load()
-    runner.load_pid()
-    if runner.data and "branch_pid" in runner.data:
+    pid = bottle.request.forms.get('pid')
+    if pid:
         try:
-            os.kill(runner.data["branch_pid"], signal.SIGTERM)
-        except OSError as e:
-            print("/killbranch: OSError:", str(e))
+            os.kill(int(pid), signal.SIGTERM)
+        except (OSError, ValueError) as e:
+            print("/killbranch: error:", str(e))
     else:
-        print("/killbranch: no PID file")
+        print("/killbranch: no PID provided")
 
     bottle.redirect("/")
     
