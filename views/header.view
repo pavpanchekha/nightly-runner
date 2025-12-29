@@ -41,7 +41,7 @@
       <button>Output</button>
     </form>
     <form action="{{baseurl}}/killbranch" method="post" class="inline">
-      <input type="hidden" name="job_name" value="{{br.get('job_name', '')}}">
+      <input type="hidden" name="job_id" value="{{br.get('job_id', '')}}">
       <button>Kill</button>
     </form>
     %end
