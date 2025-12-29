@@ -10,15 +10,6 @@ import shlex, shutil
 import slack, apt
 import urllib.request, urllib.error
 
-def format_time(ts : float) -> str:
-    t = float(ts)
-    if t < 120:
-        return f"{t:.1f}s"
-    elif t < 120*60:
-        return f"{t/60:.1f}m"
-    else:
-        return f"{t/60/60:.1f}h"
-    
 def format_cmd(s : Sequence[Union[str, Path]]) -> str:
     if hasattr(shlex, "join"):
         return shlex.join([str(part) for part in s])
@@ -28,57 +19,8 @@ def format_cmd(s : Sequence[Union[str, Path]]) -> str:
             for part in s
         ])
 
-def parse_time(to : Optional[str]) -> Optional[float]:
-    if to is None: return to
-    units = {
-        "hr": 3600, "h": 3600,
-        "min": 60, "m": 60,
-        "sec": 1, "s": 1,
-    }
-    for unit, multiplier in units.items():
-        if to.endswith(unit):
-            return float(to[:-len(unit)]) * multiplier
-    return float(to)
-
-def parse_size(size: Optional[str]) -> Optional[int]:
-    if size is None: return size
-    units = {
-        "kb": 1024, "k": 1024,
-        "mb": 1024**2, "m": 1024**2,
-        "gb": 1024**3, "g": 1024**3,
-    }
-    size = size.lower()
-    for unit, multiplier in units.items():
-        if size.endswith(unit):
-            return int(float(size.removesuffix(unit)) * multiplier)
-    return int(size)
-
-def format_size(size: int) -> str:
-    units = ["KB", "MB", "GB", "TB", "PB"]
-    s = float(size) / 1024
-    for unit in units:
-        if s < 1024:
-            break
-        s /= 1024
-    return f"{s:.2f}{unit}"
-
 def repo_to_url(repo : str) -> str:
     return "git@github.com:" + repo + ".git"
-
-def copything(src : Path, dst : Path) -> None:
-    if src.is_dir():
-        shutil.copytree(src, dst)
-    else:
-        shutil.copy2(src, dst)
-
-def gzip_matching_files(directory : Path, globs : List[str]) -> None:
-    # Authored by ChatGPT 4o
-    for path in directory.rglob("*"):
-        if path.is_file() and any(path.match(g) for g in globs):
-            gz_path = path.with_suffix(path.suffix + ".gz")
-            with path.open("rb") as f_in, gzip.open(gz_path, "wb", compresslevel=9) as f_out:
-                shutil.copyfileobj(f_in, f_out)
-            path.unlink()  # Remove original file
 
 SYSTEMD_SLICE = "nightlies.slice"
 
