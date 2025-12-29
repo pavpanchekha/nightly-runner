@@ -241,7 +241,7 @@ class NightlyRunner:
                     f"--job-name={job_name}",
                     f"--output={log_path}",
                     f"--error={log_path}",
-                    "python3", "runner.py",
+                    sys.executable, "runner.py",
                     str(self.config_file), repo_full_name, branch.name, log_name
                 ]
                 self.log(1, f"Executing {format_cmd(cmd)}")
