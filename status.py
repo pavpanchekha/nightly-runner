@@ -1,6 +1,7 @@
 import dbus
 from dataclasses import dataclass
 import shutil
+import subprocess
 
 bus = dbus.SystemBus()
 systemd = bus.get_object("org.freedesktop.systemd1", "/org/freedesktop/systemd1")
@@ -68,11 +69,18 @@ def disk_state(path):
     pct = df.used / df.total * 100
     return f"{pct:.1f}%", df.free > (10 << 30)
 
+def slurm_state():
+    result = subprocess.run(["squeue", "--version"], capture_output=True, text=True)
+    if result.returncode != 0:
+        return "unavailable", False
+    return "available", True
+
 def system_state_html():
     pieces = [
         to_html("Timer", timer_state()),
         to_html("Service", service_state()),
         to_html("Server", server_state()),
+        to_html("SLURM", slurm_state()),
         to_html("<tt>/data</tt>", disk_state("/data/")),
         to_html("<tt>/home</tt>", disk_state("/home")),
     ]

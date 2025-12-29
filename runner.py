@@ -187,9 +187,6 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
 
 
 def main() -> int:
-    import os
-    os.chdir(Path(__file__).parent.resolve())
-    
     if len(sys.argv) != 5:
         print(f"Usage: {sys.argv[0]} <config_file> <repo> <branch> <log_name>", file=sys.stderr)
         return 2

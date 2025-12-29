@@ -16,6 +16,24 @@ import status
 
 CONF_FILE = "conf/nightlies.conf"
 
+def get_nightly_jobs() -> list[tuple[str, str, str]]:
+    """Query slurm for running nightly jobs, returns list of (job_id, job_name, stdout_path)."""
+    result = subprocess.run(
+        ["squeue", "--name=nightly-*", "--format=%i %j %o", "--noheader"],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        print(f"get_nightly_jobs: squeue failed: {result.stderr}", file=sys.stderr)
+        return []
+    jobs = []
+    for line in result.stdout.splitlines():
+        parts = line.strip().split(None, 2)
+        if not parts:
+            continue
+        assert len(parts) == 3, f"unexpected squeue output: {line!r}"
+        jobs.append((parts[0], parts[1], parts[2]))
+    return jobs
+
 def edit_conf_url(runner : nightlies.NightlyRunner) -> Optional[str]:
     if "confedit" in runner.config.defaults():
         return runner.config.defaults()["confedit"]
@@ -48,34 +66,30 @@ def load():
             running = True
 
     current = dict(runner.data) if runner.data else None
+    jobs = get_nightly_jobs()
 
     if current and "repo" in current:
-        current["nr_action"] = "waiting" if current.get("branch") else "syncing"
+        current["nr_action"] = "running" if jobs else "syncing"
         current["nr_repo"] = current["repo"]
-        if "branch_log" in current:
+        current["branches"] = []
+        for job_id, job_name, log_file in jobs:
+            # Parse job name: nightly-{repo}-{branch}
+            parts = job_name.split("-", 2)
+            branch_name = parts[2] if len(parts) > 2 else ""
             last_print = None
             try:
-                log_file = runner.log_dir / current["branch_log"]
-                last_print = time.time() - os.path.getmtime(str(log_file))
+                last_print = time.time() - os.path.getmtime(log_file)
             except FileNotFoundError:
-                running = False
-            br_pid = current.get("branch_pid")
-            br_running = False
-            if br_pid:
-                try:
-                    os.kill(br_pid, 0)
-                    br_running = True
-                except OSError:
-                    pass
-            current["branches"] = [{
+                pass
+            current["branches"].append({
                 "repo": current["repo"],
-                "branch": current.get("branch", ""),
-                "pid": br_pid,
-                "log": current["branch_log"],
-                "start": current.get("start"),
+                "branch": branch_name,
+                "job_id": job_id,
+                "job_name": job_name,
+                "log": Path(log_file).name,
                 "last_print": last_print,
-                "running": br_running,
-            }]
+                "running": True,
+            })
 
     logins = set([
         line.split()[0].decode("utf8", errors="replace")
@@ -182,30 +196,28 @@ def rmbranch():
 
 @bottle.post("/kill")
 def kill():
+    for job_id, _, _ in get_nightly_jobs():
+        subprocess.run(["scancel", job_id], check=False)
     runner = nightlies.NightlyRunner(CONF_FILE)
     runner.load()
     runner.load_pid()
-    if runner.data and "branch_pid" in runner.data:
+    pid = (runner.data or {}).get("pid")
+    if pid is not None:
         try:
-            os.kill(runner.data["pid"], signal.SIGTERM)
-            runner.pid_file.unlink()
+            os.kill(pid, signal.SIGTERM)
         except OSError as e:
-            print("/kill: OSError:", str(e))
-    else:
-        print("/kill: no PID file")
+            print("/kill: OSError:", str(e), file=sys.stderr)
+    if runner.pid_file.exists():
+        runner.pid_file.unlink()
     bottle.redirect("/")
 
 @bottle.post("/killbranch")
 def killbranch():
-    pid = bottle.request.forms.get('pid')
-    if pid:
-        try:
-            os.kill(int(pid), signal.SIGTERM)
-        except (OSError, ValueError) as e:
-            print("/killbranch: error:", str(e))
+    job_id = bottle.request.forms.get('job_id')
+    if job_id:
+        subprocess.run(["scancel", job_id], check=False)
     else:
-        print("/killbranch: no PID provided")
-
+        print("/killbranch: no job_id provided", file=sys.stderr)
     bottle.redirect("/")
     
 @bottle.post("/delete_pid")
