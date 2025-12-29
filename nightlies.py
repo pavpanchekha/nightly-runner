@@ -305,8 +305,9 @@ class NightlyRunner:
                     continue
 
                 repo_full_name = branch.repo.gh_name or branch.repo.name
+                runner_py = Path(__file__).parent.resolve() / "runner.py"
                 cmd = SYSTEMD_RUN_CMD + [
-                    "python3", "runner.py",
+                    "python3", str(runner_py),
                     str(self.config_file), repo_full_name, branch.name, log_name
                 ]
                 self.log(1, f"Executing {format_cmd(cmd)}")
