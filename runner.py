@@ -1,29 +1,10 @@
 #!/usr/bin/env python3
 
-from typing import TYPE_CHECKING, Any, Dict, List, Sequence, Union
+from typing import Any, Dict, List, Sequence, Union
 from datetime import datetime
 from pathlib import Path
-import gzip, os, shlex, shutil, subprocess, time
-import slack
-
-if TYPE_CHECKING:
-    from nightlies import Branch
-
-SYSTEMD_SLICE = "nightlies.slice"
-
-SYSTEMD_RUN_CMD = [
-    "sudo",
-    "systemd-run",
-    "--collect",
-    "--wait",
-    "--pty",
-    f"--uid={os.getuid()}",
-    f"--gid={os.getgid()}",
-    f"--slice={SYSTEMD_SLICE}",
-    "--property=Delegate=yes",
-    "--service-type=simple",
-    "--setenv=TERM=dumb",
-]
+import gzip, json, shlex, shutil, subprocess, sys, time
+import config, slack
 
 def format_time(ts: float) -> str:
     t = float(ts)
@@ -44,24 +25,18 @@ def format_cmd(s: Sequence[Union[str, Path]]) -> str:
         ])
 
 def parse_time(to: str | None) -> float | None:
-    if to is None: return to
-    units = {
-        "hr": 3600, "h": 3600,
-        "min": 60, "m": 60,
-        "sec": 1, "s": 1,
-    }
+    if to is None:
+        return to
+    units = {"hr": 3600, "h": 3600, "min": 60, "m": 60, "sec": 1, "s": 1}
     for unit, multiplier in units.items():
         if to.endswith(unit):
             return float(to[:-len(unit)]) * multiplier
     return float(to)
 
 def parse_size(size: str | None) -> int | None:
-    if size is None: return size
-    units = {
-        "kb": 1024, "k": 1024,
-        "mb": 1024**2, "m": 1024**2,
-        "gb": 1024**3, "g": 1024**3,
-    }
+    if size is None:
+        return size
+    units = {"kb": 1024, "k": 1024, "mb": 1024**2, "m": 1024**2, "gb": 1024**3, "g": 1024**3}
     size = size.lower()
     for unit, multiplier in units.items():
         if size.endswith(unit):
@@ -91,64 +66,69 @@ def gzip_matching_files(directory: Path, globs: List[str]) -> None:
                 shutil.copyfileobj(f_in, f_out)
             path.unlink()
 
-def run_branch(branch: "Branch", log_name: str) -> None:
-    branch.repo.runner.log(0, f"Running branch {branch.name} on repo {branch.repo.name}")
-    info: Dict[str, str] = {}
-
-    if branch.repo.runner.base_url:
-        import urllib.parse
-        info["logurl"] = branch.repo.runner.base_url + "logs/" + urllib.parse.quote(log_name)
-
-    t = datetime.now()
-    try:
-        to = parse_time(branch.repo.config.get("timeout"))
-        cmd = SYSTEMD_RUN_CMD + ["make", "-C", str(branch.dir), "nightly"]
-        branch.repo.runner.log(1, f"Executing {format_cmd(cmd)}")
-        if branch.report_dir:
-            if branch.report_dir.exists():
-                shutil.rmtree(branch.report_dir, ignore_errors=True)
-            branch.report_dir.mkdir(parents=True, exist_ok=True)
-
-        with (branch.repo.runner.log_dir / log_name).open("wt") as fd:
-            process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
-            branch.repo.runner.data["branch_pid"] = process.pid
-            branch.repo.runner.save()
+def read_metadata(metadata_file: Path) -> Dict[str, Any]:
+    if metadata_file.exists():
+        with metadata_file.open() as f:
             try:
-                returncode = process.wait(timeout=to)
-                if returncode: raise subprocess.CalledProcessError(returncode, cmd)
-            finally:
-                process.kill()
-                branch.repo.runner.exec(2, ["sudo", "systemctl", "stop", "nightlies.slice"])
+                return json.load(f)
+            except json.JSONDecodeError:
+                pass
+    return {}
+
+def save_metadata(metadata_file: Path, data: Dict[str, Any]) -> None:
+    with metadata_file.open("w") as f:
+        json.dump(data, f)
+
+def run_branch(bc: config.BranchConfig) -> int:
+    print(f"Running branch {bc.branch_name} on repo {bc.repo_name}")
+    info: Dict[str, str] = {}
+    slack_output = slack.make_output(bc.slack_token, bc.repo_name)
+
+    start = datetime.now()
+    try:
+        to = parse_time(bc.timeout)
+        cmd = ["make", "-C", str(bc.branch_dir), "nightly"]
+        print(f"Executing {format_cmd(cmd)}")
+        
+        if bc.report_dir:
+            if bc.report_dir.exists():
+                shutil.rmtree(bc.report_dir, ignore_errors=True)
+            bc.report_dir.mkdir(parents=True, exist_ok=True)
+
+        result = subprocess.run(cmd, timeout=to)
+        if result.returncode:
+            raise subprocess.CalledProcessError(result.returncode, cmd)
 
     except subprocess.TimeoutExpired as e:
-        branch.repo.runner.log(1, f"Run on branch {branch.name} timed out after {format_time(e.timeout)}")
+        print(f"Run on branch {bc.branch_name} timed out after {format_time(e.timeout)}")
         failure = "timeout"
-    except subprocess.CalledProcessError as e:
+    except subprocess.CalledProcessError:
         failure = "failure"
     else:
-        branch.repo.runner.log(1, f"Successfully ran on branch {branch.name}")
+        print(f"Successfully ran on branch {bc.branch_name}")
         failure = ""
 
-    out = (
-        branch.repo.runner.exec(
-            2, ["git", "-C", branch.dir, "rev-parse", f"origin/{branch.name}"]
-        ).stdout.decode("ascii").strip()
-    )
-    branch.config["commit"] = out
-    branch.config["time"] = time.time()
-    branch.save_metadata()
+    out = subprocess.run(
+        ["git", "-C", bc.branch_dir, "rev-parse", f"origin/{bc.branch_name}"],
+        capture_output=True, check=True
+    ).stdout.decode("ascii").strip()
 
-    if branch.report_dir and branch.report_dir.exists():
+    metadata = read_metadata(bc.metadata_file)
+    metadata["commit"] = out
+    metadata["time"] = time.time()
+    save_metadata(bc.metadata_file, metadata)
+
+    if bc.report_dir and bc.report_dir.exists():
         try:
-            if branch.repo.config.get("gzip", ""):
-                branch.repo.runner.log(2, f"GZipping all {branch.repo.config.get('gzip', '')} files")
-                gzip_matching_files(branch.report_dir, shlex.split(branch.repo.config.get("gzip", "")))
+            if bc.gzip:
+                print(f"GZipping all {bc.gzip} files")
+                gzip_matching_files(bc.report_dir, shlex.split(bc.gzip))
 
-            warn_size = parse_size(branch.repo.config.get("warn_size", "1gb"))
+            warn_size = parse_size(bc.warn_size)
             total = 0
             biggest = None
             biggest_size = 0
-            for root, _, files in branch.report_dir.walk():
+            for root, _, files in bc.report_dir.walk():
                 for name in files:
                     path = root / name
                     size = path.stat().st_size
@@ -158,52 +138,57 @@ def run_branch(branch: "Branch", log_name: str) -> None:
                         biggest = path
             if warn_size and total > warn_size:
                 assert biggest is not None
-                rel = biggest.relative_to(branch.report_dir)
+                rel = biggest.relative_to(bc.report_dir)
                 msg = f"Report size {format_size(total)} exceeds limit {format_size(warn_size)}; largest file `{rel}`"
-                branch.repo.runner.log(1, f"Report `{branch.name}` is {format_size(total)}; largest file `{rel}`")
-                if branch.slack:
-                    branch.slack.warn("report-size", msg)
+                print(f"Report `{bc.branch_name}` is {format_size(total)}; largest file `{rel}`")
+                if slack_output:
+                    slack_output.warn("report-size", msg)
 
-            if "url" not in info:
-                assert branch.repo.runner.base_url, f"Cannot publish, no baseurl configured"
-                name = f"{int(time.time())}:{branch.filename}:{out[:8]}"
-                dest_dir = branch.repo.runner.report_dir / branch.repo.name / name
+            if "url" not in info and bc.base_url:
+                name = f"{int(time.time())}:{bc.branch_filename}:{out[:8]}"
+                dest_dir = bc.reports_dir / bc.repo_name / name
 
-                if branch.report_dir.exists():
-                    branch.repo.runner.log(2, f"Publishing report directory {branch.report_dir} to {dest_dir}")
-                    copything(branch.report_dir, dest_dir)
-                    url_base = branch.repo.runner.base_url + "reports/" + branch.repo.name + "/" + name
+                if bc.report_dir.exists():
+                    print(f"Publishing report directory {bc.report_dir} to {dest_dir}")
+                    copything(bc.report_dir, dest_dir)
+                    url_base = bc.base_url + "reports/" + bc.repo_name + "/" + name
                     info["url"] = url_base
-                    if branch.image_file and branch.image_file.exists():
-                        branch.repo.runner.log(2, f"Linking image file {branch.image_file}")
-                        path = branch.image_file.relative_to(branch.report_dir)
+                    if bc.image_file and bc.image_file.exists():
+                        print(f"Linking image file {bc.image_file}")
+                        path = bc.image_file.relative_to(bc.report_dir)
                         info["img"] = url_base + "/" + str(path)
-                    shutil.rmtree(branch.report_dir, ignore_errors=True)
+                    shutil.rmtree(bc.report_dir, ignore_errors=True)
                 else:
-                    branch.repo.runner.log(2, f"Report directory {branch.report_dir} does not exist")
+                    print(f"Report directory {bc.report_dir} does not exist")
         except OSError as e:
             msg = f"Error saving report: {e}"
-            branch.repo.runner.log(1, f"Error saving report for `{branch.name}`: {e}")
-            if branch.slack:
-                branch.slack.warn("broken-report", msg)
+            print(f"Error saving report for `{bc.branch_name}`: {e}")
+            if slack_output:
+                slack_output.warn("broken-report", msg)
 
     info["result"] = f"*{failure}*" if failure else "success"
-    info["time"] = format_time((datetime.now() - t).seconds)
+    info["time"] = format_time((datetime.now() - start).seconds)
 
-    log_file = branch.repo.runner.log_dir / log_name
-    if log_file.exists() and log_file.stat().st_size > 10 * 1024 * 1024:
-        size = log_file.stat().st_size
-        msg = (
-            f"Log file for branch {branch.name} in {branch.repo.name} "
-            f"seems too big at {size/1024/1024:.1f}MB"
-        )
-        branch.repo.runner.log(1, msg)
-        if branch.slack:
-            branch.slack.warn("log-size", msg)
-
-    if branch.slack:
-        branch.repo.runner.log(1, "Posting results of run to slack!")
+    if slack_output:
+        print("Posting results of run to slack!")
         try:
-            branch.slack.post(branch.name, info)
+            slack_output.post(bc.branch_name, info)
         except slack.SlackError as e:
-            branch.repo.runner.log(2, f"Slack error: {e}")
+            print(f"Slack error: {e}")
+
+    return 1 if failure else 0
+
+
+def main() -> int:
+    if len(sys.argv) != 4:
+        print(f"Usage: {sys.argv[0]} <config_file> <repo> <branch>", file=sys.stderr)
+        return 2
+    
+    config_file, repo, branch = sys.argv[1], sys.argv[2], sys.argv[3]
+    cfg = config.Config(config_file)
+    bc = config.BranchConfig(cfg, repo, branch)
+    return run_branch(bc)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

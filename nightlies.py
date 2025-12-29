@@ -7,7 +7,7 @@ from pathlib import Path
 import configparser
 import json
 import shlex, shutil
-import slack, apt, runner
+import slack, apt
 import urllib.request, urllib.error
 
 def format_time(ts : float) -> str:
@@ -304,7 +304,25 @@ class NightlyRunner:
                     self.log(0, f"Dry-run: skipping branch {branch.name} on repo {branch.repo.name}")
                     continue
 
-                runner.run_branch(branch, log_name)
+                repo_full_name = branch.repo.gh_name or branch.repo.name
+                to = parse_time(branch.repo.config.get("timeout"))
+                cmd = SYSTEMD_RUN_CMD + [
+                    "python3", "runner.py",
+                    str(self.config_file), repo_full_name, branch.name
+                ]
+                self.log(1, f"Executing {format_cmd(cmd)}")
+                
+                with (self.log_dir / log_name).open("wt") as fd:
+                    process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+                    self.data["branch_pid"] = process.pid
+                    self.save()
+                    try:
+                        returncode = process.wait(timeout=to)
+                        if returncode:
+                            raise subprocess.CalledProcessError(returncode, cmd)
+                    finally:
+                        process.kill()
+                        self.exec(2, ["sudo", "systemctl", "stop", "nightlies.slice"])
             except subprocess.CalledProcessError as e:
                 msg = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
                 self.log(1, msg)
