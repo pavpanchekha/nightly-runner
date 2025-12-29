@@ -274,11 +274,11 @@ class Repository:
         self.config = configuration
         self.runnable : List[Branch] = []
 
-        slack_channel = configuration.get("slack")
-        if slack_channel and slack_channel not in self.runner.secrets:
-            self.runner.log(1, f"Unknown slack channel `{slack_channel}` for repo `{name}`")
-            slack_channel = None
-        slack_token = self.runner.secrets[slack_channel]["slack"] if slack_channel else None
+        self.slack_channel = configuration.get("slack")
+        if self.slack_channel and self.slack_channel not in self.runner.secrets:
+            self.runner.log(1, f"Unknown slack channel `{self.slack_channel}` for repo `{name}`")
+            self.slack_channel = None
+        slack_token = self.runner.secrets[self.slack_channel]["slack"] if self.slack_channel else None
         self.slack = slack.make_output(slack_token, name)
 
         if self.config.get("url"): # Reserved for local testing
