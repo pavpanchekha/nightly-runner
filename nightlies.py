@@ -22,20 +22,10 @@ def format_cmd(s : Sequence[Union[str, Path]]) -> str:
 def repo_to_url(repo : str) -> str:
     return "git@github.com:" + repo + ".git"
 
-SYSTEMD_SLICE = "nightlies.slice"
-
-SYSTEMD_RUN_CMD = [
-    "sudo", # There might not be a user session manager, so run using root's
-    "systemd-run",
-    "--collect", # If it fails, throw it away
-    "--wait", # Wait for it to finish
-    "--pty", # Pass through stdio
-    f"--uid={os.getuid()}", # As the current user
-    f"--gid={os.getgid()}", # As the current group
-    f"--slice={SYSTEMD_SLICE}", # Run with the nightly resource limits
-    "--property=Delegate=yes", # Spawned Docker instances inherit resource limits
-    "--service-type=simple", # It just execs a program
-    "--setenv=TERM=dumb", # Disable color codes in logs
+SRUN_CMD = [
+    "srun",
+    "--exclusive", # Full node, mimic current systemd behavior
+    "--export=TERM=dumb", # Disable color codes in logs
 ]
 
 REPO_BADGES = [
@@ -236,8 +226,6 @@ class NightlyRunner:
                 log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{branch.repo.name}-{branch.filename}.log"
 
                 self.data["repo"] = branch.repo.name
-                self.data["branch"] = branch.name
-                self.data["branch_log"] = log_name
                 self.data["runs_done"] = i
                 self.data["runs_total"] = len(plan)
                 self.save()
@@ -247,24 +235,25 @@ class NightlyRunner:
                     continue
 
                 repo_full_name = branch.repo.gh_name or branch.repo.name
+                job_name = f"nightly-{branch.repo.name}-{branch.name}"
+                log_path = self.log_dir / log_name
                 runner_py = Path(__file__).parent.resolve() / "runner.py"
-                cmd = SYSTEMD_RUN_CMD + [
+                cmd = SRUN_CMD + [
+                    f"--job-name={job_name}",
+                    f"--output={log_path}",
+                    f"--error={log_path}",
                     "python3", str(runner_py),
                     str(self.config_file), repo_full_name, branch.name, log_name
                 ]
                 self.log(1, f"Executing {format_cmd(cmd)}")
 
-                with (self.log_dir / log_name).open("wt") as fd:
-                    process = subprocess.Popen(cmd, stdout=fd, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
-                    self.data["branch_pid"] = process.pid
-                    self.save()
-                    try:
-                        returncode = process.wait()
-                        if returncode:
-                            raise subprocess.CalledProcessError(returncode, cmd)
-                    finally:
-                        process.kill()
-                        self.exec(2, ["sudo", "systemctl", "stop", "nightlies.slice"])
+                process = subprocess.Popen(cmd, stdin=subprocess.DEVNULL)
+                try:
+                    returncode = process.wait()
+                    if returncode:
+                        raise subprocess.CalledProcessError(returncode, cmd)
+                finally:
+                    subprocess.run(["scancel", f"--name={job_name}"], check=False)
             except subprocess.CalledProcessError as e:
                 msg = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
                 self.log(1, msg)
@@ -275,9 +264,7 @@ class NightlyRunner:
                         self.log(2, f"Slack error: {e}")
             finally:
                 del self.data["repo"]
-                del self.data["branch"]
-                if "branch_log" in self.data: del self.data["branch_log"]
-                if "branch_pid" in self.data: del self.data["branch_pid"]
+
                 # del self.data["runs_done"]
                 # del self.data["runs_total"]
                 self.save()

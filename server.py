@@ -16,6 +16,19 @@ import status
 
 CONF_FILE = "conf/nightlies.conf"
 
+def get_nightly_jobs() -> list[tuple[str, str]]:
+    """Query slurm for running nightly jobs, returns list of (job_name, stdout_path)."""
+    result = subprocess.run(
+        ["squeue", "--name=nightly-*", "--format=%j %o", "--noheader"],
+        capture_output=True, text=True
+    )
+    jobs = []
+    for line in result.stdout.splitlines():
+        parts = line.strip().split(None, 1)
+        if len(parts) == 2:
+            jobs.append((parts[0], parts[1]))
+    return jobs
+
 def edit_conf_url(runner : nightlies.NightlyRunner) -> Optional[str]:
     if "confedit" in runner.config.defaults():
         return runner.config.defaults()["confedit"]
@@ -48,34 +61,29 @@ def load():
             running = True
 
     current = dict(runner.data) if runner.data else None
+    jobs = get_nightly_jobs()
 
     if current and "repo" in current:
-        current["nr_action"] = "waiting" if current.get("branch") else "syncing"
+        current["nr_action"] = "running" if jobs else "syncing"
         current["nr_repo"] = current["repo"]
-        if "branch_log" in current:
+        current["branches"] = []
+        for job_name, log_file in jobs:
+            # Parse job name: nightly-{repo}-{branch}
+            parts = job_name.split("-", 2)
+            branch_name = parts[2] if len(parts) > 2 else ""
             last_print = None
             try:
-                log_file = runner.log_dir / current["branch_log"]
-                last_print = time.time() - os.path.getmtime(str(log_file))
+                last_print = time.time() - os.path.getmtime(log_file)
             except FileNotFoundError:
-                running = False
-            br_pid = current.get("branch_pid")
-            br_running = False
-            if br_pid:
-                try:
-                    os.kill(br_pid, 0)
-                    br_running = True
-                except OSError:
-                    pass
-            current["branches"] = [{
+                pass
+            current["branches"].append({
                 "repo": current["repo"],
-                "branch": current.get("branch", ""),
-                "pid": br_pid,
-                "log": current["branch_log"],
-                "start": current.get("start"),
+                "branch": branch_name,
+                "job_name": job_name,
+                "log": Path(log_file).name,
                 "last_print": last_print,
-                "running": br_running,
-            }]
+                "running": True,
+            })
 
     logins = set([
         line.split()[0].decode("utf8", errors="replace")
@@ -182,30 +190,25 @@ def rmbranch():
 
 @bottle.post("/kill")
 def kill():
+    for job_name, _ in get_nightly_jobs():
+        subprocess.run(["scancel", f"--name={job_name}"], check=False)
     runner = nightlies.NightlyRunner(CONF_FILE)
     runner.load()
     runner.load_pid()
-    if runner.data and "branch_pid" in runner.data:
-        try:
-            os.kill(runner.data["pid"], signal.SIGTERM)
-            runner.pid_file.unlink()
-        except OSError as e:
-            print("/kill: OSError:", str(e))
-    else:
-        print("/kill: no PID file")
+    try:
+        os.kill(runner.data["pid"], signal.SIGTERM)
+        runner.pid_file.unlink()
+    except OSError as e:
+        print("/kill: OSError:", str(e))
     bottle.redirect("/")
 
 @bottle.post("/killbranch")
 def killbranch():
-    pid = bottle.request.forms.get('pid')
-    if pid:
-        try:
-            os.kill(int(pid), signal.SIGTERM)
-        except (OSError, ValueError) as e:
-            print("/killbranch: error:", str(e))
+    job_name = bottle.request.forms.get('job_name')
+    if job_name:
+        subprocess.run(["scancel", f"--name={job_name}"], check=False)
     else:
-        print("/killbranch: no PID provided")
-
+        print("/killbranch: no job_name provided")
     bottle.redirect("/")
     
 @bottle.post("/delete_pid")
