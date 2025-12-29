@@ -237,12 +237,11 @@ class NightlyRunner:
                 repo_full_name = branch.repo.gh_name or branch.repo.name
                 job_name = f"nightly-{branch.repo.name}-{branch.name}"
                 log_path = self.log_dir / log_name
-                runner_py = Path(__file__).parent.resolve() / "runner.py"
                 cmd = SRUN_CMD + [
                     f"--job-name={job_name}",
                     f"--output={log_path}",
                     f"--error={log_path}",
-                    "python3", str(runner_py),
+                    "python3", "runner.py",
                     str(self.config_file), repo_full_name, branch.name, log_name
                 ]
                 self.log(1, f"Executing {format_cmd(cmd)}")
