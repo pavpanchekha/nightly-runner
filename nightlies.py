@@ -223,7 +223,9 @@ class NightlyRunner:
 
             try:
                 date = datetime.now()
-                log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{branch.repo.name}-{branch.filename}.log"
+                run_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{branch.repo.name}-{branch.filename}"
+                job_name = f"nightly-{run_name}"
+                log_name = f"{run_name}.log"
 
                 self.data["repo"] = branch.repo.name
                 self.data["runs_done"] = i
@@ -235,7 +237,6 @@ class NightlyRunner:
                     continue
 
                 repo_full_name = branch.repo.gh_name or branch.repo.name
-                job_name = f"nightly-{branch.repo.name}-{branch.name}"
                 log_path = self.log_dir / log_name
                 cmd = SRUN_CMD + [
                     f"--job-name={job_name}",
