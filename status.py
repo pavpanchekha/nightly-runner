@@ -49,16 +49,6 @@ def service_state():
         return state.active, False
     return state.active, True
 
-def server_state():
-    state = get_state("nightly-server.service")
-    if state.load != "loaded":
-        return state.load, False
-    if state.file not in "enabled enabled-runtime static":
-        return state.file, False
-    if state.active != "active":
-        return state.active, False
-    return state.sub, True
-
 def to_html(name, result):
     text, ok = result
     style = "color: red" if not ok else "color: green"
@@ -79,8 +69,7 @@ def system_state_html():
     pieces = [
         to_html("Timer", timer_state()),
         to_html("Service", service_state()),
-        to_html("Server", server_state()),
-        to_html("SLURM", slurm_state()),
+        to_html("Slurm", slurm_state()),
         to_html("<tt>/data</tt>", disk_state("/data/")),
         to_html("<tt>/home</tt>", disk_state("/home")),
     ]
