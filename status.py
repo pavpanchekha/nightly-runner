@@ -69,7 +69,7 @@ def system_state_html():
     pieces = [
         to_html("Timer", timer_state()),
         to_html("Service", service_state()),
-        to_html("SLURM", slurm_state()),
+        to_html("Slurm", slurm_state()),
         to_html("<tt>/data</tt>", disk_state("/data/")),
         to_html("<tt>/home</tt>", disk_state("/home")),
     ]
