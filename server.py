@@ -70,13 +70,12 @@ def load():
     current = dict(runner.data) if runner.data else None
     jobs = get_nightly_jobs()
 
-    if current and "repo" in current:
-        current["nr_action"] = "running" if jobs else "syncing"
-        current["nr_repo"] = current["repo"]
+    if current:
         current["branches"] = []
         for job_id, run_name in jobs:
             # Parse run_name: YYYY-MM-DD-HHMMSS-{repo}-{branch}
             parts = run_name.split("-", 5)
+            repo_name = parts[4] if len(parts) > 4 else ""
             branch_name = parts[5] if len(parts) > 5 else ""
             log_path = runner.log_dir / f"{run_name}.log"
             last_print = None
@@ -85,7 +84,7 @@ def load():
             except FileNotFoundError:
                 pass
             current["branches"].append({
-                "repo": current["repo"],
+                "repo": repo_name,
                 "branch": branch_name,
                 "job_id": job_id,
                 "job_name": f"nightly-{run_name}",

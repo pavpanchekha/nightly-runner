@@ -227,11 +227,6 @@ class NightlyRunner:
                 job_name = f"nightly-{run_name}"
                 log_name = f"{run_name}.log"
 
-                self.data["repo"] = branch.repo.name
-                self.data["runs_done"] = i
-                self.data["runs_total"] = len(plan)
-                self.save()
-
                 if self.dryrun:
                     self.log(0, f"Dry-run: skipping branch {branch.name} on repo {branch.repo.name}")
                     continue
@@ -255,12 +250,6 @@ class NightlyRunner:
                         branch.slack.fatal(msg)
                     except slack.SlackError as e:
                         self.log(2, f"Slack error: {e}")
-            finally:
-                del self.data["repo"]
-
-                # del self.data["runs_done"]
-                # del self.data["runs_total"]
-                self.save()
 
         self.pid_file.unlink()
         self.log(0, "Finished nightly run for today")
