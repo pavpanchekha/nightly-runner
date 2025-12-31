@@ -22,8 +22,8 @@ def format_cmd(s : Sequence[Union[str, Path]]) -> str:
 def repo_to_url(repo : str) -> str:
     return "git@github.com:" + repo + ".git"
 
-SRUN_CMD = [
-    "srun",
+SBATCH_CMD = [
+    "sbatch",
     "--exclusive", # Full node, mimic current systemd behavior
     "--export=ALL,TERM=dumb", # Inherit env, disable color codes in logs
 ]
@@ -238,7 +238,7 @@ class NightlyRunner:
 
                 repo_full_name = branch.repo.gh_name or branch.repo.name
                 log_path = self.log_dir / log_name
-                cmd = SRUN_CMD + [
+                cmd = SBATCH_CMD + [
                     f"--job-name={job_name}",
                     f"--output={log_path}",
                     f"--error={log_path}",
@@ -246,11 +246,7 @@ class NightlyRunner:
                     str(self.config_file), repo_full_name, branch.name, log_name
                 ]
                 self.log(1, f"Executing {format_cmd(cmd)}")
-
-                process = subprocess.Popen(cmd, stdin=subprocess.DEVNULL)
-                returncode = process.wait()
-                if returncode:
-                    raise subprocess.CalledProcessError(returncode, cmd)
+                subprocess.run(cmd, stdin=subprocess.DEVNULL, check=True)
             except subprocess.CalledProcessError as e:
                 msg = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
                 self.log(1, msg)
