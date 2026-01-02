@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from typing import Optional
+from dataclasses import dataclass
 import bottle
 from pathlib import Path
 import nightlies
@@ -16,10 +17,17 @@ import status
 
 CONF_FILE = "conf/nightlies.conf"
 
-def get_nightly_jobs() -> list[tuple[str, str]]:
-    """Query slurm for running nightly jobs, returns list of (job_id, run_name)."""
+@dataclass
+class NightlyJob:
+    job_id: str
+    repo: str
+    branch: str
+    log: str
+
+def get_nightly_jobs() -> list[NightlyJob]:
+    """Query slurm for running nightly jobs."""
     result = subprocess.run(
-        ["squeue", "--Format=Name:100,JobID:20", "--noheader"],
+        ["squeue", "--Format=Name:500,JobID:500,Comment:500", "--noheader"],
         capture_output=True, text=True
     )
     if result.returncode != 0:
@@ -29,11 +37,9 @@ def get_nightly_jobs() -> list[tuple[str, str]]:
     for line in result.stdout.splitlines():
         if not line.startswith("nightly-"):
             continue
-        parts = line.strip().split()
-        assert len(parts) == 2, f"unexpected squeue output: {line!r}"
-        job_name, job_id = parts
-        run_name = job_name.removeprefix("nightly-")
-        jobs.append((job_id, run_name))
+        job_name, job_id, log = line.strip().split()
+        repo, branch = job_name.removeprefix("nightly-").split("-", 1)
+        jobs.append(NightlyJob(job_id, repo, branch, log))
     return jobs
 
 def edit_conf_url(runner : nightlies.NightlyRunner) -> Optional[str]:
@@ -74,22 +80,19 @@ def load():
         current["nr_action"] = "running" if jobs else "syncing"
         current["nr_repo"] = current["repo"]
         current["branches"] = []
-        for job_id, run_name in jobs:
-            # Parse run_name: YYYY-MM-DD-HHMMSS-{repo}-{branch}
-            parts = run_name.split("-", 5)
-            branch_name = parts[5] if len(parts) > 5 else ""
-            log_path = runner.log_dir / f"{run_name}.log"
+        for job in jobs:
             last_print = None
+            log_path = runner.log_dir / job.log
             try:
                 last_print = time.time() - os.path.getmtime(log_path)
             except FileNotFoundError:
                 pass
             current["branches"].append({
-                "repo": current["repo"],
-                "branch": branch_name,
-                "job_id": job_id,
-                "job_name": f"nightly-{run_name}",
-                "log": f"{run_name}.log",
+                "repo": job.repo,
+                "branch": job.branch,
+                "job_id": job.job_id,
+                "job_name": f"nightly-{job.repo}-{job.branch}",
+                "log": job.log,
                 "last_print": last_print,
                 "running": True,
             })
@@ -199,8 +202,8 @@ def rmbranch():
 
 @bottle.post("/kill")
 def kill():
-    for job_id, _ in get_nightly_jobs():
-        subprocess.run(["scancel", job_id], check=False)
+    for job in get_nightly_jobs():
+        subprocess.run(["scancel", job.job_id], check=False)
     runner = nightlies.NightlyRunner(CONF_FILE)
     runner.load()
     runner.load_pid()

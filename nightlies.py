@@ -223,9 +223,8 @@ class NightlyRunner:
 
             try:
                 date = datetime.now()
-                run_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{branch.repo.name}-{branch.filename}"
-                job_name = f"nightly-{run_name}"
-                log_name = f"{run_name}.log"
+                job_name = f"nightly-{branch.repo.name}-{branch.filename}"
+                log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{branch.repo.name}-{branch.filename}.log"
 
                 self.data["repo"] = branch.repo.name
                 self.data["runs_done"] = i
@@ -240,6 +239,7 @@ class NightlyRunner:
                 log_path = self.log_dir / log_name
                 cmd = SRUN_CMD + [
                     f"--job-name={job_name}",
+                    f"--comment={log_name}",
                     f"--output={log_path}",
                     f"--error={log_path}",
                     sys.executable, "runner.py",
