@@ -369,7 +369,9 @@ class Repository:
             self.clean()
 
         for branch in self.branches.values():
-            branch.load()
+            if not branch.dir.is_dir():
+                branch.create()
+            branch.read_metadata()
 
         pr_map = self.list_pr_branches()
         for name, branch in self.branches.items():
@@ -478,13 +480,9 @@ class Branch:
     def escape_filename(filename : str) -> str:
         return filename.replace("%", "_25").replace("/", "_2f")
 
-    def load(self) -> None:
-        if not self.dir.is_dir():
-            relpath = self.dir.relative_to(self.repo.dir)
-            self.repo.runner.exec(2, ["git", "-C", self.repo.checkout, "worktree", "add", ".." / relpath, self.name])
-        self.repo.runner.exec(2, ["git", "-C", self.dir, "reset", "--hard", "origin/" + self.name])
-        self.repo.runner.exec(2, ["git", "-C", self.dir, "submodule", "update", "--init", "--recursive", "--force"])
-        self.read_metadata()
+    def create(self) -> None:
+        relpath = self.dir.relative_to(self.repo.dir)
+        self.repo.runner.exec(2, ["git", "-C", self.repo.checkout, "worktree", "add", ".." / relpath, self.name])
 
     def read_metadata(self) -> None:
         self.config = {}

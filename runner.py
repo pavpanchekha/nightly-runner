@@ -18,6 +18,10 @@ def format_time(ts: float) -> str:
 def format_cmd(s: Sequence[str | Path]) -> str:
     return shlex.join([str(part) for part in s])
 
+def run(cmd: Sequence[str | Path], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+    print(f"Executing {format_cmd(cmd)}")
+    return subprocess.run(cmd, **kwargs)
+
 def parse_time(to: str | None) -> float | None:
     if to is None:
         return to
@@ -83,7 +87,10 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
         import urllib.parse
         info["logurl"] = bc.base_url + "logs/" + urllib.parse.quote(log_name)
 
-    out = subprocess.run(
+    run(["git", "-C", bc.branch_dir, "reset", "--hard", f"origin/{bc.branch_name}"], check=True)
+    run(["git", "-C", bc.branch_dir, "submodule", "update", "--init", "--recursive", "--force"], check=True)
+
+    out = run(
         ["git", "-C", bc.branch_dir, "rev-parse", f"origin/{bc.branch_name}"],
         capture_output=True, check=True
     ).stdout.decode("ascii").strip()
@@ -92,14 +99,13 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
     try:
         to = parse_time(bc.timeout)
         cmd = ["make", "-C", str(bc.branch_dir), "nightly"]
-        print(f"Executing {format_cmd(cmd)}")
         
         if bc.report_dir:
             if bc.report_dir.exists():
                 shutil.rmtree(bc.report_dir, ignore_errors=True)
             bc.report_dir.mkdir(parents=True, exist_ok=True)
 
-        result = subprocess.run(cmd, timeout=to)
+        result = run(cmd, timeout=to)
         if result.returncode:
             raise subprocess.CalledProcessError(result.returncode, cmd)
 
