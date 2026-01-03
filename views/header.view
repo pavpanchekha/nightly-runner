@@ -14,9 +14,8 @@
   </div>
 %end
 
-%if current:
-  %# NR (Nightly Runner) section
-  %if "pid" in current and "start" in current and "log" in current:
+%# NR (Nightly Runner) section - only shown when runfile exists
+%if current and "pid" in current and "start" in current and "log" in current:
   <div>
     <form action="{{baseurl}}/logs/{{Path(current['log']).name}}" method="get" class="inline">
       <button>View log</button>
@@ -31,36 +30,6 @@
     ({{current["nr_action"]}} <kbd>{{current.get("nr_repo", "")}}</kbd>)
     %end
   </div>
-  %end
-
-  %# BR (Branch Run) section - list of running branches
-  %for br in current.get("branches", []):
-  <div class="indent">
-    %if "log" in br:
-    <form action="{{baseurl}}/logs/{{quote(br['log'])}}" method="get" class="inline">
-      <button>Output</button>
-    </form>
-    <form action="{{baseurl}}/killbranch" method="post" class="inline">
-      <input type="hidden" name="job_id" value="{{br.get('job_id', '')}}">
-      <button>Kill</button>
-    </form>
-    %end
-    {{ "Running" if br.get("running") else "Was running" }} <kbd>{{br["repo"]}}#{{br["branch"]}}</kbd>
-    %if "start" in br:
-    for {{format_time((datetime.now() - datetime.fromisoformat(br["start"])).total_seconds())}}
-    %end
-    %if br.get("last_print"):
-    (last print {{format_time(br["last_print"])}} ago)
-    %end
-  </div>
-  %end
-
-  %# Progress section
-  %if "runs_done" in current and "runs_total" in current:
-  <div class="indent">
-    {{current["runs_done"]}}/{{current["runs_total"]}} done.
-  </div>
-  %end
 
   %if not running:
   <div>
@@ -70,5 +39,22 @@
     Nightly seems dead (PID not found).
   </div>
   %end
+%end
+
+%# BR (Branch Run) section - always shown independently
+%for br in branches:
+<div class="indent">
+  <form action="{{baseurl}}/logs/{{quote(br.log)}}" method="get" class="inline">
+    <button>Output</button>
+  </form>
+  <form action="{{baseurl}}/killbranch" method="post" class="inline">
+    <input type="hidden" name="job_id" value="{{br.job_id}}">
+    <button>Kill</button>
+  </form>
+  Running <kbd>{{br.repo}}#{{br.branch}}</kbd>
+  %if br.last_print:
+  (last print {{format_time(br.last_print)}} ago)
+  %end
+</div>
 %end
 </header>

@@ -60,10 +60,16 @@ def disk_state(path):
     return f"{pct:.1f}%", df.free > (10 << 30)
 
 def slurm_state():
-    result = subprocess.run(["squeue", "--version"], capture_output=True, text=True)
+    result = subprocess.run(
+        ["squeue", "--Format=Name", "--noheader"],
+        capture_output=True, text=True
+    )
     if result.returncode != 0:
         return "unavailable", False
-    return "available", True
+    count = len([line for line in result.stdout.splitlines() if line.startswith("nightly-")])
+    if count == 0:
+        return "ready", True
+    return f"{count} jobs", True
 
 def system_state_html():
     pieces = [
