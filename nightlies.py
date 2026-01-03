@@ -227,8 +227,6 @@ class NightlyRunner:
                 log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{branch.repo.name}-{branch.filename}.log"
 
                 self.data["repo"] = branch.repo.name
-                self.data["runs_done"] = i
-                self.data["runs_total"] = len(plan)
                 self.save()
 
                 if self.dryrun:

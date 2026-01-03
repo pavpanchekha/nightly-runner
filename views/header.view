@@ -31,13 +31,6 @@
     %end
   </div>
 
-  %# Progress section
-  %if "runs_done" in current and "runs_total" in current:
-  <div class="indent">
-    {{current["runs_done"]}}/{{current["runs_total"]}} done.
-  </div>
-  %end
-
   %if not running:
   <div>
     <form action="{{baseurl}}/delete_pid" method="post" class="inline">
