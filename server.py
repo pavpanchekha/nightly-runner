@@ -23,8 +23,9 @@ class NightlyJob:
     repo: str
     branch: str
     log: str
+    last_print: Optional[float] = None
 
-def get_nightly_jobs() -> list[NightlyJob]:
+def get_nightly_jobs(log_dir: Path) -> list[NightlyJob]:
     """Query slurm for running nightly jobs."""
     result = subprocess.run(
         ["squeue", "--Format=Name:500,JobID:500,Comment:500", "--noheader"],
@@ -39,7 +40,12 @@ def get_nightly_jobs() -> list[NightlyJob]:
             continue
         job_name, job_id, log = line.strip().split()
         repo, branch = job_name.removeprefix("nightly-").split("-", 1)
-        jobs.append(NightlyJob(job_id, repo, branch, log))
+        last_print = None
+        try:
+            last_print = time.time() - os.path.getmtime(log_dir / log)
+        except FileNotFoundError:
+            pass
+        jobs.append(NightlyJob(job_id, repo, branch, log, last_print))
     return jobs
 
 def edit_conf_url(runner : nightlies.NightlyRunner) -> Optional[str]:
@@ -74,28 +80,11 @@ def load():
             running = True
 
     current = dict(runner.data) if runner.data else None
-    jobs = get_nightly_jobs()
+    jobs = get_nightly_jobs(runner.log_dir)
 
     if current and "repo" in current:
         current["nr_action"] = "running" if jobs else "syncing"
         current["nr_repo"] = current["repo"]
-        current["branches"] = []
-        for job in jobs:
-            last_print = None
-            log_path = runner.log_dir / job.log
-            try:
-                last_print = time.time() - os.path.getmtime(log_path)
-            except FileNotFoundError:
-                pass
-            current["branches"].append({
-                "repo": job.repo,
-                "branch": job.branch,
-                "job_id": job.job_id,
-                "job_name": f"nightly-{job.repo}-{job.branch}",
-                "log": job.log,
-                "last_print": last_print,
-                "running": True,
-            })
 
     logins = set([
         line.split()[0].decode("utf8", errors="replace")
@@ -111,6 +100,7 @@ def load():
         "runner": runner,
         "current": current,
         "running": running,
+        "branches": jobs,
         "baseurl": runner.base_url,
         "confurl": edit_conf_url(runner),
         "system_state": system_state,
@@ -202,10 +192,10 @@ def rmbranch():
 
 @bottle.post("/kill")
 def kill():
-    for job in get_nightly_jobs():
-        subprocess.run(["scancel", job.job_id], check=False)
     runner = nightlies.NightlyRunner(CONF_FILE)
     runner.load()
+    for job in get_nightly_jobs(runner.log_dir):
+        subprocess.run(["scancel", job.job_id], check=False)
     runner.load_pid()
     pid = (runner.data or {}).get("pid")
     if pid is not None:

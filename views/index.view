@@ -3,7 +3,7 @@
 <link rel="stylesheet" href="/static/style.css">
 <script async src="/static/nightly.js"></script>
 
-% include("header.view", current=current, baseurl=baseurl, running=running, system_state=system_state, logins=logins)
+% include("header.view", current=current, branches=branches, baseurl=baseurl, running=running, system_state=system_state, logins=logins)
 
 % disabled = "disabled" if current else ""
 %if disabled:
