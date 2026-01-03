@@ -5,7 +5,7 @@
 
 % include("header.view", current=current, branches=branches, baseurl=baseurl, running=running, system_state=system_state, logins=logins)
 
-% disabled = "disabled" if current else ""
+% disabled = "disabled" if current or branches else ""
 %if disabled:
   <div>Controls disabled until current nightly ends.</div>
 %end
