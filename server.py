@@ -167,20 +167,6 @@ def runnow():
     run_nightlies(runner.config)
     bottle.redirect("/")
 
-@bottle.post("/runnext")
-def runnext():
-    repo_name = bottle.request.forms.get('repo')
-    branch = bottle.request.forms.get('branch')
-    runner = nightlies.NightlyRunner(CONF_FILE)
-    runner.load()
-    for repo in runner.repos:
-        if repo.name == repo_name:
-            try:
-                nightlies.Branch(repo, branch).lastcommit.unlink()
-            except FileNotFoundError:
-                pass
-    bottle.redirect("/")
-
 @bottle.post("/rmbranch")
 def rmbranch():
     repo_name = bottle.request.forms.get('repo')
