@@ -151,7 +151,13 @@ def runnow():
         except OSError:
             pass
         else:
-            raise bottle.HTTPError(409, "Nightly already running")
+            raise bottle.HTTPError(409, "Nightly sync already running")
+    for r in runner.repos:
+        if r.name == repo:
+            b = nightlies.Branch(r, branch)
+            if b.is_queued():
+                raise bottle.HTTPError(409, f"Job {b.job_name()} already queued")
+            break
     for section in runner.config.sections():
         if repo == section or section.endswith("/" + repo):
             runner.config[section]["branches"] = branch

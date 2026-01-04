@@ -230,6 +230,10 @@ class NightlyRunner:
                     self.log(0, f"Dry-run: skipping branch {branch.name} on repo {branch.repo.name}")
                     continue
 
+                if branch.is_queued():
+                    self.log(1, f"Job {job_name} already queued; skipping")
+                    continue
+
                 repo_full_name = branch.repo.gh_name or branch.repo.name
                 log_path = self.log_dir / log_name
                 cmd = SBATCH_CMD + [
@@ -462,6 +466,16 @@ class Branch:
 
     def last_run(self) -> float:
         return float(self.config.get("time", "inf"))
+
+    def job_name(self) -> str:
+        return f"nightly-{self.repo.name}-{self.filename}"
+
+    def is_queued(self) -> bool:
+        result = subprocess.run(
+            ["squeue", "--name=" + self.job_name(), "--noheader"],
+            capture_output=True, text=True
+        )
+        return result.returncode == 0 and bool(result.stdout.strip())
 
     @staticmethod
     def parse_filename(filename : str) -> str:
