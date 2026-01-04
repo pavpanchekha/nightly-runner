@@ -18,10 +18,7 @@
 %if current and "pid" in current and "start" in current and "log" in current:
   <div>
     <form action="{{baseurl}}/logs/{{Path(current['log']).name}}" method="get" class="inline">
-      <button>View log</button>
-    </form>
-    <form action="{{baseurl}}/kill" method="post" class="inline">
-      <button {{ "" if running else "disabled" }}>Kill</button>
+      <button>Log</button>
     </form>
     Nightly {{ "" if running else "was" }} running
     for {{format_time((datetime.now() - datetime.fromisoformat(current["start"])).total_seconds())}}
@@ -29,6 +26,9 @@
     %if "nr_action" in current:
     ({{current["nr_action"]}} <kbd>{{current.get("nr_repo", "")}}</kbd>)
     %end
+    <form action="{{baseurl}}/killsync" method="post" class="inline">
+      <button {{ "" if running else "disabled" }}>Kill</button>
+    </form>
   </div>
 
   %if not running:
@@ -45,16 +45,16 @@
 %for br in branches:
 <div class="indent">
   <form action="{{baseurl}}/logs/{{quote(br.log)}}" method="get" class="inline">
-    <button>Output</button>
-  </form>
-  <form action="{{baseurl}}/killbranch" method="post" class="inline">
-    <input type="hidden" name="job_id" value="{{br.job_id}}">
-    <button>Kill</button>
+    <button>Log</button>
   </form>
   Running <kbd>{{br.repo}}#{{br.branch}}</kbd>
   %if br.last_print:
   (last print {{format_time(br.last_print)}} ago)
   %end
+  <form action="{{baseurl}}/killbranch" method="post" class="inline">
+    <input type="hidden" name="job_id" value="{{br.job_id}}">
+    <button>Kill</button>
+  </form>
 </div>
 %end
 </header>

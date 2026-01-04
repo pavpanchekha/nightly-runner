@@ -190,19 +190,17 @@ def rmbranch():
                 pass
     bottle.redirect("/dryrun")
 
-@bottle.post("/kill")
-def kill():
+@bottle.post("/killsync")
+def killsync():
     runner = nightlies.NightlyRunner(CONF_FILE)
     runner.load()
-    for job in get_nightly_jobs(runner.log_dir):
-        subprocess.run(["scancel", job.job_id], check=False)
     runner.load_pid()
     pid = (runner.data or {}).get("pid")
     if pid is not None:
         try:
             os.kill(pid, signal.SIGTERM)
         except OSError as e:
-            print("/kill: OSError:", str(e), file=sys.stderr)
+            print("/killsync: OSError:", str(e), file=sys.stderr)
     if runner.pid_file.exists():
         runner.pid_file.unlink()
     bottle.redirect("/")
