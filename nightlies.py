@@ -441,7 +441,7 @@ class Repository:
 
         # Mark branches that are currently queued in slurm
         result = subprocess.run(
-            ["squeue", "--noheader", "--Format=Name"],
+            ["squeue", "--noheader", "--Format=Name:500"],
             capture_output=True, text=True
         )
         if result.returncode == 0:
