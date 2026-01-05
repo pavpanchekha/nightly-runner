@@ -428,13 +428,15 @@ class Repository:
 
         # Mark branches that are currently queued in slurm
         result = subprocess.run(
-            ["squeue", f"--name=nightly-{self.name}-", "--noheader", "--Format=Name"],
+            ["squeue", "--noheader", "--Format=Name"],
             capture_output=True, text=True
         )
         if result.returncode == 0:
+            prefix = f"nightly-{self.name}-"
             queued = {
-                line.strip().removeprefix(f"nightly-{self.name}-")
+                line.strip().removeprefix(prefix)
                 for line in result.stdout.splitlines()
+                if line.strip().startswith(prefix)
             }
             for branch in self.branches.values():
                 if branch.filename in queued:
