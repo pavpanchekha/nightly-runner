@@ -43,6 +43,34 @@ def escape_branch_filename(branch: str) -> str:
     return branch.replace("%", "_25").replace("/", "_2f")
 
 
+def parse_size(size: str | None) -> int | None:
+    if size is None:
+        return size
+    units = {"kb": 1024, "k": 1024, "mb": 1024**2, "m": 1024**2, "gb": 1024**3, "g": 1024**3}
+    size = size.lower()
+    for unit, multiplier in units.items():
+        if size.endswith(unit):
+            return int(float(size[:-len(unit)]) * multiplier)
+    return int(size)
+
+
+def format_size_slurm(size_bytes: int) -> str:
+    if size_bytes % (1024**3) == 0:
+        return f"{size_bytes // (1024**3)}G"
+    elif size_bytes % (1024**2) == 0:
+        return f"{size_bytes // (1024**2)}M"
+    elif size_bytes % 1024 == 0:
+        return f"{size_bytes // 1024}K"
+    else:
+        return str(size_bytes)
+
+
+def parse_cores(cores: str | None) -> int | None:
+    if cores is None or cores.lower() == "all":
+        return None
+    return int(cores)
+
+
 class BranchConfig:
     def __init__(self, config: Config, repo_name: str, branch_name: str):
         self.config = config

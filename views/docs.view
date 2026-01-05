@@ -159,4 +159,15 @@ branches.</dd>
 <dt><code>main</code></dt>
 <dd>The name of the main branch, if it's not <code>main</code>.</dd>
 
+<dt><code>cores</code></dt>
+<dd>The number of CPU cores your nightly requires. Use a number like
+<code>2</code> for jobs that don't need the full machine, or
+<code>all</code> for jobs that need exclusive access (the default). Jobs
+requesting fewer cores can run concurrently with other jobs.</dd>
+
+<dt><code>memory</code></dt>
+<dd>The maximum memory your nightly is allowed to use, like
+<code>8gb</code> or <code>512mb</code>. If your job exceeds this limit,
+it will be killed. By default, there is no memory limit.</dd>
+
 </dl>

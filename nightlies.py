@@ -8,6 +8,7 @@ import configparser
 import json
 import shlex, shutil
 import slack, apt
+from config import parse_cores, parse_size, format_size_slurm
 import urllib.request, urllib.error
 
 def format_cmd(s : Sequence[Union[str, Path]]) -> str:
@@ -22,9 +23,8 @@ def format_cmd(s : Sequence[Union[str, Path]]) -> str:
 def repo_to_url(repo : str) -> str:
     return "git@github.com:" + repo + ".git"
 
-SBATCH_CMD = [
+SBATCH_BASE = [
     "sbatch",
-    "--exclusive",
     "--export=ALL,TERM=dumb",
     "--parsable",
 ]
@@ -240,7 +240,16 @@ class NightlyRunner:
                     sys.executable, "runner.py",
                     str(self.config_file), repo_full_name, branch.name, log_name
                 ])
-                cmd = SBATCH_CMD + [
+
+                resource_args: List[str] = []
+                if branch.repo.cores is None:
+                    resource_args.append("--exclusive")
+                else:
+                    resource_args.append(f"--cpus-per-task={branch.repo.cores}")
+                if branch.repo.memory is not None:
+                    resource_args.append(f"--mem={format_size_slurm(branch.repo.memory)}")
+
+                cmd = SBATCH_BASE + resource_args + [
                     f"--job-name={job_name}",
                     f"--comment={log_name}",
                     f"--output={log_path}",
@@ -250,7 +259,8 @@ class NightlyRunner:
                 result = self.exec(1, cmd)
                 self.log(2, f"Submitted job {result.stdout.decode().strip()}")
             except subprocess.CalledProcessError as e:
-                msg = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
+                error_output = e.stdout.decode().strip() if e.stdout else ""
+                msg = f"Failed to queue branch {branch.name}: {error_output or f'exit code {e.returncode}'}"
                 self.log(1, msg)
                 if branch.slack:
                     try:
@@ -297,6 +307,8 @@ class Repository:
         } | set([self.checkout, self.status])
         self.report_dir_name = configuration.get("report")
         self.image_file_name = configuration.get("image")
+        self.cores = parse_cores(configuration.get("cores"))
+        self.memory = parse_size(configuration.get("memory"))
         
         self.branches : Dict[str, Branch] = {}
 
