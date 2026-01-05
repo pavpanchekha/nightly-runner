@@ -69,6 +69,8 @@ def load():
     for repo in runner.repos:
         repo.read()
 
+    jobs = get_nightly_jobs(runner.log_dir)
+
     running = False
     if runner.data and "pid" in runner.data:
         try:
@@ -80,7 +82,6 @@ def load():
             running = True
 
     current = dict(runner.data) if runner.data else None
-    jobs = get_nightly_jobs(runner.log_dir)
 
     if current and "repo" in current:
         current["nr_action"] = "running" if jobs else "syncing"
@@ -154,9 +155,9 @@ def runnow():
             raise bottle.HTTPError(409, "Nightly sync already running")
     for r in runner.repos:
         if r.name == repo:
-            b = nightlies.Branch(r, branch)
-            if b.is_queued():
-                raise bottle.HTTPError(409, f"Job {b.job_name()} already queued")
+            r.read()
+            if branch in r.branches and "queued" in r.branches[branch].badges:
+                raise bottle.HTTPError(409, f"Job nightly-{repo}-{branch} already queued")
             break
     for section in runner.config.sections():
         if repo == section or section.endswith("/" + repo):

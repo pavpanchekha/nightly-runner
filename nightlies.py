@@ -230,7 +230,7 @@ class NightlyRunner:
                     self.log(0, f"Dry-run: skipping branch {branch.name} on repo {branch.repo.name}")
                     continue
 
-                if branch.is_queued():
+                if "queued" in branch.badges:
                     self.log(1, f"Job {job_name} already queued; skipping")
                     continue
 
@@ -426,6 +426,20 @@ class Repository:
             if pr:
                 branch.badges.append(f"pr#{pr}")
 
+        # Mark branches that are currently queued in slurm
+        result = subprocess.run(
+            ["squeue", f"--name=nightly-{self.name}-", "--noheader", "--Format=Name"],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            queued = {
+                line.strip().removeprefix(f"nightly-{self.name}-")
+                for line in result.stdout.splitlines()
+            }
+            for branch in self.branches.values():
+                if branch.filename in queued:
+                    branch.badges.append("queued")
+
     def plan(self) -> None:
         self.runner.log(1, "Filtering branches " + ", ".join(self.branches))
         self.runnable = [branch for branch in self.branches.values() if branch.plan()]
@@ -469,16 +483,6 @@ class Branch:
 
     def last_run(self) -> float:
         return float(self.config.get("time", "inf"))
-
-    def job_name(self) -> str:
-        return f"nightly-{self.repo.name}-{self.filename}"
-
-    def is_queued(self) -> bool:
-        result = subprocess.run(
-            ["squeue", "--name=" + self.job_name(), "--noheader"],
-            capture_output=True, text=True
-        )
-        return result.returncode == 0 and bool(result.stdout.strip())
 
     @staticmethod
     def parse_filename(filename : str) -> str:

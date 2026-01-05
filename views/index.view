@@ -58,7 +58,7 @@
       <form action="{{baseurl}}/runnow" method="post" class="inline">
         <input type="hidden" name="repo" value="{{repo.name}}" />
         <input type="hidden" name="branch" value="{{branch.name}}" />
-        <button {{"disabled" if current or branch.is_queued() else ""}}>Now</button>
+        <button {{"disabled" if current or "queued" in branch.badges else ""}}>Now</button>
       </form>
       <td>
       <kbd>{{branch.name}}</kbd>
