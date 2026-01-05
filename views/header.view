@@ -14,47 +14,62 @@
   </div>
 %end
 
+%if current or branches:
+<table class="status">
+  <tbody>
 %# NR (Nightly Runner) section - only shown when runfile exists
 %if current and "pid" in current and "start" in current and "log" in current:
-  <div>
-    <form action="{{baseurl}}/logs/{{Path(current['log']).name}}" method="get" class="inline">
-      <button>Log</button>
-    </form>
-    Nightly {{ "" if running else "was" }} running
-    for {{format_time((datetime.now() - datetime.fromisoformat(current["start"])).total_seconds())}}
-    on PID <kbd>{{current["pid"]}}</kbd>
-    %if "nr_action" in current:
-    ({{current["nr_action"]}} <kbd>{{current.get("nr_repo", "")}}</kbd>)
-    %end
-    <form action="{{baseurl}}/killsync" method="post" class="inline">
-      <button {{ "" if running else "disabled" }}>Kill</button>
-    </form>
-  </div>
-
+    <tr>
+      <td class="left">
+        <form action="{{baseurl}}/logs/{{Path(current['log']).name}}" method="get" class="inline">
+          <button>Log</button>
+        </form>
+      <td class="middle">
+        Nightly {{ "" if running else "was" }} running
+        for {{format_time((datetime.now() - datetime.fromisoformat(current["start"])).total_seconds())}}
+        on PID <kbd>{{current["pid"]}}</kbd>
+        %if "nr_action" in current:
+        ({{current["nr_action"]}} <kbd>{{current.get("nr_repo", "")}}</kbd>)
+        %end
+      <td class="right">
+        <form action="{{baseurl}}/killsync" method="post" class="inline">
+          <button {{ "" if running else "disabled" }}>Kill</button>
+        </form>
   %if not running:
-  <div>
-    <form action="{{baseurl}}/delete_pid" method="post" class="inline">
-      <button>Delete lockfile</button>
-    </form> 
-    Nightly seems dead (PID not found).
-  </div>
+    <tr>
+      <td class="left">
+      <td class="middle">
+        Nightly seems dead (PID not found).
+      <td class="right">
+        <form action="{{baseurl}}/delete_pid" method="post" class="inline">
+          <button>Delete lockfile</button>
+        </form>
   %end
 %end
 
 %# BR (Branch Run) section - always shown independently
 %for br in branches:
-<div class="indent">
-  <form action="{{baseurl}}/logs/{{quote(br.log)}}" method="get" class="inline">
-    <button>Log</button>
-  </form>
-  Running <kbd>{{br.repo}}#{{br.branch}}</kbd>
-  %if br.last_print:
-  (last print {{format_time(br.last_print)}} ago)
-  %end
-  <form action="{{baseurl}}/killbranch" method="post" class="inline">
-    <input type="hidden" name="job_id" value="{{br.job_id}}">
-    <button>Kill</button>
-  </form>
-</div>
+    <tr>
+      <td class="left">
+        <form action="{{baseurl}}/logs/{{quote(br.log)}}" method="get" class="inline">
+          <button>Log</button>
+        </form>
+      <td class="middle">
+        Running <kbd>{{br.branch}}</kbd> on <kbd>{{br.repo}}</kbd>
+        %if br.elapsed:
+        for {{format_time(br.elapsed)}}
+        %end
+        as job <kbd>{{br.job_id}}</kbd>
+        %if br.last_print:
+        (last print {{format_time(br.last_print)}} ago)
+        %end
+      <td class="right">
+        <form action="{{baseurl}}/killbranch" method="post" class="inline">
+          <input type="hidden" name="job_id" value="{{br.job_id}}">
+          <button>Kill</button>
+        </form>
+%end
+  </tbody>
+</table>
 %end
 </header>

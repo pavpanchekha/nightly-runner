@@ -44,38 +44,31 @@
     </h2>
   </summary>
 
-<table class="branches">
-  <thead>
-    <tr>
-      <th>Run</th>
-      <th>Branch</th>
-      <th>Actions</th>
-  </thead>
+<table class="status">
   <tbody>
   %for branch in sorted(repo.branches.values(), key=lambda b: b.last_run(), reverse=True):
     <tr>
-      <td>
-      <form action="{{baseurl}}/runnow" method="post" class="inline">
-        <input type="hidden" name="repo" value="{{repo.name}}" />
-        <input type="hidden" name="branch" value="{{branch.name}}" />
-        <button {{"disabled" if current or "queued" in branch.badges else ""}}>Now</button>
-      </form>
-      <td>
-      <kbd>{{branch.name}}</kbd>
-      %for badge in branch.badges:
-      %if badge.startswith("pr#"):
-      <a class="badge" href="{{repo.get_pr_link(int(badge.removeprefix('pr#')))}}">{{badge}}</span>
-      %else:
-      <span class="badge">{{badge}}</span>
-      %end
-      %end
-      <td>
-      <form action="{{baseurl}}/rmbranch" method="post" class="inline">
-        <input type="hidden" name="repo" value="{{repo.name}}" />
-        <input type="hidden" name="branch" value="{{branch.name}}" />
-        <button>Reset</button>
-      </form>
-    </tr>
+      <td class="left">
+        <form action="{{baseurl}}/runnow" method="post" class="inline">
+          <input type="hidden" name="repo" value="{{repo.name}}" />
+          <input type="hidden" name="branch" value="{{branch.name}}" />
+          <button {{"disabled" if current or "queued" in branch.badges else ""}}>Run</button>
+        </form>
+      <td class="middle">
+        <kbd>{{branch.name}}</kbd>
+        %for badge in branch.badges:
+        %if badge.startswith("pr#"):
+        <a class="badge" href="{{repo.get_pr_link(int(badge.removeprefix('pr#')))}}">{{badge}}</span>
+        %else:
+        <span class="badge">{{badge}}</span>
+        %end
+        %end
+      <td class="right">
+        <form action="{{baseurl}}/rmbranch" method="post" class="inline">
+          <input type="hidden" name="repo" value="{{repo.name}}" />
+          <input type="hidden" name="branch" value="{{branch.name}}" />
+          <button>Reset</button>
+        </form>
   %end
   </tbody>
 </table>

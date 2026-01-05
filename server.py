@@ -24,11 +24,12 @@ class NightlyJob:
     branch: str
     log: str
     last_print: Optional[float] = None
+    elapsed: Optional[float] = None
 
 def get_nightly_jobs(log_dir: Path) -> list[NightlyJob]:
     """Query slurm for running nightly jobs."""
     result = subprocess.run(
-        ["squeue", "--Format=Name:500,JobID:500,Comment:500", "--noheader"],
+        ["squeue", "--Format=Name:500,JobID:500,Comment:500,TimeUsed:500,State:500", "--noheader"],
         capture_output=True, text=True
     )
     if result.returncode != 0:
@@ -38,15 +39,25 @@ def get_nightly_jobs(log_dir: Path) -> list[NightlyJob]:
     for line in result.stdout.splitlines():
         if not line.startswith("nightly-"):
             continue
-        job_name, job_id, log = line.strip().split()
+        job_name, job_id, log, time_used, state = line.strip().split()
+        if state != "RUNNING":
+            continue
         repo, branch = job_name.removeprefix("nightly-").split("-", 1)
         last_print = None
         try:
             last_print = time.time() - os.path.getmtime(log_dir / log)
         except FileNotFoundError:
             pass
-        jobs.append(NightlyJob(job_id, repo, branch, log, last_print))
+        elapsed = parse_slurm_time(time_used)
+        jobs.append(NightlyJob(job_id, repo, branch, log, last_print, elapsed))
     return jobs
+
+def parse_slurm_time(s: str) -> float:
+    parts = s.split("-")
+    days = int(parts[0]) if len(parts) == 2 else 0
+    hms = parts[-1].split(":")
+    h, m, sec = (int(hms[0]), int(hms[1]), int(hms[2])) if len(hms) == 3 else (0, int(hms[0]), int(hms[1]))
+    return days * 86400 + h * 3600 + m * 60 + sec
 
 def edit_conf_url(runner : nightlies.NightlyRunner) -> Optional[str]:
     if "confedit" in runner.config.defaults():
