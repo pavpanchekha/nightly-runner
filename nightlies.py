@@ -236,13 +236,16 @@ class NightlyRunner:
 
                 repo_full_name = branch.repo.gh_name or branch.repo.name
                 log_path = self.log_dir / log_name
+                wrap_cmd = shlex.join([
+                    sys.executable, "runner.py",
+                    str(self.config_file), repo_full_name, branch.name, log_name
+                ])
                 cmd = SBATCH_CMD + [
                     f"--job-name={job_name}",
                     f"--comment={log_name}",
                     f"--output={log_path}",
                     f"--error={log_path}",
-                    sys.executable, "runner.py",
-                    str(self.config_file), repo_full_name, branch.name, log_name
+                    f"--wrap={wrap_cmd}",
                 ]
                 result = self.exec(1, cmd)
                 self.log(2, f"Submitted job {result.stdout.decode().strip()}")
