@@ -58,7 +58,7 @@
         <kbd>{{branch.name}}</kbd>
         %for badge in branch.badges:
         %if badge.startswith("pr#"):
-        <a class="badge" href="{{repo.get_pr_link(int(badge.removeprefix('pr#')))}}">{{badge}}</span>
+        <a class="badge" href="{{repo.get_pr_link(int(badge.removeprefix('pr#')))}}">{{badge}}</a>
         %else:
         <span class="badge">{{badge}}</span>
         %end
