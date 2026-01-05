@@ -22,10 +22,11 @@ def format_cmd(s : Sequence[Union[str, Path]]) -> str:
 def repo_to_url(repo : str) -> str:
     return "git@github.com:" + repo + ".git"
 
-SRUN_CMD = [
-    "srun",
-    "--exclusive", # Full node, mimic current systemd behavior
-    "--export=ALL,TERM=dumb", # Inherit env, disable color codes in logs
+SBATCH_CMD = [
+    "sbatch",
+    "--exclusive",
+    "--export=ALL,TERM=dumb",
+    "--parsable",
 ]
 
 REPO_BADGES = [
@@ -216,11 +217,7 @@ class NightlyRunner:
             finally:
                 del self.data["repo"]
 
-        for i, branch in enumerate(plan):
-            if i and not self.dryrun:
-                self.log(1, f"Waiting for machine to cool down")
-                time.sleep(30) # To avoid thermal throttling
-
+        for branch in plan:
             try:
                 date = datetime.now()
                 job_name = f"nightly-{branch.repo.name}-{branch.filename}"
@@ -233,9 +230,13 @@ class NightlyRunner:
                     self.log(0, f"Dry-run: skipping branch {branch.name} on repo {branch.repo.name}")
                     continue
 
+                if branch.is_queued():
+                    self.log(1, f"Job {job_name} already queued; skipping")
+                    continue
+
                 repo_full_name = branch.repo.gh_name or branch.repo.name
                 log_path = self.log_dir / log_name
-                cmd = SRUN_CMD + [
+                cmd = SBATCH_CMD + [
                     f"--job-name={job_name}",
                     f"--comment={log_name}",
                     f"--output={log_path}",
@@ -243,12 +244,8 @@ class NightlyRunner:
                     sys.executable, "runner.py",
                     str(self.config_file), repo_full_name, branch.name, log_name
                 ]
-                self.log(1, f"Executing {format_cmd(cmd)}")
-
-                process = subprocess.Popen(cmd, stdin=subprocess.DEVNULL)
-                returncode = process.wait()
-                if returncode:
-                    raise subprocess.CalledProcessError(returncode, cmd)
+                result = self.exec(1, cmd)
+                self.log(2, f"Submitted job {result.stdout.decode().strip()}")
             except subprocess.CalledProcessError as e:
                 msg = f"Process {format_cmd(e.cmd)} returned error code {e.returncode}"
                 self.log(1, msg)
@@ -265,7 +262,7 @@ class NightlyRunner:
                 self.save()
 
         self.pid_file.unlink()
-        self.log(0, "Finished nightly run for today")
+        self.log(0, "Finished submitting jobs")
 
 class Repository:
     def __init__(self, runner : NightlyRunner, name : str, configuration : configparser.SectionProxy):
@@ -469,6 +466,16 @@ class Branch:
 
     def last_run(self) -> float:
         return float(self.config.get("time", "inf"))
+
+    def job_name(self) -> str:
+        return f"nightly-{self.repo.name}-{self.filename}"
+
+    def is_queued(self) -> bool:
+        result = subprocess.run(
+            ["squeue", "--name=" + self.job_name(), "--noheader"],
+            capture_output=True, text=True
+        )
+        return result.returncode == 0 and bool(result.stdout.strip())
 
     @staticmethod
     def parse_filename(filename : str) -> str:

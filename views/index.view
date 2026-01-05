@@ -5,9 +5,9 @@
 
 % include("header.view", current=current, branches=branches, baseurl=baseurl, running=running, system_state=system_state, logins=logins)
 
-% disabled = "disabled" if current or branches else ""
-%if disabled:
-  <div>Controls disabled until current nightly ends.</div>
+% sync_disabled = "disabled" if current else ""
+%if sync_disabled:
+  <div>Sync controls disabled until current sync ends.</div>
 %end
 
 <div>
@@ -18,11 +18,11 @@
   </form>
 
   <form action="{{baseurl}}/dryrun" method="post" class="inline">
-    <button {{disabled}}>Sync with Github</button>
+    <button {{sync_disabled}}>Sync with Github</button>
   </form>
 
   <form action="{{baseurl}}/fullrun" method="post" class="inline">
-    <button {{disabled}}>Start a full run</button>
+    <button {{sync_disabled}}>Start a full run</button>
   </form>
 
   %if confurl:
@@ -58,7 +58,7 @@
       <form action="{{baseurl}}/runnow" method="post" class="inline">
         <input type="hidden" name="repo" value="{{repo.name}}" />
         <input type="hidden" name="branch" value="{{branch.name}}" />
-        <button {{disabled}}>Now</button>
+        <button {{"disabled" if current or branch.is_queued() else ""}}>Now</button>
       </form>
       <td>
       <kbd>{{branch.name}}</kbd>
@@ -70,11 +70,6 @@
       %end
       %end
       <td>
-      <form action="{{baseurl}}/runnext" method="post" class="inline">
-        <input type="hidden" name="repo" value="{{repo.name}}" />
-        <input type="hidden" name="branch" value="{{branch.name}}" />
-        <button>Queue</button>
-      </form>
       <form action="{{baseurl}}/rmbranch" method="post" class="inline">
         <input type="hidden" name="repo" value="{{repo.name}}" />
         <input type="hidden" name="branch" value="{{branch.name}}" />
