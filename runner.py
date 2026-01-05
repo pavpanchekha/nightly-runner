@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 import gzip, json, shlex, shutil, subprocess, sys, time
 import config, slack
+from config import parse_size
 
 def format_time(ts: float) -> str:
     t = float(ts)
@@ -30,16 +31,6 @@ def parse_time(to: str | None) -> float | None:
         if to.endswith(unit):
             return float(to[:-len(unit)]) * multiplier
     return float(to)
-
-def parse_size(size: str | None) -> int | None:
-    if size is None:
-        return size
-    units = {"kb": 1024, "k": 1024, "mb": 1024**2, "m": 1024**2, "gb": 1024**3, "g": 1024**3}
-    size = size.lower()
-    for unit, multiplier in units.items():
-        if size.endswith(unit):
-            return int(float(size[:-len(unit)]) * multiplier)
-    return int(size)
 
 def format_size(size: int) -> str:
     units = ["KB", "MB", "GB", "TB", "PB"]
