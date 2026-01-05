@@ -27,7 +27,6 @@ SBATCH_BASE = [
     "sbatch",
     "--export=ALL,TERM=dumb",
     "--parsable",
-    "--cpu-bind=threads",
 ]
 
 REPO_BADGES = [
