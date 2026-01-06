@@ -37,12 +37,12 @@ def get_nightly_jobs(log_dir: Path) -> list[NightlyJob]:
         return []
     jobs = []
     for line in result.stdout.splitlines():
-        if not line.startswith("nightly-"):
+        if not line.startswith("nightly:"):
             continue
         job_name, job_id, log, time_used, state = line.strip().split()
         if state != "RUNNING":
             continue
-        repo, branch = job_name.removeprefix("nightly-").split("-", 1)
+        repo, branch = job_name.removeprefix("nightly:").split(":", 1)
         last_print = None
         try:
             last_print = time.time() - os.path.getmtime(log_dir / log)
@@ -168,7 +168,8 @@ def runnow():
         if r.name == repo:
             r.read()
             if branch in r.branches and "queued" in r.branches[branch].badges:
-                raise bottle.HTTPError(409, f"Job nightly-{repo}-{branch} already queued")
+                branch_filename = r.branches[branch].filename
+                raise bottle.HTTPError(409, f"Job nightly:{repo}:{branch_filename} already queued")
             break
     for section in runner.config.sections():
         if repo == section or section.endswith("/" + repo):

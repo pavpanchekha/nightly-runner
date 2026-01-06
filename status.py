@@ -66,7 +66,7 @@ def slurm_state():
     )
     if result.returncode != 0:
         return "unavailable", False
-    count = len([line for line in result.stdout.splitlines() if line.startswith("nightly-")])
+    count = len([line for line in result.stdout.splitlines() if line.startswith("nightly:")])
     if count == 0:
         return "ready", True
     return f"{count} jobs", True

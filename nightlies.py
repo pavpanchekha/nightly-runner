@@ -220,7 +220,7 @@ class NightlyRunner:
         for branch in plan:
             try:
                 date = datetime.now()
-                job_name = f"nightly-{branch.repo.name}-{branch.filename}"
+                job_name = f"nightly:{branch.repo.name}:{branch.filename}"
                 log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{branch.repo.name}-{branch.filename}.log"
 
                 self.data["repo"] = branch.repo.name
@@ -444,7 +444,7 @@ class Repository:
             capture_output=True, text=True
         )
         if result.returncode == 0:
-            prefix = f"nightly-{self.name}-"
+            prefix = f"nightly:{self.name}:"
             queued = {
                 line.strip().removeprefix(prefix)
                 for line in result.stdout.splitlines()
