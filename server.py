@@ -16,6 +16,15 @@ import shutil
 import status
 
 CONF_FILE = "conf/nightlies.conf"
+REPO_DIR = Path(__file__).resolve().parent
+
+def get_repo_head() -> str:
+    return subprocess.check_output(
+        ["git", "-C", str(REPO_DIR), "rev-parse", "HEAD"],
+        text=True,
+    ).strip()
+
+BOOT_HEAD = get_repo_head()
 
 @dataclass
 class NightlyJob:
@@ -107,6 +116,13 @@ def load():
     ])
 
     system_state = status.system_state_html()
+    current_head = get_repo_head()
+    upgrade = {
+        "available": current_head != BOOT_HEAD,
+        "disabled": running,
+        "from": BOOT_HEAD,
+        "to": current_head,
+    }
 
     return {
         "runner": runner,
@@ -117,6 +133,7 @@ def load():
         "confurl": edit_conf_url(runner),
         "system_state": system_state,
         "logins": logins,
+        "upgrade": upgrade,
     }
 
 @bottle.route("/")
@@ -225,6 +242,16 @@ def delete_pid():
     runner.load()
     if runner.pid_file.exists():
         runner.pid_file.unlink()
+    bottle.redirect("/")
+
+@bottle.post("/upgrade")
+def upgrade():
+    runner = nightlies.NightlyRunner(CONF_FILE)
+    runner.load()
+    runner.load_pid()
+    current_head = get_repo_head()
+    if not runner.data and current_head != BOOT_HEAD:
+        os.execv(sys.executable, [sys.executable] + sys.argv)
     bottle.redirect("/")
 
 def run_nightlies(conf=None):
