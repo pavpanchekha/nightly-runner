@@ -10,6 +10,24 @@
   <div>Sync controls disabled until current sync ends.</div>
 %end
 
+%if upgrade["available"]:
+<table class="status">
+  <tbody>
+    <tr>
+      <td class="left"></td>
+      <td class="middle">
+        The nightly server can be upgraded from <kbd>{{upgrade["from"][:8]}}</kbd> to <kbd>{{upgrade["to"][:8]}}</kbd>
+      </td>
+      <td class="right">
+        <form action="{{baseurl}}/upgrade" method="post" class="inline">
+          <button {{"disabled" if upgrade["disabled"] else ""}}>Upgrade</button>
+        </form>
+      </td>
+    </tr>
+  </tbody>
+</table>
+%end
+
 <div>
   <form action="{{baseurl}}/logs/" method="get" class="inline">
     <input type=hidden name=C value=M>
