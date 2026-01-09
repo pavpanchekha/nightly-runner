@@ -21,21 +21,25 @@ SLURM runs multiple runners concurrently if there are enough cores.
 
 # State
 
-Nightly state is stored in-disk in `runner.pid`. It stores the PID,
-what it's currently doing, and a few other details.
+Nightly state is stored in-disk in `running.pid`. It stores the PID,
+what repo it is syncing, and a few other details.
 
 Runner state is stored in SLURM. SLURM knows which jobs are running,
 what branches they are running (in the job name), where their log file
 is (in the job comment), and how long they've been running.
 
-Repo state is stored on disk in `git`. Each repository has a
-`.checkout` folder with a complete `git` checkout. Then each branch
-has a worktree. The nightly process owns the checkout while the runner
-process owns its worktree. As a result they never need to coordinate.
+Repo state is stored on disk. Each repository has a `.checkout` folder
+with a complete `git` checkout. Then each branch has a worktree, plus
+a JSON file with extra state. The nightly process owns the checkout
+while the runner process owns the worktree and JSON file.
+
+The nightly process self-updates when run. The server shows a button
+to restart when updated. This avoids manual deploy steps.
 
 # Coding Style
 
-- Maintenance budget is low. Never write clever code. It's usually
-  better to have dumber features.
+- Maintenance budget is low. No clever code, usually better to dumb
+  down features.
 - Type-check with `mypy` before committing.
 - Document all config file keys in `views/docs.view`.
+- Document all architecture changes in this file
