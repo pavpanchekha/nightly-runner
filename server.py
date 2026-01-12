@@ -97,7 +97,9 @@ def load():
             # Does not actually kill, but does check if pid exists
             os.kill(runner.data["pid"], 0)
         except OSError:
-            pass
+            if not runner.pid_file.exists():
+                # Nightly exited between runner.load_pid and os.kill
+                runner.data = None
         else:
             running = True
 
