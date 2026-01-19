@@ -3,29 +3,11 @@
 <link rel="stylesheet" href="/static/style.css">
 <script async src="/static/nightly.js"></script>
 
-% include("header.view", current=current, branches=branches, baseurl=baseurl, running=running, system_state=system_state, logins=logins)
+% include("header.view", current=current, branches=branches, baseurl=baseurl, running=running, system_state=system_state, logins=logins, upgrade=upgrade)
 
 % sync_disabled = "disabled" if current else ""
 %if sync_disabled:
   <div>Sync controls disabled until current sync ends.</div>
-%end
-
-%if upgrade["available"]:
-<table class="status">
-  <tbody>
-    <tr>
-      <td class="left"></td>
-      <td class="middle">
-        The nightly server can be upgraded from <kbd>{{upgrade["from"][:8]}}</kbd> to <kbd>{{upgrade["to"][:8]}}</kbd>
-      </td>
-      <td class="right">
-        <form action="{{baseurl}}/upgrade" method="post" class="inline">
-          <button {{"disabled" if upgrade["disabled"] else ""}}>Upgrade</button>
-        </form>
-      </td>
-    </tr>
-  </tbody>
-</table>
 %end
 
 <div>
