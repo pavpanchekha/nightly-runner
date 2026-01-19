@@ -5,7 +5,6 @@ from datetime import datetime
 from pathlib import Path
 import gzip, json, shlex, shutil, subprocess, sys, time
 import config, slack
-from config import parse_size
 
 def log(msg: str) -> None:
     print(msg, flush=True)
@@ -43,6 +42,20 @@ def format_size(size: int) -> str:
             break
         s /= 1024
     return f"{s:.2f}{unit}"
+
+def tree_size(root: Path) -> tuple[int, Path | None, int]:
+    total = 0
+    biggest = None
+    biggest_size = 0
+    for dirpath, _, files in root.walk():
+        for name in files:
+            path = dirpath / name
+            size = path.stat().st_size
+            total += size
+            if size > biggest_size:
+                biggest_size = size
+                biggest = path
+    return total, biggest, biggest_size
 
 def copything(src: Path, dst: Path) -> None:
     if src.is_dir():
@@ -123,22 +136,14 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
                 log(f"GZipping all {bc.gzip} files")
                 gzip_matching_files(bc.report_dir, shlex.split(bc.gzip))
 
-            warn_size = parse_size(bc.warn_size)
-            total = 0
-            biggest = None
-            biggest_size = 0
-            for root, _, files in bc.report_dir.walk():
-                for name in files:
-                    path = root / name
-                    size = path.stat().st_size
-                    total += size
-                    if size > biggest_size:
-                        biggest_size = size
-                        biggest = path
-            if warn_size and total > warn_size:
+            total, biggest, _ = tree_size(bc.report_dir)
+            if bc.warn_report and total > bc.warn_report:
                 assert biggest is not None
                 rel = biggest.relative_to(bc.report_dir)
-                msg = f"Report size {format_size(total)} exceeds limit {format_size(warn_size)}; largest file `{rel}`"
+                msg = (
+                    f"Report size {format_size(total)} exceeds limit {format_size(bc.warn_report)}; "
+                    f"largest file `{rel}`"
+                )
                 log(f"Report `{bc.branch_name}` is {format_size(total)}; largest file `{rel}`")
                 if slack_output:
                     slack_output.warn("report-size", msg)
@@ -165,16 +170,32 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
             if slack_output:
                 slack_output.warn("broken-report", msg)
 
+    total, biggest, _ = tree_size(bc.branch_dir)
+    if bc.warn_branch and total > bc.warn_branch:
+        rel = biggest.relative_to(bc.branch_dir) if biggest else None
+        detail = f"; largest file `{rel}`" if rel else ""
+        msg = (
+            f"Branch directory for {bc.branch_name} in {bc.repo_name} is "
+            f"{format_size(total)} (limit {format_size(bc.warn_branch)}){detail}"
+        )
+        log(msg)
+        if slack_output:
+            slack_output.warn("branch-size", msg)
+
     info["result"] = f"*{failure}*" if failure else "success"
     info["time"] = format_time((datetime.now() - start).seconds)
 
     log_file = bc.logs_dir / log_name
-    if log_file.exists() and log_file.stat().st_size > 10 * 1024 * 1024:
+    if log_file.exists():
         size = log_file.stat().st_size
-        msg = f"Log file for branch {bc.branch_name} in {bc.repo_name} seems too big at {size/1024/1024:.1f}MB"
-        log(msg)
-        if slack_output:
-            slack_output.warn("log-size", msg)
+        if bc.warn_log and size > bc.warn_log:
+            msg = (
+                f"Log file for branch {bc.branch_name} in {bc.repo_name} seems too big at "
+                f"{format_size(size)} (limit {format_size(bc.warn_log)})"
+            )
+            log(msg)
+            if slack_output:
+                slack_output.warn("log-size", msg)
 
     if slack_output:
         log("Posting results of run to slack!")
