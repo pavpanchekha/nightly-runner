@@ -55,7 +55,8 @@ def tree_size(root: Path) -> tuple[int, Path | None, int]:
             if size > biggest_size:
                 biggest_size = size
                 biggest = path
-    return total, biggest, biggest_size
+    assert biggest is not None
+    return total, biggest.relative_to(root), biggest_size
 
 def copything(src: Path, dst: Path) -> None:
     if src.is_dir():
@@ -138,11 +139,9 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
 
             total, biggest, _ = tree_size(bc.report_dir)
             if bc.warn_report and total > bc.warn_report:
-                assert biggest is not None
-                rel = biggest.relative_to(bc.report_dir)
                 msg = (
-                    f"Report size {format_size(total)} exceeds limit {format_size(bc.warn_report)}; "
-                    f"largest file `{rel}`"
+                    f"Report size {format_size(total)} exceeds limit {format_size(bc.warn_report)}"
+                    f"; largest file `{biggest}`"
                 )
                 log(f"Report `{bc.branch_name}` is {format_size(total)}; largest file `{rel}`")
                 if slack_output:
@@ -172,30 +171,27 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
 
     total, biggest, _ = tree_size(bc.branch_dir)
     if bc.warn_branch and total > bc.warn_branch:
-        rel = biggest.relative_to(bc.branch_dir) if biggest else None
-        detail = f"; largest file `{rel}`" if rel else ""
         msg = (
-            f"Branch directory for {bc.branch_name} in {bc.repo_name} is "
-            f"{format_size(total)} (limit {format_size(bc.warn_branch)}){detail}"
+            f"Branch size {format_size(total)} exceeds limit {format_size(bc.warn_branch)}"
+            f"; largest file `{biggest}`"
         )
         log(msg)
         if slack_output:
             slack_output.warn("branch-size", msg)
-
-    info["result"] = f"*{failure}*" if failure else "success"
-    info["time"] = format_time((datetime.now() - start).seconds)
 
     log_file = bc.logs_dir / log_name
     if log_file.exists():
         size = log_file.stat().st_size
         if bc.warn_log and size > bc.warn_log:
             msg = (
-                f"Log file for branch {bc.branch_name} in {bc.repo_name} seems too big at "
-                f"{format_size(size)} (limit {format_size(bc.warn_log)})"
+                f"Log size {format_size(size)} exceeds limit {format_size(bc.warn_log)}"
             )
             log(msg)
             if slack_output:
                 slack_output.warn("log-size", msg)
+
+    info["result"] = f"*{failure}*" if failure else "success"
+    info["time"] = format_time((datetime.now() - start).seconds)
 
     if slack_output:
         log("Posting results of run to slack!")
