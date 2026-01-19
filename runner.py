@@ -180,15 +180,14 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
             slack_output.warn("branch-size", msg)
 
     log_file = bc.logs_dir / log_name
-    if log_file.exists():
-        size = log_file.stat().st_size
-        if bc.warn_log and size > bc.warn_log:
-            msg = (
-                f"Log size {format_size(size)} exceeds limit {format_size(bc.warn_log)}"
-            )
-            log(msg)
-            if slack_output:
-                slack_output.warn("log-size", msg)
+    size = log_file.stat().st_size if log_file.exists() else 0
+    if bc.warn_log and size > bc.warn_log:
+        msg = (
+            f"Log size {format_size(size)} exceeds limit {format_size(bc.warn_log)}"
+        )
+        log(msg)
+        if slack_output:
+            slack_output.warn("log-size", msg)
 
     info["result"] = f"*{failure}*" if failure else "success"
     info["time"] = format_time((datetime.now() - start).seconds)
