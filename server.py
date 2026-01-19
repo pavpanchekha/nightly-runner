@@ -196,6 +196,8 @@ def runnow():
             runner.config[section]["always"] = branch
         else:
             runner.config.remove_section(section)
+    # Don't clean when running a single-branch UI run; it would delete other branches' directories.
+    runner.config["DEFAULT"]["clean"] = "false"
     run_nightlies(runner.config)
     bottle.redirect("/")
 
@@ -259,7 +261,6 @@ def upgrade():
 def run_nightlies(conf=None):
     if conf:
         conf.set("DEFAULT", "conffile", str(Path(CONF_FILE).resolve()))
-        conf.set("DEFAULT", "clean", "false")
         with tempfile.NamedTemporaryFile(prefix="nightlies-", mode="wt", delete=False) as f:
             conf.write(f)
             fn = f.name
