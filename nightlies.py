@@ -148,6 +148,9 @@ class NightlyRunner:
             try:
                 with self.pid_file.open("r") as f:
                     current_process = json.load(f)
+                    if current_process.get("pid") == os.getpid():
+                        self.log(1, "Reusing existing lockfile after restart")
+                        return True
                     self.log(0, f"Nightly already running on pid {current_process['pid']}")
             except (OSError, json.decoder.JSONDecodeError):
                 self.log(0, f"Nightly already running")
@@ -169,8 +172,6 @@ class NightlyRunner:
         self.log_path = self.log_dir / name
         self.log(0, f"Nightly script starting up at {self.start:%H:%M}")
         self.log(0, f"Loaded configuration file {self.config_file}")
-        self.update()
-
         if not self.lock():
             return
 
@@ -181,6 +182,8 @@ class NightlyRunner:
             "log": str(self.log_path),
         }
         self.save()
+
+        self.update()
 
         if self.dryrun:
             self.log(0, "Running in dry-run mode. No nightlies will be executed.")

@@ -34,7 +34,8 @@ a JSON file with extra state. The nightly process owns the checkout
 while the runner process owns the worktree and JSON file.
 
 The nightly process self-updates when run. The server shows a button
-to restart when updated. This avoids manual deploy steps.
+to restart when updated. This avoids manual deploy steps. Self-update
+reuses the same `running.pid`.
 
 # Coding Style
 
