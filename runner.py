@@ -143,7 +143,7 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
                     f"Report size {format_size(total)} exceeds limit {format_size(bc.warn_report)}"
                     f"; largest file `{biggest}`"
                 )
-                log(f"Report `{bc.branch_name}` is {format_size(total)}; largest file `{rel}`")
+                log(f"Report `{bc.branch_name}` is {format_size(total)}; largest file `{biggest}`")
                 if slack_output:
                     slack_output.warn("report-size", msg)
 
