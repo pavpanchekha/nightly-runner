@@ -93,8 +93,11 @@ def build_runs(
             res.add(TextBlock(f":warning: {warnings[key]}"))
     
     result = info["result"]
-    time = info["time"]
-    text = f"Branch `{branch}` of `{name}` was a {result} in {time}"
+    time = info.get("time")
+    if time:
+        text = f"Branch `{branch}` of `{name}` was a {result} in {time}"
+    else:
+        text = f"Branch `{branch}` of `{name}` was {result} before starting"
     block = TextBlock(text)
 
     if "success" != result and info.get("logurl"):
