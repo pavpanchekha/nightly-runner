@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 from datetime import datetime
 from pathlib import Path
 import gzip, json, shlex, shutil, subprocess, sys, time
+import signal
 import config, slack
-from config import parse_size
 
 def log(msg: str) -> None:
     print(msg, flush=True)
@@ -44,6 +44,21 @@ def format_size(size: int) -> str:
         s /= 1024
     return f"{s:.2f}{unit}"
 
+def tree_size(root: Path) -> tuple[int, Path | None, int]:
+    total = 0
+    biggest = None
+    biggest_size = 0
+    for dirpath, _, files in root.walk():
+        for name in files:
+            path = dirpath / name
+            size = path.lstat().st_size
+            total += size
+            if size > biggest_size:
+                biggest_size = size
+                biggest = path
+    assert biggest is not None
+    return total, biggest.relative_to(root), biggest_size
+
 def copything(src: Path, dst: Path) -> None:
     if src.is_dir():
         shutil.copytree(src, dst)
@@ -76,10 +91,26 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
     log(f"Running branch {bc.branch_name} on repo {bc.repo_name}")
     info: Dict[str, str] = {}
     slack_output = slack.make_output(bc.slack_token, bc.repo_name)
+    start: Optional[datetime] = None
 
     if bc.base_url:
         import urllib.parse
         info["logurl"] = bc.base_url + "logs/" + urllib.parse.quote(log_name)
+
+    def handle_sigterm(signum, frame):
+        log(f"Received signal {signum}")
+        info["result"] = "*killed*"
+        if start is not None:
+            info["time"] = format_time((datetime.now() - start).seconds)
+        log("Posting killed result to slack")
+        if slack_output:
+            try:
+                slack_output.post(bc.branch_name, info)
+            except slack.SlackError as e:
+                log(f"Slack error: {e}")
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGTERM, handle_sigterm)
 
     run(["git", "-C", bc.branch_dir, "reset", "--hard", f"origin/{bc.branch_name}"], check=True)
     run(["git", "-C", bc.branch_dir, "submodule", "update", "--init", "--recursive", "--force"], check=True)
@@ -123,24 +154,13 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
                 log(f"GZipping all {bc.gzip} files")
                 gzip_matching_files(bc.report_dir, shlex.split(bc.gzip))
 
-            warn_size = parse_size(bc.warn_size)
-            total = 0
-            biggest = None
-            biggest_size = 0
-            for root, _, files in bc.report_dir.walk():
-                for name in files:
-                    path = root / name
-                    # Use lstat to measure the entry itself without following symlinks.
-                    size = path.lstat().st_size
-                    total += size
-                    if size > biggest_size:
-                        biggest_size = size
-                        biggest = path
-            if warn_size and total > warn_size:
-                assert biggest is not None
-                rel = biggest.relative_to(bc.report_dir)
-                msg = f"Report size {format_size(total)} exceeds limit {format_size(warn_size)}; largest file `{rel}`"
-                log(f"Report `{bc.branch_name}` is {format_size(total)}; largest file `{rel}`")
+            total, biggest, _ = tree_size(bc.report_dir)
+            if bc.warn_report and total > bc.warn_report:
+                msg = (
+                    f"Report size {format_size(total)} exceeds limit {format_size(bc.warn_report)}"
+                    f"; largest file `{biggest}`"
+                )
+                log(f"Report `{bc.branch_name}` is {format_size(total)}; largest file `{biggest}`")
                 if slack_output:
                     slack_output.warn("report-size", msg)
 
@@ -166,16 +186,28 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
             if slack_output:
                 slack_output.warn("broken-report", msg)
 
-    info["result"] = f"*{failure}*" if failure else "success"
-    info["time"] = format_time((datetime.now() - start).seconds)
+    total, biggest, _ = tree_size(bc.branch_dir)
+    if bc.warn_branch and total > bc.warn_branch:
+        msg = (
+            f"Branch size {format_size(total)} exceeds limit {format_size(bc.warn_branch)}"
+            f"; largest file `{biggest}`"
+        )
+        log(msg)
+        if slack_output:
+            slack_output.warn("branch-size", msg)
 
     log_file = bc.logs_dir / log_name
-    if log_file.exists() and log_file.stat().st_size > 10 * 1024 * 1024:
-        size = log_file.stat().st_size
-        msg = f"Log file for branch {bc.branch_name} in {bc.repo_name} seems too big at {size/1024/1024:.1f}MB"
+    size = log_file.stat().st_size if log_file.exists() else 0
+    if bc.warn_log and size > bc.warn_log:
+        msg = (
+            f"Log size {format_size(size)} exceeds limit {format_size(bc.warn_log)}"
+        )
         log(msg)
         if slack_output:
             slack_output.warn("log-size", msg)
+
+    info["result"] = f"*{failure}*" if failure else "success"
+    info["time"] = format_time((datetime.now() - start).seconds)
 
     if slack_output:
         log("Posting results of run to slack!")

@@ -92,7 +92,9 @@ class BranchConfig:
         
         self.timeout = repo_config.get("timeout")
         self.gzip = repo_config.get("gzip", "")
-        self.warn_size = repo_config.get("warn_size", "1gb")
+        self.warn_log = parse_size(repo_config.get("warn_log", "1mb"))
+        self.warn_report = parse_size(repo_config.get("warn_report", "1gb"))
+        self.warn_branch = parse_size(repo_config.get("warn_branch", "10gb"))
         
         self.base_url = config.base_url
         self.reports_dir = config.reports_dir
