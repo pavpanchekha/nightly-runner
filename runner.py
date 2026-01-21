@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 from datetime import datetime
 from pathlib import Path
 import gzip, json, shlex, shutil, subprocess, sys, time
+import signal
 import config, slack
 
 def log(msg: str) -> None:
@@ -90,10 +91,26 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
     log(f"Running branch {bc.branch_name} on repo {bc.repo_name}")
     info: Dict[str, str] = {}
     slack_output = slack.make_output(bc.slack_token, bc.repo_name)
+    start: Optional[datetime] = None
 
     if bc.base_url:
         import urllib.parse
         info["logurl"] = bc.base_url + "logs/" + urllib.parse.quote(log_name)
+
+    def handle_sigterm(signum, frame):
+        log(f"Received signal {signum}")
+        info["result"] = "*killed*"
+        if start is not None:
+            info["time"] = format_time((datetime.now() - start).seconds)
+        log("Posting killed result to slack")
+        if slack_output:
+            try:
+                slack_output.post(bc.branch_name, info)
+            except slack.SlackError as e:
+                log(f"Slack error: {e}")
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGTERM, handle_sigterm)
 
     run(["git", "-C", bc.branch_dir, "reset", "--hard", f"origin/{bc.branch_name}"], check=True)
     run(["git", "-C", bc.branch_dir, "submodule", "update", "--init", "--recursive", "--force"], check=True)
