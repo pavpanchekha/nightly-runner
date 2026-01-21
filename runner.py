@@ -130,7 +130,8 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
             for root, _, files in bc.report_dir.walk():
                 for name in files:
                     path = root / name
-                    size = path.stat().st_size
+                    # Use lstat to measure the entry itself without following symlinks.
+                    size = path.lstat().st_size
                     total += size
                     if size > biggest_size:
                         biggest_size = size
