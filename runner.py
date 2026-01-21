@@ -51,7 +51,7 @@ def tree_size(root: Path) -> tuple[int, Path | None, int]:
     for dirpath, _, files in root.walk():
         for name in files:
             path = dirpath / name
-            size = path.stat().st_size
+            size = path.lstat().st_size
             total += size
             if size > biggest_size:
                 biggest_size = size
