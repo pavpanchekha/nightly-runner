@@ -86,7 +86,8 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
     def handle_sigterm(signum, frame):
         log(f"Received signal {signum}")
         info["result"] = "*killed*"
-        info["time"] = None if start is None else format_time((datetime.now() - start).seconds)
+        if start is not None:
+            info["time"] = format_time((datetime.now() - start).seconds)
         log("Posting killed result to slack")
         if slack_output:
             try:
