@@ -45,4 +45,3 @@ reuses the same `running.pid`.
 - The code has one user, its author, on one server.
 - Target Python 3.14. Type-check with `mypy` before committing.
 - Document all config file keys in `views/docs.view`.
-- Document all architecture changes in this file
