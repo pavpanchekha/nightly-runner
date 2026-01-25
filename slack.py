@@ -163,10 +163,10 @@ class SlackOutput:
         self.secrets = secrets
         self.spec = spec
         token, channel = parse_slack_spec(spec, secrets)
-        self.token: Optional[str] = token
-        self.channel: Optional[str] = channel
-        assert self.token is not None
-        assert self.channel is not None
+        assert token is not None
+        assert channel is not None
+        self.token: str = token
+        self.channel: str = channel
         self.name = name
         self.warnings: Dict[str, str] = {}
 
