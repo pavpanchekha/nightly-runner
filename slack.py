@@ -160,11 +160,7 @@ def send(token: str, channel: str, res: Response) -> None:
 
 class SlackOutput:
     def __init__(self, secrets: Mapping[str, Mapping[str, str]], spec: str, name: str):
-        self.secrets = secrets
-        self.spec = spec
         token, channel = parse_slack_spec(spec, secrets)
-        assert token is not None
-        assert channel is not None
         self.token: str = token
         self.channel: str = channel
         self.name = name
