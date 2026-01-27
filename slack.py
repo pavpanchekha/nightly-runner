@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Mapping
 import json
 import urllib.request, urllib.error
 
@@ -121,35 +121,87 @@ def build_fatal(name : str, text : str) -> Response:
     res.add(TextBlock(text))
     return res
 
-def send(url: str, res: Response) -> None:
+SLACK_API_URL = "https://slack.com/api/chat.postMessage"
+SLACK_WEBHOOK_PREFIX = "https://hooks.slack.com/"
+
+def parse_slack_spec(
+    spec: str,
+    secrets: Mapping[str, Mapping[str, str]],
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    if "/" in spec:
+        workspace, channel = spec.split("/", 1)
+        assert workspace in secrets, f"Unknown Slack workspace {workspace!r}"
+        token = secrets[workspace].get("token")
+        assert token, f"No token for Slack workspace {workspace!r}"
+        return None, token, channel
+    else:
+        assert spec in secrets, f"Unknown Slack key {spec!r}"
+        webhook_url = secrets[spec].get("slack")
+        assert webhook_url, "No Slack URL for key {spec!r}"
+        assert webhook_url.startswith(SLACK_WEBHOOK_PREFIX), \
+            f"Invalid webhook URL {webhook_url!r} for Slack key {spec!r}"
+        return webhook_url, None, None
+
+def send_api(token: str, channel: str, res: Response) -> None:
+    payload = res.to_json()
+    payload["channel"] = channel
+    data = json.dumps(payload).encode("utf8")
+    req = urllib.request.Request(SLACK_API_URL, data=data, method="POST")
+    req.add_header("Content-Type", "application/json; charset=utf8")
+    req.add_header("Authorization", f"Bearer {token}")
+
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            body = response.read()
+    except urllib.error.HTTPError as exc:
+        reason = exc.read().decode("utf-8", errors="replace")
+        raise SlackError(f"{exc.code} {exc.reason}: {reason}")
+    try:
+        reply = json.loads(body.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SlackError(f"Invalid Slack response: {exc}") from exc
+    if not reply.get("ok", False):
+        error = reply.get("error", "unknown_error")
+        raise SlackError(f"Slack API error: {error}")
+
+def send_webhook(url: str, res: Response) -> None:
     payload = json.dumps(res.to_json()).encode("utf8")
     req = urllib.request.Request(url, data=payload, method="POST")
     req.add_header("Content-Type", "application/json; charset=utf8")
 
     try:
         with urllib.request.urlopen(req, timeout=10) as response:
-            pass
+            response.read()
     except urllib.error.HTTPError as exc:
-        reason = exc.read().decode('utf-8')
+        reason = exc.read().decode("utf-8", errors="replace")
         raise SlackError(f"{exc.code} {exc.reason}: {reason}")
 
-
 class SlackOutput:
-    def __init__(self, token: str, name: str):
+    def __init__(self, secrets: Mapping[str, Mapping[str, str]], spec: str, name: str):
+        webhook_url, token, channel = parse_slack_spec(spec, secrets)
+        self.webhook_url = webhook_url
         self.token = token
+        self.channel = channel
         self.name = name
         self.warnings: Dict[str, str] = {}
+
+    def _send(self, res: Response) -> None:
+        if self.token and self.channel:
+            send_api(self.token, self.channel, res)
+        else:
+            assert self.webhook_url
+            send_webhook(self.webhook_url, res)
 
     def warn(self, key: str, message: str) -> None:
         self.warnings[key] = message
 
     def fatal(self, message: str) -> None:
         data = build_fatal(self.name, message)
-        send(self.token, data)
+        self._send(data)
 
     def post(self, branch: str, info: Dict[str, str]) -> None:
         data = build_runs(self.name, branch, info, self.warnings if self.warnings else None)
-        send(self.token, data)
+        self._send(data)
         self.warnings.clear()
 
     def post_warnings(self) -> None:
@@ -158,11 +210,11 @@ class SlackOutput:
         res = Response(f"Warnings for {self.name}")
         for key in sorted(self.warnings):
             res.add(TextBlock(f":warning: {self.warnings[key]}"))
-        send(self.token, res)
+        self._send(res)
         self.warnings.clear()
 
 
-def make_output(token: Optional[str], name: str) -> Optional[SlackOutput]:
-    if not token:
+def make_output(secrets: Mapping[str, Mapping[str, str]], spec: Optional[str], name: str) -> Optional[SlackOutput]:
+    if not spec:
         return None
-    return SlackOutput(token, name)
+    return SlackOutput(secrets, spec, name)

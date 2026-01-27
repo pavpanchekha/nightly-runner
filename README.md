@@ -35,7 +35,7 @@ Clone the repository somewhere and create a file named
 `nightlies.conf`. It should be formatted like this:
 
     [pavpanchekha/nightly-test]
-    slack = https://hooks.slack.com/services/xxx/yyy/zzz
+    slack = uw/herbie
     master = main
 
 Each heading corresponds to one repository to test. Under each heading
@@ -46,8 +46,9 @@ are:
   name and the `github` key.
 + `github`: the Github repository name, in `user/repo` format. This
   overrides the section name.
-+ `master`: change default branch, for example to `main`
-+ `slack`: a webhook URL for posting to Slack after nightly runs
++ `master`: change default branch, for example to `main`.
++ `slack`: post after nightly runs; it's a Slack and channel name.
+  The Slack is defined in the secrets file, the channel must be public.
 + `baseline`: a branch to always run if any others are being run
 + `run`: When to run a branch. One of `baseline`, `always`, or `commit`
 
@@ -60,3 +61,9 @@ sudo systemctl enable nightlies.timer
 ```
 
 That will run the nightly daemon every night.
+
+Slack secrets are stored separately. For a `slack = uw/herbie` entry,
+ensure the secrets file has a matching section like:
+
+    [uw]
+    token = xoxb-...

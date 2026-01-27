@@ -90,7 +90,7 @@ def save_metadata(metadata_file: Path, data: Dict[str, Any]) -> None:
 def run_branch(bc: config.BranchConfig, log_name: str) -> int:
     log(f"Running branch {bc.branch_name} on repo {bc.repo_name}")
     info: Dict[str, str] = {}
-    slack_output = slack.make_output(bc.slack_token, bc.repo_name)
+    slack_output = slack.make_output(bc.config.secrets, bc.slack_spec, bc.repo_name)
     start: Optional[datetime] = None
 
     if bc.base_url:
