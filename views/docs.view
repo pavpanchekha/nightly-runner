@@ -27,17 +27,13 @@ nightly.</p>
 
 <pre>
 [username/reponame]
-slack=channelname
+slack=workspace/channel
 timeout=1hr
 report=report/
 </pre>
 
 <p>It is polite to make a PR on the nightly configuration repository
 and ping someone who knows nightlies to review it.</p>
-
-<p>If you are using a new channel name, you'll need to get in touch
-with someone who knows the nightly system so they can add a new Slack
-key to the secrets file.</p>
 
 <h2>Scripting the nightly</h2>
 
