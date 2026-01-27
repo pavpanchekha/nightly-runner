@@ -56,8 +56,7 @@ def tree_size(root: Path) -> tuple[int, Path | None, int]:
             if size > biggest_size:
                 biggest_size = size
                 biggest = path
-    assert biggest is not None
-    return total, biggest.relative_to(root), biggest_size
+    return total, biggest and biggest.relative_to(root), biggest_size
 
 def copything(src: Path, dst: Path) -> None:
     if src.is_dir():
