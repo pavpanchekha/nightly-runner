@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 import gzip, json, shlex, shutil, subprocess, sys, time
 import signal
+import os
 import config, slack
 
 def log(msg: str) -> None:
@@ -215,6 +216,17 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
             slack_output.post(bc.branch_name, info)
         except slack.SlackError as e:
             log(f"Slack error: {e}")
+
+    job_id = os.environ.get("SLURM_JOB_ID")
+    assert job_id is not None
+    output = run(
+        ["sstat", "--noheader", "-j", f"{job_id}.batch", "--format=MaxRSS,Elapsed"],
+        capture_output=True, check=True,
+    ).stdout.decode("ascii", errors="replace").strip()
+    assert output, f"sstat returned empty line: {output!r}"
+    assert "\n" not in output, f"sstat returned multiple lines: {output!r}"
+    max_rss, elapsed = output.split()
+    log(f"Nightly used memory={format_size(max_rss)}, timeout={format_time(elapsed)}")
 
     return 1 if failure else 0
 
