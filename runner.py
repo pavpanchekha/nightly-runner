@@ -227,7 +227,7 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
     assert "\n" not in output, f"sstat returned multiple lines: {output!r}"
     max_rss = config.parse_size(output)
     assert max_rss is not None, f"sstat returned unknown MaxRSS: {output!r}"
-    log(f"Nightly used memory={format_size(max_rss).lower()}")
+    log(f"Nightly used memory={format_size(max_rss).lower()}, timeout={info['time']}")
 
     return 1 if failure else 0
 
