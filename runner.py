@@ -225,8 +225,10 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
     ).stdout.decode("ascii", errors="replace").strip()
     assert output, f"sstat returned empty line: {output!r}"
     assert "\n" not in output, f"sstat returned multiple lines: {output!r}"
-    max_rss, elapsed = output.split()
-    log(f"Nightly used memory={format_size(max_rss)}, timeout={format_time(elapsed)}")
+    max_rss_str, elapsed = output.split()
+    max_rss = config.parse_size(max_rss_str.lower())
+    assert max_rss is not None, f"sstat returned unknown MaxRSS: {max_rss_str!r}"
+    log(f"Nightly used memory={format_size(max_rss).lower()}, elapsed={elapsed}")
 
     return 1 if failure else 0
 
