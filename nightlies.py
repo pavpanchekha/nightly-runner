@@ -365,7 +365,7 @@ class Repository:
             self.runner.exec(2, ["git", "-C", self.checkout, "checkout", "--detach"])
 
         self.runner.log(1, "Updating branches for " + self.name)
-        self.runner.exec(2, ["git", "-C", self.checkout, "fetch", "origin", "--prune", "--recurse-submodules"])
+        self.runner.exec(2, ["git", "-C", self.checkout, "fetch", "origin", "--prune", "--no-tags", "--recurse-submodules=on-demand"])
 
         if "branches" in self.config:
             all_branches = self.config["branches"].split()
