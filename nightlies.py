@@ -168,7 +168,7 @@ class NightlyRunner:
 
     def run(self) -> None:
         self.start = datetime.now()
-        name = f"{self.start:%Y-%m-%d}-{self.start:%H%M%S}.log"
+        name = f"{self.start:%Y-%m-%d}-{self.start:%H%M%S-%f}.log"
         self.log_path = self.log_dir / name
         self.log(0, f"Nightly script starting up at {self.start:%H:%M}")
         self.log(0, f"Loaded configuration file {self.config_file}")
@@ -224,7 +224,7 @@ class NightlyRunner:
             try:
                 date = datetime.now()
                 job_name = f"nightly:{branch.repo.name}:{branch.filename}"
-                log_name = f"{date:%Y-%m-%d}-{date:%H%M%S}-{branch.repo.name}-{branch.filename}.log"
+                log_name = f"{date:%Y-%m-%d}-{date:%H%M%S-%f}-{branch.repo.name}-{branch.filename}.log"
 
                 self.data["repo"] = branch.repo.name
                 self.save()
@@ -442,20 +442,24 @@ class Repository:
                 branch.badges.append(f"pr#{pr}")
 
         # Mark branches that are currently queued in slurm
-        result = subprocess.run(
-            ["squeue", "--noheader", "--Format=Name:500"],
-            capture_output=True, text=True
-        )
-        if result.returncode == 0:
-            prefix = f"nightly:{self.name}:"
-            queued = {
-                line.strip().removeprefix(prefix)
-                for line in result.stdout.splitlines()
-                if line.strip().startswith(prefix)
-            }
-            for branch in self.branches.values():
-                if branch.filename in queued:
-                    branch.badges.append("queued")
+        try:
+            result = self.runner.exec(2, ["squeue", "--noheader", "--Format=Name:500"])
+        except FileNotFoundError:
+            self.runner.log(2, "SLURM squeue command not found; skipping queued-branch detection")
+            return
+        except subprocess.CalledProcessError as e:
+            self.runner.log(2, f"squeue failed with exit code {e.returncode}; skipping queued-branch detection")
+            return
+
+        prefix = f"nightly:{self.name}:"
+        queued = {
+            line.strip().removeprefix(prefix)
+            for line in result.stdout.decode("utf8").splitlines()
+            if line.strip().startswith(prefix)
+        }
+        for branch in self.branches.values():
+            if branch.filename in queued:
+                branch.badges.append("queued")
 
     def plan(self) -> None:
         self.runner.log(1, "Filtering branches " + ", ".join(self.branches))
@@ -492,6 +496,7 @@ class Branch:
         self.lastcommit = self.repo.dir / (self.filename + ".json")
         self.badges : List[str] = []
         self.config : Dict[str, Any] = {}
+        self.current_commit = ""
 
         self.report_dir = self.dir / self.repo.report_dir_name if self.repo.report_dir_name else None
         self.image_file = self.report_dir / self.repo.image_file_name if self.report_dir and self.repo.image_file_name else None
