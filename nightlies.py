@@ -40,6 +40,8 @@ class NightlyRunner:
         self.config_file = Path(config_file)
         self.self_dir = Path(__file__).resolve().parent
         self.data : Any = None
+        self.log_path: Optional[Path] = None
+        self.start: Optional[datetime] = None
 
     def update_system_repo(self, dir : str, repo : str, branch : str) -> None:
         if not Path(dir).is_dir():
@@ -116,6 +118,9 @@ class NightlyRunner:
         return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
 
     def log(self, level : int, s : str) -> None:
+        if self.log_path is None or self.start is None:
+            print(f"{datetime.now().isoformat()}\t{'    ' * level}{s}", file=sys.stderr)
+            return
         with self.log_path.open("at") as f:
             f.write("{}\t{}{}\n".format(datetime.now() - self.start, "    " * level, s))
 
