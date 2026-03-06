@@ -12,5 +12,7 @@ jobs:
       with:
         python-version: "3.12"
     - uses: astral-sh/setup-uv@v5
+      with:
+        cache-dependency-glob: ".github/workflows/mypy.yml,setup.cfg"
     - run: uv run test/test_nightlies.py
     - run: uv run --with mypy mypy

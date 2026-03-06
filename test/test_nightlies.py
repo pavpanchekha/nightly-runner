@@ -98,29 +98,12 @@ class TestNightlyRunnerHarness(unittest.TestCase):
 
     def test_adding_new_branch_gets_scheduled(self) -> None:
         first = self.nightly(repo_updates={}, complete=True)
-        self.dump_repo_state("after-initial-complete")
-        self.assertEqual(
-            first,
-            ["main"],
-            msg=(
-                f"Unexpected initial runnable branches: {first}\n"
-                f"{self.format_repo_state('after-initial-complete-assert')}"
-            ),
-        )
+        self.assertEqual(first, ["main"])
 
         self.create_branch("hotfix/new", "hotfix.txt", "v1\n", "add hotfix branch")
-        self.dump_repo_state("after-hotfix-push-before-nightly")
 
         ran = self.nightly()
-        self.dump_repo_state("after-hotfix-nightly")
-        self.assertEqual(
-            ran,
-            ["hotfix/new"],
-            msg=(
-                f"Unexpected runnable branches: {ran}\n"
-                f"{self.format_repo_state('assertion-context')}"
-            ),
-        )
+        self.assertEqual(ran, ["hotfix/new"])
 
     def test_deleting_branch_removes_worktree_directory(self) -> None:
         self.create_branch("feature/test", "feature.txt", "v1\n", "initial feature commit")
@@ -394,61 +377,7 @@ class TestNightlyRunnerHarness(unittest.TestCase):
             for branch in repo.runnable:
                 branch.config["commit"] = branch.current_commit
                 branch.save_metadata()
-                print(
-                    "[debug:complete-write] "
-                    f"branch={branch.name} "
-                    f"current_commit={branch.current_commit} "
-                    f"metadata={branch.lastcommit.read_text()}"
-                )
         return ran
-
-    def format_repo_state(self, label: str) -> str:
-        repo_dir = self.repos_dir / "testrepo"
-        checkout = repo_dir / ".checkout"
-        details: list[str] = [f"[debug:{label}]"]
-        details.append(f"repo_dir_exists={repo_dir.exists()}")
-        details.append(f"checkout_exists={checkout.exists()}")
-        if checkout.exists():
-            cp = subprocess.run(
-                ["git", "-C", str(checkout), "branch", "-r"],
-                capture_output=True,
-                text=True,
-            )
-            if cp.returncode == 0:
-                details.append("remote_branches=" + " | ".join(line.strip() for line in cp.stdout.splitlines()))
-            else:
-                details.append(f"remote_branches=<error:{cp.stderr.strip()}>")
-
-        for branch in ("main", "hotfix/new"):
-            filename = branch.replace("%", "_25").replace("/", "_2f") + ".json"
-            metadata = repo_dir / filename
-            if metadata.exists():
-                details.append(f"{branch}.json={metadata.read_text()}")
-            else:
-                details.append(f"{branch}.json=<missing>")
-            if checkout.exists():
-                cp = subprocess.run(
-                    ["git", "-C", str(checkout), "rev-parse", f"origin/{branch}"],
-                    capture_output=True,
-                    text=True,
-                )
-                if cp.returncode == 0:
-                    details.append(f"origin/{branch}={cp.stdout.strip()}")
-                else:
-                    details.append(f"origin/{branch}=<missing:{cp.stderr.strip()}>")
-
-        logs = sorted(self.logs_dir.glob("*.log"))
-        if logs:
-            latest = logs[-1]
-            tail = latest.read_text(errors="replace").splitlines()[-20:]
-            details.append(f"latest_log={latest.name}")
-            details.append("latest_log_tail:\n" + "\n".join(tail))
-        else:
-            details.append("latest_log=<none>")
-        return "\n".join(details)
-
-    def dump_repo_state(self, label: str) -> None:
-        print(self.format_repo_state(label))
 
     def run_runner(
         self,
