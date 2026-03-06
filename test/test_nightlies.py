@@ -97,8 +97,16 @@ class TestNightlyRunnerHarness(unittest.TestCase):
         self.assertFalse((repo_dir / "feature_2ftest").exists())
 
     def test_adding_new_branch_gets_scheduled(self) -> None:
-        self.nightly(repo_updates={}, complete=True)
+        first = self.nightly(repo_updates={}, complete=True)
         self.dump_repo_state("after-initial-complete")
+        self.assertEqual(
+            first,
+            ["main"],
+            msg=(
+                f"Unexpected initial runnable branches: {first}\n"
+                f"{self.format_repo_state('after-initial-complete-assert')}"
+            ),
+        )
 
         self.create_branch("hotfix/new", "hotfix.txt", "v1\n", "add hotfix branch")
         self.dump_repo_state("after-hotfix-push-before-nightly")
@@ -386,6 +394,12 @@ class TestNightlyRunnerHarness(unittest.TestCase):
             for branch in repo.runnable:
                 branch.config["commit"] = branch.current_commit
                 branch.save_metadata()
+                print(
+                    "[debug:complete-write] "
+                    f"branch={branch.name} "
+                    f"current_commit={branch.current_commit} "
+                    f"metadata={branch.lastcommit.read_text()}"
+                )
         return ran
 
     def format_repo_state(self, label: str) -> str:
@@ -394,6 +408,16 @@ class TestNightlyRunnerHarness(unittest.TestCase):
         details: list[str] = [f"[debug:{label}]"]
         details.append(f"repo_dir_exists={repo_dir.exists()}")
         details.append(f"checkout_exists={checkout.exists()}")
+        if checkout.exists():
+            cp = subprocess.run(
+                ["git", "-C", str(checkout), "branch", "-r"],
+                capture_output=True,
+                text=True,
+            )
+            if cp.returncode == 0:
+                details.append("remote_branches=" + " | ".join(line.strip() for line in cp.stdout.splitlines()))
+            else:
+                details.append(f"remote_branches=<error:{cp.stderr.strip()}>")
 
         for branch in ("main", "hotfix/new"):
             filename = branch.replace("%", "_25").replace("/", "_2f") + ".json"
