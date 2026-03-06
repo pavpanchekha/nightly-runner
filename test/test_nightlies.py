@@ -42,7 +42,7 @@ class TestNightlyRunnerHarness(unittest.TestCase):
         self.git(["config", "user.email", "nr-harness@example.com"], repo=self.work_dir)
         self.commit(self.work_dir, "README.md", "seed\n", "initial main commit")
 
-        self.git(["init", "--bare", str(self.remote_dir)], repo=self.tmpdir)
+        self.git(["init", "--bare", "--initial-branch=main", str(self.remote_dir)], repo=self.tmpdir)
         self.git(["remote", "add", "origin", str(self.remote_dir)], repo=self.work_dir)
         self.git(["push", "origin", "main"], repo=self.work_dir)
 
