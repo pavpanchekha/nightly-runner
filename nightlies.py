@@ -40,6 +40,8 @@ class NightlyRunner:
         self.config_file = Path(config_file)
         self.self_dir = Path(__file__).resolve().parent
         self.data : Any = None
+        self.log_path: Optional[Path] = None
+        self.start: Optional[datetime] = None
 
     def update_system_repo(self, dir : str, repo : str, branch : str) -> None:
         if not Path(dir).is_dir():
@@ -116,6 +118,9 @@ class NightlyRunner:
         return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
 
     def log(self, level : int, s : str) -> None:
+        if self.log_path is None or self.start is None:
+            print(f"{datetime.now().isoformat()}\t{'    ' * level}{s}", file=sys.stderr)
+            return
         with self.log_path.open("at") as f:
             f.write("{}\t{}{}\n".format(datetime.now() - self.start, "    " * level, s))
 
@@ -353,11 +358,14 @@ class Repository:
                     self.slack.warn("ppa", msg)
 
         pkgs = self.config.get("apt", "").split()
-        if pkgs and not self.runner.dryrun and apt.check_updates(self.runner, pkgs):
+        updates = apt.check_updates(self.runner, pkgs) if pkgs and not self.runner.dryrun else []
+        if updates:
             apt.install(self.runner, pkgs)
-            self.runner.log(1, "Updated an apt package")
+            detail = ", ".join(f"{u.package} ({u.before} -> {u.after})" for u in updates)
+            msg = f"Updated apt packages: {detail}"
+            self.runner.log(1, msg)
             if self.slack:
-                self.slack.warn("apt", "Updated an apt package")
+                self.slack.warn("apt", msg)
 
         if not self.checkout.is_dir():
             self.runner.log(1, "Checking out base repository for " + self.name)
