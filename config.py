@@ -31,13 +31,6 @@ class Config:
     def get_repo_config(self, repo_name: str) -> Dict[str, str]:
         return dict(self.config[repo_name])
 
-    def get_slack_token(self, repo_name: str) -> Optional[str]:
-        repo_config = self.config[repo_name]
-        slack_channel = repo_config.get("slack")
-        if not slack_channel or slack_channel not in self.secrets:
-            return None
-        return self.secrets[slack_channel]["slack"]
-
 
 def escape_branch_filename(branch: str) -> str:
     return branch.replace("%", "_25").replace("/", "_2f")
@@ -99,4 +92,4 @@ class BranchConfig:
         self.base_url = config.base_url
         self.reports_dir = config.reports_dir
         self.logs_dir = config.logs_dir
-        self.slack_token = config.get_slack_token(repo_name)
+        self.slack_spec = repo_config.get("slack")

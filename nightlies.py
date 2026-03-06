@@ -286,12 +286,7 @@ class Repository:
         self.config = configuration
         self.runnable : List[Branch] = []
 
-        self.slack_channel = configuration.get("slack")
-        if self.slack_channel and self.slack_channel not in self.runner.secrets:
-            self.runner.log(1, f"Unknown slack channel `{self.slack_channel}` for repo `{name}`")
-            self.slack_channel = None
-        slack_token = self.runner.secrets[self.slack_channel]["slack"] if self.slack_channel else None
-        self.slack = slack.make_output(slack_token, name)
+        self.slack = slack.make_output(self.runner.secrets, configuration.get("slack"), name)
 
         if self.config.get("url"): # Reserved for local testing
             self.url = self.config["url"]
@@ -370,7 +365,7 @@ class Repository:
             self.runner.exec(2, ["git", "-C", self.checkout, "checkout", "--detach"])
 
         self.runner.log(1, "Updating branches for " + self.name)
-        self.runner.exec(2, ["git", "-C", self.checkout, "fetch", "origin", "--prune", "--recurse-submodules"])
+        self.runner.exec(2, ["git", "-C", self.checkout, "fetch", "origin", "--prune", "--no-tags", "--recurse-submodules=on-demand"])
 
         if "branches" in self.config:
             all_branches = self.config["branches"].split()

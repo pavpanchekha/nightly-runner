@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 import gzip, json, shlex, shutil, subprocess, sys, time
 import signal
+import os
 import config, slack
 
 def log(msg: str) -> None:
@@ -51,13 +52,12 @@ def tree_size(root: Path) -> tuple[int, Path | None, int]:
     for dirpath, _, files in root.walk():
         for name in files:
             path = dirpath / name
-            size = path.stat().st_size
+            size = path.lstat().st_size
             total += size
             if size > biggest_size:
                 biggest_size = size
                 biggest = path
-    assert biggest is not None
-    return total, biggest.relative_to(root), biggest_size
+    return total, biggest and biggest.relative_to(root), biggest_size
 
 def copything(src: Path, dst: Path) -> None:
     if src.is_dir():
@@ -90,7 +90,7 @@ def save_metadata(metadata_file: Path, data: Dict[str, Any]) -> None:
 def run_branch(bc: config.BranchConfig, log_name: str) -> int:
     log(f"Running branch {bc.branch_name} on repo {bc.repo_name}")
     info: Dict[str, str] = {}
-    slack_output = slack.make_output(bc.slack_token, bc.repo_name)
+    slack_output = slack.make_output(bc.config.secrets, bc.slack_spec, bc.repo_name)
     start: Optional[datetime] = None
 
     if bc.base_url:
@@ -215,6 +215,18 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
             slack_output.post(bc.branch_name, info)
         except slack.SlackError as e:
             log(f"Slack error: {e}")
+
+    job_id = os.environ.get("SLURM_JOB_ID")
+    assert job_id is not None
+    output = run(
+        ["sstat", "--noheader", "-j", f"{job_id}.batch", "--format=MaxRSS"],
+        capture_output=True, check=True,
+    ).stdout.decode("ascii", errors="replace").strip()
+    assert output, f"sstat returned empty line: {output!r}"
+    assert "\n" not in output, f"sstat returned multiple lines: {output!r}"
+    max_rss = config.parse_size(output)
+    assert max_rss is not None, f"sstat returned unknown MaxRSS: {output!r}"
+    log(f"Nightly used memory={format_size(max_rss).lower()}, timeout={info['time']}")
 
     return 1 if failure else 0
 
