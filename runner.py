@@ -217,16 +217,18 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
             log(f"Slack error: {e}")
 
     job_id = os.environ.get("SLURM_JOB_ID")
-    assert job_id is not None
-    output = run(
-        ["sstat", "--noheader", "-j", f"{job_id}.batch", "--format=MaxRSS"],
-        capture_output=True, check=True,
-    ).stdout.decode("ascii", errors="replace").strip()
-    assert output, f"sstat returned empty line: {output!r}"
-    assert "\n" not in output, f"sstat returned multiple lines: {output!r}"
-    max_rss = config.parse_size(output)
-    assert max_rss is not None, f"sstat returned unknown MaxRSS: {output!r}"
-    log(f"Nightly used memory={format_size(max_rss).lower()}, timeout={info['time']}")
+    if job_id is None:
+        log("SLURM_JOB_ID not set; skipping memory usage collection")
+    else:
+        output = run(
+            ["sstat", "--noheader", "-j", f"{job_id}.batch", "--format=MaxRSS"],
+            capture_output=True, check=True,
+        ).stdout.decode("ascii", errors="replace").strip()
+        assert output, f"sstat returned empty line: {output!r}"
+        assert "\n" not in output, f"sstat returned multiple lines: {output!r}"
+        max_rss = config.parse_size(output)
+        assert max_rss is not None, f"sstat returned unknown MaxRSS: {output!r}"
+        log(f"Nightly used memory={format_size(max_rss).lower()}, timeout={info['time']}")
 
     return 1 if failure else 0
 
