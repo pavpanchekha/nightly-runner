@@ -13,4 +13,4 @@ jobs:
         python-version: "3.12"
     - uses: astral-sh/setup-uv@v5
     - run: uv run test/test_nightlies.py
-    - run: uv run mypy
+    - run: uv run --with mypy mypy
