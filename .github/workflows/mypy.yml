@@ -1,15 +1,16 @@
-name: Type check with mypy
+name: Unit tests and mypy
 
 on: ['push']
 
 jobs:
-  mypy:
-    name: "Mypy type check"
+  checks:
+    name: "Unit tests + mypy"
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
       with:
         python-version: "3.12"
-    - run: pip install mypy
-    - run: mypy
+    - uses: astral-sh/setup-uv@v5
+    - run: uv run test/test_nightlies.py
+    - run: uv run mypy

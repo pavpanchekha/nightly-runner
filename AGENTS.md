@@ -44,5 +44,6 @@ reuses the same `running.pid`.
 - It's better to crash than to swallow failures. Asserts are good.
 - The code has one user, its author, on one server.
 - Target Python 3.14. Type-check with `mypy` before committing.
+- Always run `uv run test/test_nightlies.py` before committing.
 - Document all config file keys in `views/docs.view`.
 - Document all architecture changes in this file
