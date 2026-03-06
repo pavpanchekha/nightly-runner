@@ -98,11 +98,21 @@ class TestNightlyRunnerHarness(unittest.TestCase):
 
     def test_adding_new_branch_gets_scheduled(self) -> None:
         self.nightly(repo_updates={}, complete=True)
+        self.dump_repo_state("after-initial-complete")
 
         self.create_branch("hotfix/new", "hotfix.txt", "v1\n", "add hotfix branch")
+        self.dump_repo_state("after-hotfix-push-before-nightly")
 
         ran = self.nightly()
-        self.assertEqual(ran, ["hotfix/new"])
+        self.dump_repo_state("after-hotfix-nightly")
+        self.assertEqual(
+            ran,
+            ["hotfix/new"],
+            msg=(
+                f"Unexpected runnable branches: {ran}\n"
+                f"{self.format_repo_state('assertion-context')}"
+            ),
+        )
 
     def test_deleting_branch_removes_worktree_directory(self) -> None:
         self.create_branch("feature/test", "feature.txt", "v1\n", "initial feature commit")
@@ -377,6 +387,44 @@ class TestNightlyRunnerHarness(unittest.TestCase):
                 branch.config["commit"] = branch.current_commit
                 branch.save_metadata()
         return ran
+
+    def format_repo_state(self, label: str) -> str:
+        repo_dir = self.repos_dir / "testrepo"
+        checkout = repo_dir / ".checkout"
+        details: list[str] = [f"[debug:{label}]"]
+        details.append(f"repo_dir_exists={repo_dir.exists()}")
+        details.append(f"checkout_exists={checkout.exists()}")
+
+        for branch in ("main", "hotfix/new"):
+            filename = branch.replace("%", "_25").replace("/", "_2f") + ".json"
+            metadata = repo_dir / filename
+            if metadata.exists():
+                details.append(f"{branch}.json={metadata.read_text()}")
+            else:
+                details.append(f"{branch}.json=<missing>")
+            if checkout.exists():
+                cp = subprocess.run(
+                    ["git", "-C", str(checkout), "rev-parse", f"origin/{branch}"],
+                    capture_output=True,
+                    text=True,
+                )
+                if cp.returncode == 0:
+                    details.append(f"origin/{branch}={cp.stdout.strip()}")
+                else:
+                    details.append(f"origin/{branch}=<missing:{cp.stderr.strip()}>")
+
+        logs = sorted(self.logs_dir.glob("*.log"))
+        if logs:
+            latest = logs[-1]
+            tail = latest.read_text(errors="replace").splitlines()[-20:]
+            details.append(f"latest_log={latest.name}")
+            details.append("latest_log_tail:\n" + "\n".join(tail))
+        else:
+            details.append("latest_log=<none>")
+        return "\n".join(details)
+
+    def dump_repo_state(self, label: str) -> None:
+        print(self.format_repo_state(label))
 
     def run_runner(
         self,
