@@ -446,7 +446,12 @@ class Repository:
 
         # Mark branches that are currently queued in slurm
         try:
-            result = self.runner.exec(2, ["squeue", "--noheader", "--Format=Name:500"])
+            result = subprocess.run(
+                ["squeue", "--noheader", "--Format=Name:500"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
         except FileNotFoundError:
             self.runner.log(2, "SLURM squeue command not found; skipping queued-branch detection")
             return
@@ -457,7 +462,7 @@ class Repository:
         prefix = f"nightly:{self.name}:"
         queued = {
             line.strip().removeprefix(prefix)
-            for line in result.stdout.decode("utf8").splitlines()
+            for line in result.stdout.splitlines()
             if line.strip().startswith(prefix)
         }
         for branch in self.branches.values():
