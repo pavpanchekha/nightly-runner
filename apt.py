@@ -1,10 +1,12 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Sequence, TYPE_CHECKING
-import re
 import subprocess
 
 if TYPE_CHECKING:
     import nightlies
+
+import re
 
 APT_LINE_RE = re.compile(r"^(\d+) upgraded, (\d+) newly installed, (\d+) to remove and (\d+) not upgraded\.$", re.MULTILINE)
 APT_INST_RE = re.compile(r"^Inst (\S+)(?: \[([^\]]+)\])? \(([^)]+)\)")
@@ -24,9 +26,49 @@ def _format_cmd(cmd: Sequence[object]) -> str:
     return " ".join(str(part) for part in cmd)
 
 
+def _apt_source_files(
+    source_list: Path = Path("/etc/apt/sources.list"),
+    sources_dir: Path = Path("/etc/apt/sources.list.d"),
+) -> List[Path]:
+    files: List[Path] = []
+    if source_list.is_file():
+        files.append(source_list)
+    if sources_dir.is_dir():
+        for path in sorted(sources_dir.iterdir()):
+            if path.is_file():
+                files.append(path)
+    return files
+
+def _has_repository(
+    repo: str,
+    source_list: Path = Path("/etc/apt/sources.list"),
+    sources_dir: Path = Path("/etc/apt/sources.list.d"),
+) -> bool:
+    if not repo.startswith("ppa:"):
+        return False
+
+    parts = repo[4:].split("/")
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        return False
+    owner, name = parts
+    ppa_path = f"/{owner}/{name}/ubuntu"
+
+    for path in _apt_source_files(source_list, sources_dir):
+        try:
+            contents = path.read_text(errors="ignore")
+        except OSError:
+            continue
+        if "launchpad" in contents and ppa_path in contents:
+            return True
+    return False
+
+
 def add_repositories(runner: "nightlies.NightlyRunner", repos: Sequence[str]) -> List[str]:
     failed: List[str] = []
     for repo in repos:
+        if _has_repository(repo):
+            runner.log(1, f"Apt repository {repo} already present; skipping")
+            continue
         runner.log(1, f"Adding apt repository {repo}")
         if runner.dryrun:
             continue
