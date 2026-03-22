@@ -44,22 +44,22 @@ def _has_repository(
     source_list: Path = Path("/etc/apt/sources.list"),
     sources_dir: Path = Path("/etc/apt/sources.list.d"),
 ) -> bool:
-    if not repo.startswith("ppa:"):
+    if not repo.startswith("ppa:") or repo.count("/") != 1:
         return False
 
-    parts = repo[4:].split("/")
-    if len(parts) != 2 or not parts[0] or not parts[1]:
-        return False
-    owner, name = parts
-    ppa_path = f"/{owner}/{name}/ubuntu"
+    ppa_path = f"/{repo[4:]}/ubuntu"
 
     for path in _apt_source_files(source_list, sources_dir):
         try:
             contents = path.read_text(errors="ignore")
         except OSError:
             continue
-        if "launchpad" in contents and ppa_path in contents:
-            return True
+        for line in contents.splitlines():
+            if not line.startswith("URIs:"):
+                continue
+            uri = line.removeprefix("URIs:").strip()
+            if ppa_path in uri:
+                return True
     return False
 
 
