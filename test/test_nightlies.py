@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 # Ensure direct execution (uv run test/test_nightlies.py) resolves project modules from repo root.
 ROOT = Path(__file__).resolve().parent.parent
@@ -17,6 +18,68 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from nightlies import NightlyRunner
+import apt
+
+
+class FakeRunner:
+    def __init__(self, dryrun: bool = False) -> None:
+        self.dryrun = dryrun
+        self.logs: list[tuple[int, str]] = []
+        self.commands: list[list[str]] = []
+
+    def log(self, level: int, message: str) -> None:
+        self.logs.append((level, message))
+
+    def exec(self, level: int, cmd: list[str]) -> subprocess.CompletedProcess[bytes]:
+        self.commands.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout=b"", stderr=b"")
+
+
+class TestApt(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp(prefix="apt-test-"))
+        self.source_list = self.tmpdir / "sources.list"
+        self.sources_dir = self.tmpdir / "sources.list.d"
+        self.sources_dir.mkdir()
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmpdir)
+
+    def test_add_repositories_skips_existing_ppa(self) -> None:
+        (self.sources_dir / "owner-name.list").write_text(
+            "deb https://ppa.launchpadcontent.net/owner/name/ubuntu noble main\n"
+        )
+        runner = FakeRunner()
+
+        with mock.patch.object(apt, "_has_repository", return_value=True):
+            failed = apt.add_repositories(runner, ["ppa:owner/name"])
+
+        self.assertEqual(failed, [])
+        self.assertEqual(runner.commands, [])
+        self.assertIn((1, "Apt repository ppa:owner/name already present; skipping"), runner.logs)
+
+    def test_add_repositories_adds_missing_ppa(self) -> None:
+        runner = FakeRunner()
+
+        with mock.patch.object(apt, "_has_repository", return_value=False):
+            failed = apt.add_repositories(runner, ["ppa:owner/name"])
+
+        self.assertEqual(failed, [])
+        self.assertEqual(
+            runner.commands,
+            [["sudo", "add-apt-repository", "--yes", "ppa:owner/name"]],
+        )
+
+    def test_has_repository_matches_launchpad_sources(self) -> None:
+        (self.source_list).write_text(
+            "Types: deb\n"
+            "URIs: https://ppa.launchpadcontent.net/owner/name/ubuntu\n"
+            "Suites: noble\n"
+            "Components: main\n"
+        )
+
+        self.assertTrue(apt._has_repository("ppa:owner/name", self.source_list, self.sources_dir))
+        self.assertFalse(apt._has_repository("ppa:other/name", self.source_list, self.sources_dir))
 
 
 class TestNightlyRunnerHarness(unittest.TestCase):
