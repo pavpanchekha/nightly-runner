@@ -395,13 +395,7 @@ class TestNightlyRunnerHarness(unittest.TestCase):
         self.assertIn('"commit"', contents)
         self.assertIn('"time"', contents)
         report_dir = self.published_report(result)
-        info = json.loads((report_dir / "nightly_info.json").read_text())
-        self.assertEqual(info["status"], "timeout")
-        self.assertEqual(
-            info["report_url"],
-            "https://nightlies.example/reports/testrepo/" + report_dir.name,
-        )
-        self.assertEqual(info["log"], "timeout.log")
+        self.assertFalse((report_dir / "nightly_info.json").exists())
 
     def test_runner_writes_metadata_for_successful_run(self) -> None:
         self.makefile("add simple nightly target", ["echo ok"])

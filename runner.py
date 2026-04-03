@@ -91,24 +91,24 @@ def format_time_iso_utc(ts: datetime) -> str:
     return ts.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 def write_nightly_info(
-    report_dir: Path,
+    branch_config: config.BranchConfig,
     *,
-    bc: config.BranchConfig,
     commit: str,
     status: str,
     started_at: datetime,
     finished_at: datetime,
-    log_name: str,
-    log_url: str | None,
-    report_url: str | None,
+    log: str,
+    log_url: str,
+    report_url: str,
     image_url: str | None,
 ) -> None:
     duration_seconds = (finished_at - started_at).total_seconds()
-    with (report_dir / "nightly_info.json").open("w") as f:
+    assert branch_config.report_dir is not None
+    with (branch_config.report_dir / "nightly_info.json").open("w") as f:
         json.dump({
-            "repo": bc.repo_name,
-            "branch": bc.branch_name,
-            "branch_filename": bc.branch_filename,
+            "repo": branch_config.repo_name,
+            "branch": branch_config.branch_name,
+            "branch_filename": branch_config.branch_filename,
             "commit": commit,
             "commit_short": commit[:8],
             "status": status,
@@ -116,7 +116,7 @@ def write_nightly_info(
             "finished_at": format_time_iso_utc(finished_at),
             "duration_seconds": duration_seconds,
             "duration_human": format_time(duration_seconds),
-            "log": log_name,
+            "log": log,
             "log_url": log_url,
             "report_url": report_url,
             "image_url": image_url,
@@ -185,30 +185,6 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
 
     if bc.report_dir and bc.report_dir.exists():
         try:
-            finished_at = datetime.now(timezone.utc)
-            log_url = info.get("logurl")
-            report_url = None
-            image_url = None
-            if bc.base_url:
-                name = f"{int(time.time())}:{bc.branch_filename}:{out[:8]}"
-                report_url = bc.base_url + "reports/" + bc.repo_name + "/" + name
-                if bc.image_file and bc.image_file.exists():
-                    path = bc.image_file.relative_to(bc.report_dir)
-                    image_url = report_url + "/" + str(path)
-
-            write_nightly_info(
-                bc.report_dir,
-                bc=bc,
-                commit=out,
-                status=status,
-                started_at=start,
-                finished_at=finished_at,
-                log_name=log_name,
-                log_url=log_url,
-                report_url=report_url,
-                image_url=image_url,
-            )
-
             if bc.gzip:
                 log(f"GZipping all {bc.gzip} files")
                 gzip_matching_files(bc.report_dir, shlex.split(bc.gzip))
@@ -224,10 +200,27 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
                     slack_output.warn("report-size", msg)
 
             if "url" not in info and bc.base_url:
-                assert report_url is not None
+                name = f"{int(time.time())}:{bc.branch_filename}:{out[:8]}"
                 dest_dir = bc.reports_dir / bc.repo_name / name
+                report_url = bc.base_url + "reports/" + bc.repo_name + "/" + name
 
                 if bc.report_dir.exists():
+                    image_url = None
+                    if bc.image_file and bc.image_file.exists():
+                        path = bc.image_file.relative_to(bc.report_dir)
+                        image_url = report_url + "/" + str(path)
+                    if status == "success":
+                        write_nightly_info(
+                            bc,
+                            commit=out,
+                            status=status,
+                            started_at=start,
+                            finished_at=datetime.now(timezone.utc),
+                            log=log_name,
+                            log_url=bc.base_url + "logs/" + urllib.parse.quote(log_name),
+                            report_url=report_url,
+                            image_url=image_url,
+                        )
                     log(f"Publishing report directory {bc.report_dir} to {dest_dir}")
                     copything(bc.report_dir, dest_dir)
                     info["url"] = report_url

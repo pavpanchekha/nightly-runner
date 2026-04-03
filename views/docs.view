@@ -89,8 +89,9 @@ metadata about the run, such as branch, commit, status, timing, and
 report/log URLs.</p>
 
 <p>The <code>nightly_info.json</code> file is written by the runner at
-the top level of the report directory. It contains a single JSON
-object with these keys:</p>
+the top level of the report directory, but only when the nightly run
+itself succeeds and the report is published. It contains a single JSON object with these
+keys:</p>
 
 <dl>
 <dt><code>repo</code></dt>
@@ -132,13 +133,10 @@ names.</dd>
 <dd>The log file name for the run.</dd>
 
 <dt><code>log_url</code></dt>
-<dd>The absolute URL to the log file when <code>baseurl</code> is
-configured, otherwise <code>null</code>.</dd>
+<dd>The absolute URL to the log file for the run.</dd>
 
 <dt><code>report_url</code></dt>
-<dd>The absolute URL to the published report directory when the report
-is published under a configured <code>baseurl</code>, otherwise
-<code>null</code>.</dd>
+<dd>The absolute URL to the published report directory.</dd>
 
 <dt><code>image_url</code></dt>
 <dd>The absolute URL to the configured report image when one exists,
