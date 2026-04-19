@@ -65,13 +65,28 @@ def copything(src: Path, dst: Path) -> None:
     else:
         shutil.copy2(src, dst)
 
-def gzip_matching_files(directory: Path, globs: List[str]) -> None:
+def gzip_matching_files(directory: Path, globs: List[str]) -> set[Path]:
+    compressed: set[Path] = set()
     for path in directory.rglob("*"):
         if path.is_file() and any(path.match(g) for g in globs):
             gz_path = path.with_suffix(path.suffix + ".gz")
+            compressed.add(gz_path.relative_to(directory))
             with path.open("rb") as f_in, gzip.open(gz_path, "wb", compresslevel=9) as f_out:
                 shutil.copyfileobj(f_in, f_out)
             path.unlink()
+    return compressed
+
+def report_files(directory: Path, compressed: set[Path]) -> List[Dict[str, Any]]:
+    files: List[Dict[str, Any]] = []
+    for path in sorted(directory.rglob("*")):
+        if not path.is_file():
+            continue
+        stored_path = path.relative_to(directory)
+        files.append({
+            "stored_path": str(stored_path),
+            "gzip": stored_path in compressed,
+        })
+    return files
 
 def read_metadata(metadata_file: Path) -> Dict[str, Any]:
     if metadata_file.exists():
@@ -101,6 +116,7 @@ def write_nightly_info(
     log_url: str,
     report_url: str,
     image_url: str | None,
+    compressed: set[Path],
 ) -> None:
     duration_seconds = (finished_at - started_at).total_seconds()
     assert branch_config.report_dir is not None
@@ -120,6 +136,7 @@ def write_nightly_info(
             "log_url": log_url,
             "report_url": report_url,
             "image_url": image_url,
+            "files": report_files(branch_config.report_dir, compressed),
         }, f)
 
 def run_branch(bc: config.BranchConfig, log_name: str) -> int:
@@ -185,9 +202,10 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
 
     if bc.report_dir and bc.report_dir.exists():
         try:
+            compressed: set[Path] = set()
             if bc.gzip:
                 log(f"GZipping all {bc.gzip} files")
-                gzip_matching_files(bc.report_dir, shlex.split(bc.gzip))
+                compressed = gzip_matching_files(bc.report_dir, shlex.split(bc.gzip))
 
             total, biggest, _ = tree_size(bc.report_dir)
             if bc.warn_report and total > bc.warn_report:
@@ -220,6 +238,7 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
                             log_url=bc.base_url + "logs/" + urllib.parse.quote(log_name),
                             report_url=report_url,
                             image_url=image_url,
+                            compressed=compressed,
                         )
                     log(f"Publishing report directory {bc.report_dir} to {dest_dir}")
                     copything(bc.report_dir, dest_dir)
