@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import configparser
+import json
 import os
 import shutil
 import subprocess
@@ -218,6 +219,23 @@ class TestNightlyRunnerHarness(unittest.TestCase):
         published = report_dir / "index.html"
         self.assertTrue(published.exists())
         self.assertEqual(published.read_text(), "<h1>ok</h1>\n")
+        info = json.loads((report_dir / "nightly_info.json").read_text())
+        self.assertEqual(info["repo"], "testrepo")
+        self.assertEqual(info["branch"], "main")
+        self.assertEqual(info["branch_filename"], "main")
+        self.assertEqual(info["status"], "success")
+        self.assertRegex(info["commit"], r"^[0-9a-f]{40}$")
+        self.assertEqual(info["commit_short"], info["commit"][:8])
+        self.assertEqual(info["log"], "publish-report.log")
+        self.assertEqual(
+            info["report_url"],
+            "https://nightlies.example/reports/testrepo/" + report_dir.name,
+        )
+        self.assertEqual(
+            info["log_url"],
+            "https://nightlies.example/logs/publish-report.log",
+        )
+        self.assertIsNone(info["image_url"])
         # Published reports should be moved out of the worktree so later runs start clean.
         self.assertFalse((self.repos_dir / "testrepo" / "main" / "report").exists())
 
@@ -376,6 +394,8 @@ class TestNightlyRunnerHarness(unittest.TestCase):
         contents = metadata.read_text()
         self.assertIn('"commit"', contents)
         self.assertIn('"time"', contents)
+        report_dir = self.published_report(result)
+        self.assertFalse((report_dir / "nightly_info.json").exists())
 
     def test_runner_writes_metadata_for_successful_run(self) -> None:
         self.makefile("add simple nightly target", ["echo ok"])

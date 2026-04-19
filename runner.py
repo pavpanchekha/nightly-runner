@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from typing import Any, Dict, List, Optional, Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import gzip, json, shlex, shutil, subprocess, sys, time
 import signal
@@ -87,6 +87,41 @@ def save_metadata(metadata_file: Path, data: Dict[str, Any]) -> None:
     with metadata_file.open("w") as f:
         json.dump(data, f)
 
+def format_time_iso_utc(ts: datetime) -> str:
+    return ts.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+def write_nightly_info(
+    branch_config: config.BranchConfig,
+    *,
+    commit: str,
+    status: str,
+    started_at: datetime,
+    finished_at: datetime,
+    log: str,
+    log_url: str,
+    report_url: str,
+    image_url: str | None,
+) -> None:
+    duration_seconds = (finished_at - started_at).total_seconds()
+    assert branch_config.report_dir is not None
+    with (branch_config.report_dir / "nightly_info.json").open("w") as f:
+        json.dump({
+            "repo": branch_config.repo_name,
+            "branch": branch_config.branch_name,
+            "branch_filename": branch_config.branch_filename,
+            "commit": commit,
+            "commit_short": commit[:8],
+            "status": status,
+            "started_at": format_time_iso_utc(started_at),
+            "finished_at": format_time_iso_utc(finished_at),
+            "duration_seconds": duration_seconds,
+            "duration_human": format_time(duration_seconds),
+            "log": log,
+            "log_url": log_url,
+            "report_url": report_url,
+            "image_url": image_url,
+        }, f)
+
 def run_branch(bc: config.BranchConfig, log_name: str) -> int:
     log(f"Running branch {bc.branch_name} on repo {bc.repo_name}")
     info: Dict[str, str] = {}
@@ -101,7 +136,7 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
         log(f"Received signal {signum}")
         info["result"] = "*killed*"
         if start is not None:
-            info["time"] = format_time((datetime.now() - start).seconds)
+            info["time"] = format_time((datetime.now(timezone.utc) - start).total_seconds())
         log("Posting killed result to slack")
         if slack_output:
             try:
@@ -120,7 +155,7 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
         capture_output=True, check=True
     ).stdout.decode("ascii").strip()
 
-    start = datetime.now()
+    start = datetime.now(timezone.utc)
     try:
         to = parse_time(bc.timeout)
         cmd = ["make", "-C", str(bc.branch_dir), "nightly"]
@@ -136,12 +171,12 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
 
     except subprocess.TimeoutExpired as e:
         log(f"Run on branch {bc.branch_name} timed out after {format_time(e.timeout)}")
-        failure = "timeout"
+        status = "timeout"
     except subprocess.CalledProcessError:
-        failure = "failure"
+        status = "failure"
     else:
         log(f"Successfully ran on branch {bc.branch_name}")
-        failure = ""
+        status = "success"
 
     metadata = read_metadata(bc.metadata_file)
     metadata["commit"] = out
@@ -167,16 +202,32 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
             if "url" not in info and bc.base_url:
                 name = f"{int(time.time())}:{bc.branch_filename}:{out[:8]}"
                 dest_dir = bc.reports_dir / bc.repo_name / name
+                report_url = bc.base_url + "reports/" + bc.repo_name + "/" + name
 
                 if bc.report_dir.exists():
+                    image_url = None
+                    if bc.image_file and bc.image_file.exists():
+                        path = bc.image_file.relative_to(bc.report_dir)
+                        image_url = report_url + "/" + str(path)
+                    if status == "success":
+                        write_nightly_info(
+                            bc,
+                            commit=out,
+                            status=status,
+                            started_at=start,
+                            finished_at=datetime.now(timezone.utc),
+                            log=log_name,
+                            log_url=bc.base_url + "logs/" + urllib.parse.quote(log_name),
+                            report_url=report_url,
+                            image_url=image_url,
+                        )
                     log(f"Publishing report directory {bc.report_dir} to {dest_dir}")
                     copything(bc.report_dir, dest_dir)
-                    url_base = bc.base_url + "reports/" + bc.repo_name + "/" + name
-                    info["url"] = url_base
+                    info["url"] = report_url
                     if bc.image_file and bc.image_file.exists():
                         log(f"Linking image file {bc.image_file}")
-                        path = bc.image_file.relative_to(bc.report_dir)
-                        info["img"] = url_base + "/" + str(path)
+                        assert image_url is not None
+                        info["img"] = image_url
                     shutil.rmtree(bc.report_dir, ignore_errors=True)
                 else:
                     log(f"Report directory {bc.report_dir} does not exist")
@@ -206,8 +257,8 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
         if slack_output:
             slack_output.warn("log-size", msg)
 
-    info["result"] = f"*{failure}*" if failure else "success"
-    info["time"] = format_time((datetime.now() - start).seconds)
+    info["result"] = f"*{status}*" if status != "success" else "success"
+    info["time"] = format_time((datetime.now(timezone.utc) - start).total_seconds())
 
     if slack_output:
         log("Posting results of run to slack!")
@@ -230,7 +281,7 @@ def run_branch(bc: config.BranchConfig, log_name: str) -> int:
         assert max_rss is not None, f"sstat returned unknown MaxRSS: {output!r}"
         log(f"Nightly used memory={format_size(max_rss).lower()}, timeout={info['time']}")
 
-    return 1 if failure else 0
+    return 1 if status != "success" else 0
 
 
 def main() -> int:
