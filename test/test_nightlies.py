@@ -236,8 +236,42 @@ class TestNightlyRunnerHarness(unittest.TestCase):
             "https://nightlies.example/logs/publish-report.log",
         )
         self.assertIsNone(info["image_url"])
+        self.assertEqual(
+            info["files"],
+            [
+                {"stored_path": "index.html", "gzip": False},
+                {"stored_path": "nightly_info.json", "gzip": False},
+            ],
+        )
         # Published reports should be moved out of the worktree so later runs start clean.
         self.assertFalse((self.repos_dir / "testrepo" / "main" / "report").exists())
+
+    def test_runner_records_gzipped_files_in_nightly_info(self) -> None:
+        self.makefile(
+            "add gzipped report-producing nightly target",
+            [
+                "printf '<h1>ok</h1>\\n' > report/index.html",
+                "printf '{\"ok\":true}\\n' > report/results.json",
+            ],
+        )
+        self.git(["push", "origin", "main"], repo=self.work_dir)
+
+        self.nightly(
+            repo_updates={"branches": "main", "report": "report", "gzip": "*.json"},
+            complete=True,
+        )
+        result = self.run_runner("main", "publish-gzip-report.log")
+        report_dir = self.published_report(result)
+        info = json.loads((report_dir / "nightly_info.json").read_text())
+
+        self.assertEqual(
+            info["files"],
+            [
+                {"stored_path": "index.html", "gzip": False},
+                {"stored_path": "nightly_info.json", "gzip": False},
+                {"stored_path": "results.json.gz", "gzip": True},
+            ],
+        )
 
     def test_runner_handles_invalid_report_destination(self) -> None:
         invalid_reports = self.tmpdir / "reports-file"
