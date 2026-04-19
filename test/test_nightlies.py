@@ -239,8 +239,8 @@ class TestNightlyRunnerHarness(unittest.TestCase):
         self.assertEqual(
             info["files"],
             [
-                {"stored_path": "index.html", "gzip": False},
-                {"stored_path": "nightly_info.json", "gzip": False},
+                {"path": "index.html", "gzip": False},
+                {"path": "nightly_info.json", "gzip": False},
             ],
         )
         # Published reports should be moved out of the worktree so later runs start clean.
@@ -267,9 +267,9 @@ class TestNightlyRunnerHarness(unittest.TestCase):
         self.assertEqual(
             info["files"],
             [
-                {"stored_path": "index.html", "gzip": False},
-                {"stored_path": "nightly_info.json", "gzip": False},
-                {"stored_path": "results.json.gz", "gzip": True},
+                {"path": "index.html", "gzip": False},
+                {"path": "nightly_info.json", "gzip": False},
+                {"path": "results.json.gz", "gzip": True},
             ],
         )
 

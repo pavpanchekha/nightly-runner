@@ -241,4 +241,13 @@ names.</dd>
 <dt><code>image_url</code></dt>
 <dd>The absolute URL to the configured report image when one exists,
 otherwise <code>null</code>.</dd>
+
+<dt><code>files</code></dt>
+<dd>A list of file records describing the published report contents.
+Each record contains <code>path</code>, the path actually stored
+under the report directory, and <code>gzip</code>, which is
+<code>true</code> when the runner created that stored file by gzipping a
+report artifact before upload. Downloaders can fetch
+<code>path</code> directly and, when <code>gzip</code> is true,
+ungzip it after download.</dd>
 </dl>

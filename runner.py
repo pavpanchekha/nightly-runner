@@ -81,10 +81,10 @@ def report_files(directory: Path, compressed: set[Path]) -> List[Dict[str, Any]]
     for path in sorted(directory.rglob("*")):
         if not path.is_file():
             continue
-        stored_path = path.relative_to(directory)
+        report_path = path.relative_to(directory)
         files.append({
-            "stored_path": str(stored_path),
-            "gzip": stored_path in compressed,
+            "path": str(report_path),
+            "gzip": report_path in compressed,
         })
     return files
 
