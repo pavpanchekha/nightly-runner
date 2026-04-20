@@ -1,7 +1,7 @@
 [project]
 name = "nightly-runner"
 version = "0.1.0"
-description = "Add your description here"
+description = "A script that runs integration tests nightly"
 readme = "README.md"
 requires-python = "~=3.14.0"
 dependencies = [
