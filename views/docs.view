@@ -251,3 +251,28 @@ report artifact before upload. Downloaders can fetch
 <code>path</code> directly and, when <code>gzip</code> is true,
 ungzip it after download.</dd>
 </dl>
+
+<h2>Server-side report tools</h2>
+
+<p>Published reports can include executables or scripts and invoke them
+through the nightly server with a POST request to:</p>
+
+<pre>/exec/&lt;repo&gt;/&lt;run&gt;/&lt;filepath&gt;</pre>
+
+<p>Here <code>repo</code> is the short repository name,
+<code>run</code> is a published run directory name like
+<code>1776156991:main:dee549aa</code>, and <code>filepath</code> is a
+path inside that report directory. The server rejects requests that try
+to escape the chosen report directory.</p>
+
+<p>The server executes the requested file synchronously with its current
+working directory set to the published report directory. On success, the
+server returns the tool's standard output as the HTTP response. If the
+tool exits with a non-zero status, the server returns an error using the
+tool's standard error output when available.</p>
+
+<p>Report pages can pass arguments by posting repeated
+<code>arg</code> form fields. For example, a report can submit
+<code>old_run</code> and <code>new_run</code> indirectly by placing them
+in hidden inputs named <code>arg</code> and then interpreting positional
+arguments inside the tool.</p>
