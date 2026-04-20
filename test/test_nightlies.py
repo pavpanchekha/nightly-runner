@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 import configparser
 import json
 import os
@@ -53,7 +54,7 @@ class TestApt(unittest.TestCase):
         runner = FakeRunner()
 
         with mock.patch.object(apt, "_has_repository", return_value=True):
-            failed = apt.add_repositories(runner, ["ppa:owner/name"])
+            failed = apt.add_repositories(cast(NightlyRunner, runner), ["ppa:owner/name"])
 
         self.assertEqual(failed, [])
         self.assertEqual(runner.commands, [])
@@ -63,7 +64,7 @@ class TestApt(unittest.TestCase):
         runner = FakeRunner()
 
         with mock.patch.object(apt, "_has_repository", return_value=False):
-            failed = apt.add_repositories(runner, ["ppa:owner/name"])
+            failed = apt.add_repositories(cast(NightlyRunner, runner), ["ppa:owner/name"])
 
         self.assertEqual(failed, [])
         self.assertEqual(
