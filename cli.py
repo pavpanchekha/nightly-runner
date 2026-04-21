@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import codecs
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
 import argparse
+import gzip
+import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -17,9 +23,13 @@ import urllib.request
 
 BASE_URL = "https://nightly.cs.washington.edu/"
 LOGS_URL = BASE_URL + "logs/"
+LOGS_SORTED_URL = LOGS_URL + "?C=M&O=D"
+REPORTS_URL = BASE_URL + "reports/"
 USERNAME = "uwplse"
 PASSWORD = "uwplse"
+CURL_PARALLEL_MAX = 32
 COMPLETE_RE = re.compile(r"^Nightly used memory=.*timeout=.*$", re.MULTILINE)
+PUBLISH_RE = re.compile(r"^Publishing report directory .* to .*/reports/([^/]+)/([^/\n]+)$", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -33,6 +43,20 @@ class RepoRun:
     date: str
     time: str
     branch: str
+
+
+@dataclass(frozen=True)
+class RunSelector:
+    branch: str | None
+    date: str | None
+    time: str | None
+
+
+@dataclass(frozen=True)
+class DownloadStats:
+    file_count: int
+    curl_seconds: float
+    ungzip_seconds: float
 
 
 class NginxIndexParser(HTMLParser):
@@ -64,6 +88,11 @@ class NginxIndexParser(HTMLParser):
             return
         self.entries.append(LogEntry(Path(href).name, urllib.parse.urljoin(self.base_url, href)))
 
+    def drain_entries(self) -> list[LogEntry]:
+        entries = self.entries
+        self.entries = []
+        return entries
+
 
 def make_opener() -> urllib.request.OpenerDirector:
     password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
@@ -73,6 +102,11 @@ def make_opener() -> urllib.request.OpenerDirector:
 
 def fetch_logs_index(opener: urllib.request.OpenerDirector) -> str:
     with opener.open(LOGS_URL) as response:
+        return response.read().decode("utf-8", errors="replace")
+
+
+def fetch_text(opener: urllib.request.OpenerDirector, url: str) -> str:
+    with opener.open(url) as response:
         return response.read().decode("utf-8", errors="replace")
 
 
@@ -102,8 +136,30 @@ def parse_html_entries(payload: str) -> list[LogEntry]:
     return list(deduped.values())
 
 
+def iter_html_entries(response: urllib.response.addinfourl, base_url: str) -> Iterator[LogEntry]:
+    parser = NginxIndexParser(base_url)
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    while True:
+        chunk = response.read(65536)
+        if not chunk:
+            break
+        parser.feed(decoder.decode(chunk))
+        yield from parser.drain_entries()
+    tail = decoder.decode(b"", final=True)
+    if tail:
+        parser.feed(tail)
+    parser.close()
+    yield from parser.drain_entries()
+
+
+def iter_entries(opener: urllib.request.OpenerDirector, *, newest_first: bool) -> Iterator[LogEntry]:
+    url = LOGS_SORTED_URL if newest_first else LOGS_URL
+    with opener.open(url) as response:
+        yield from iter_html_entries(response, url)
+
+
 def load_entries() -> list[LogEntry]:
-    return parse_html_entries(fetch_logs_index(make_opener()))
+    return list(iter_entries(make_opener(), newest_first=False))
 
 
 def github_repo(url: str) -> str | None:
@@ -151,20 +207,21 @@ def strip_timestamp_prefix(stem: str) -> str | None:
     return "-".join(rest) if rest else ""
 
 
-def repo_entries(entries: list[LogEntry], repo: str) -> list[LogEntry]:
+def repo_entries(entries: Iterable[LogEntry], repo: str) -> Iterator[LogEntry]:
     repo_name = repo.split("/")[-1]
-    matched: list[LogEntry] = []
     for entry in entries:
         rest = strip_timestamp_prefix(Path(entry.name).stem)
         if rest and rest.startswith(repo_name + "-"):
-            matched.append(entry)
-    return matched
+            yield entry
 
 
-def recent_repo_entries(entries: list[LogEntry], repo: str) -> list[LogEntry]:
-    matched = repo_entries(entries, repo)
-    matched.sort(key=lambda entry: entry.name, reverse=True)
-    return list(reversed(matched[:20]))
+def recent_repo_entries(entries: Iterable[LogEntry], repo: str) -> list[LogEntry]:
+    matched: list[LogEntry] = []
+    for entry in repo_entries(entries, repo):
+        matched.append(entry)
+        if len(matched) >= 20:
+            break
+    return list(reversed(matched))
 
 
 def parse_repo_run(repo: str, entry: LogEntry) -> RepoRun:
@@ -212,13 +269,45 @@ def find_repo_log(
     return matched[-1]
 
 
+def matching_repo_entries(
+    entries: Iterable[LogEntry],
+    repo: str,
+    selector: RunSelector,
+) -> list[LogEntry]:
+    normalized_time = normalize_time(selector.time)
+    matched: list[LogEntry] = []
+    for entry in repo_entries(entries, repo):
+        run = parse_repo_run(repo, entry)
+        if selector.branch is not None and run.branch != selector.branch:
+            continue
+        if selector.date is not None and run.date != selector.date:
+            continue
+        if normalized_time is not None and run.time != normalized_time:
+            continue
+        matched.append(entry)
+    return matched
+
+
+def latest_matching_repo_entry(
+    entries: Iterable[LogEntry],
+    repo: str,
+    selector: RunSelector,
+) -> LogEntry | None:
+    for entry in matching_repo_entries(entries, repo, selector):
+        return entry
+    return None
+
+
+def timing_line(step: str, seconds: float) -> str:
+    return f"download timing: {step:<18} {seconds:.3f}s"
+
+
 def log_complete(text: str) -> bool:
     return COMPLETE_RE.search(text) is not None
 
 
 def print_log(opener: urllib.request.OpenerDirector, url: str) -> None:
-    with opener.open(url) as response:
-        sys.stdout.write(response.read().decode("utf-8", errors="replace"))
+    sys.stdout.write(fetch_text(opener, url))
 
 
 def tail_log(opener: urllib.request.OpenerDirector, url: str) -> None:
@@ -235,9 +324,154 @@ def tail_log(opener: urllib.request.OpenerDirector, url: str) -> None:
         time.sleep(1)
 
 
-def cmd_list(repo: str) -> int:
+def find_report_url_in_log(repo: str, log_text: str) -> str | None:
+    repo_name = repo.split("/")[-1]
+    matched: str | None = None
+    for match in PUBLISH_RE.finditer(log_text):
+        if match.group(1) != repo_name:
+            continue
+        matched = REPORTS_URL + repo_name + "/" + match.group(2)
+    return matched
+
+
+def fetch_manifest(opener: urllib.request.OpenerDirector, report_url: str) -> dict[str, object]:
+    manifest = json.loads(fetch_text(opener, report_url + "/nightly_info.json"))
+    if not isinstance(manifest, dict):
+        raise ValueError("nightly_info.json did not contain a JSON object")
+    files = manifest.get("files")
+    if not isinstance(files, list):
+        raise ValueError("nightly_info.json did not contain a files list")
+    return manifest
+
+
+def manifest_paths(path_value: object, gzip_value: object) -> tuple[str, str]:
+    if not isinstance(path_value, str):
+        raise ValueError("manifest file path was not a string")
+    if not isinstance(gzip_value, bool):
+        raise ValueError("manifest gzip flag was not a boolean")
+    path = Path(path_value)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError(f"unsafe manifest path {path_value!r}")
+    if gzip_value:
+        if path_value.endswith(".gz"):
+            return path_value, path_value[:-3]
+        return path_value + ".gz", path_value
+    return path_value, path_value
+
+
+def download_report_files(
+    report_url: str,
+    files: list[object],
+    output_dir: Path,
+) -> DownloadStats:
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    file_paths: list[tuple[str, str]] = []
+    for file_info in files:
+        if not isinstance(file_info, dict):
+            raise ValueError("manifest file entry was not an object")
+        file_paths.append(manifest_paths(file_info.get("path"), file_info.get("gzip")))
+
+    curl_start = time.perf_counter()
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8") as config_file:
+        for remote_relpath, _ in file_paths:
+            remote_url = report_url + "/" + urllib.parse.quote(remote_relpath)
+            local_path = output_dir / remote_relpath
+            print(f'url = "{remote_url}"', file=config_file)
+            print(f'output = "{local_path}"', file=config_file)
+        config_file.flush()
+        subprocess.run(
+            [
+                "curl",
+                "--fail",
+                "--silent",
+                "--show-error",
+                "--location",
+                "--create-dirs",
+                "--parallel",
+                "--parallel-max",
+                str(min(CURL_PARALLEL_MAX, max(1, len(file_paths)))),
+                "--user",
+                f"{USERNAME}:{PASSWORD}",
+                "--config",
+                config_file.name,
+            ],
+            check=True,
+        )
+    curl_seconds = time.perf_counter() - curl_start
+
+    ungzip_start = time.perf_counter()
+    for remote_relpath, local_relpath in file_paths:
+        if remote_relpath == local_relpath:
+            continue
+        remote_path = output_dir / remote_relpath
+        local_path = output_dir / local_relpath
+        with gzip.open(remote_path, "rb") as f_in, local_path.open("wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
+        remote_path.unlink()
+    ungzip_seconds = time.perf_counter() - ungzip_start
+    return DownloadStats(len(file_paths), curl_seconds, ungzip_seconds)
+
+
+def cmd_download(repo: str, selector: RunSelector) -> int:
+    assert selector.branch is not None
+    opener = make_opener()
+    total_start = time.perf_counter()
     try:
-        entries = recent_repo_entries(load_entries(), repo)
+        entries_start = time.perf_counter()
+        entries = iter_entries(opener, newest_first=True)
+        entry = latest_matching_repo_entry(entries, repo, selector)
+        entries_seconds = time.perf_counter() - entries_start
+        print(timing_line("load/select run", entries_seconds), file=sys.stderr)
+        if entry is None:
+            print("No matching log found.", file=sys.stderr)
+            return 1
+
+        log_fetch_start = time.perf_counter()
+        log_text = fetch_text(opener, entry.url)
+        log_fetch_seconds = time.perf_counter() - log_fetch_start
+        print(timing_line("fetch log", log_fetch_seconds), file=sys.stderr)
+
+        report_url_start = time.perf_counter()
+        report_url = find_report_url_in_log(repo, log_text)
+        report_url_seconds = time.perf_counter() - report_url_start
+        print(timing_line("parse report url", report_url_seconds), file=sys.stderr)
+        if report_url is None:
+            print("No published report found in log.", file=sys.stderr)
+            return 1
+
+        manifest_start = time.perf_counter()
+        manifest = fetch_manifest(opener, report_url)
+        manifest_seconds = time.perf_counter() - manifest_start
+        print(timing_line("fetch manifest", manifest_seconds), file=sys.stderr)
+        files = manifest["files"]
+        assert isinstance(files, list)
+        output_dir = Path(urllib.parse.urlsplit(report_url).path.rstrip("/")).name
+        stats = download_report_files(report_url, files, Path(output_dir))
+        print(timing_line("curl download", stats.curl_seconds), file=sys.stderr)
+        print(timing_line("ungzip files", stats.ungzip_seconds), file=sys.stderr)
+    except urllib.error.URLError as exc:
+        print(f"error: failed to fetch {BASE_URL}: {exc}", file=sys.stderr)
+        return 1
+    except (OSError, ValueError, gzip.BadGzipFile) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    total_seconds = time.perf_counter() - total_start
+    print(timing_line("total", total_seconds), file=sys.stderr)
+    print(f"Downloaded {stats.file_count} files to {output_dir}/")
+    return 0
+
+
+def cmd_list(
+    repo: str,
+    selector: RunSelector,
+) -> int:
+    opener = make_opener()
+    try:
+        if selector.branch is None and selector.date is None and selector.time is None:
+            entries = recent_repo_entries(iter_entries(opener, newest_first=True), repo)
+        else:
+            entries = list(reversed(matching_repo_entries(iter_entries(opener, newest_first=True), repo, selector)))
     except urllib.error.URLError as exc:
         print(f"error: failed to fetch {LOGS_URL}: {exc}", file=sys.stderr)
         return 1
@@ -250,10 +484,11 @@ def cmd_list(repo: str) -> int:
     return 0
 
 
-def cmd_log(repo: str, branch: str, date: str | None, time_value: str | None, follow: bool) -> int:
+def cmd_log(repo: str, selector: RunSelector, follow: bool) -> int:
+    assert selector.branch is not None
     opener = make_opener()
     try:
-        entry = find_repo_log(load_entries(), repo, branch, date, time_value)
+        entry = latest_matching_repo_entry(iter_entries(opener, newest_first=True), repo, selector)
         if entry is None:
             print("No matching log found.", file=sys.stderr)
             return 1
@@ -267,35 +502,52 @@ def cmd_log(repo: str, branch: str, date: str | None, time_value: str | None, fo
     return 0
 
 
+def add_run_selector_args(parser: argparse.ArgumentParser, *, branch_required: bool) -> None:
+    branch_nargs = None if branch_required else "?"
+    parser.add_argument("branch", nargs=branch_nargs, default=None, help="Branch name.")
+    parser.add_argument("date", nargs="?", default=None, help="Run date as YYYY-MM-DD.")
+    parser.add_argument("time", nargs="?", default=None, help="Run time as HH:MM:SS or HHMMSS.")
+
+
+def selector_from_args(args: argparse.Namespace) -> RunSelector:
+    return RunSelector(args.branch, args.date, args.time)
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Query nightly.cs.washington.edu logs.")
+    parser = argparse.ArgumentParser(description="Query nightly.cs.washington.edu logs and reports.")
     parser.add_argument("-C", dest="cwd", default=".", help="Change to this directory first.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    list_parser = subparsers.add_parser("list", help="List the latest runs for a repo.")
+    list_parser = subparsers.add_parser("list", help="List runs for a repo.")
     list_parser.add_argument("--repo", help="Repository name, such as herbie or owner/herbie.")
+    add_run_selector_args(list_parser, branch_required=False)
 
     log_parser = subparsers.add_parser("log", help="Print a log for a repo branch.")
     log_parser.add_argument("--repo", help="Repository name, such as herbie or owner/herbie.")
     log_parser.add_argument("-f", action="store_true", dest="follow", help="Follow the log until it completes.")
-    log_parser.add_argument("branch", help="Branch name.")
-    log_parser.add_argument("date", nargs="?", default=None, help="Run date as YYYY-MM-DD.")
-    log_parser.add_argument("time", nargs="?", default=None, help="Run time as HH:MM:SS or HHMMSS.")
+    add_run_selector_args(log_parser, branch_required=True)
+
+    download_parser = subparsers.add_parser("download", help="Download a published report for a repo branch run.")
+    download_parser.add_argument("--repo", help="Repository name, such as herbie or owner/herbie.")
+    add_run_selector_args(download_parser, branch_required=True)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     os.chdir(args.cwd)
+    selector = selector_from_args(args)
     try:
         repo = args.repo or infer_repo(".")
     except (subprocess.CalledProcessError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     if args.command == "list":
-        return cmd_list(repo)
+        return cmd_list(repo, selector)
     if args.command == "log":
-        return cmd_log(repo, args.branch, args.date, args.time, args.follow)
+        return cmd_log(repo, selector, args.follow)
+    if args.command == "download":
+        return cmd_download(repo, selector)
     raise AssertionError(f"unknown command {args.command}")
 
 

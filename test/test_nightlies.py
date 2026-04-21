@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 import configparser
+import gzip
+import io
 import json
 import os
 import shutil
@@ -11,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from typing import Any, Literal, cast
 from unittest import mock
 
 # Ensure direct execution (uv run test/test_nightlies.py) resolves project modules from repo root.
@@ -20,6 +23,7 @@ if str(ROOT) not in sys.path:
 
 from nightlies import NightlyRunner
 import apt
+import cli
 
 
 class FakeRunner:
@@ -34,6 +38,41 @@ class FakeRunner:
     def exec(self, level: int, cmd: list[str]) -> subprocess.CompletedProcess[bytes]:
         self.commands.append(cmd)
         return subprocess.CompletedProcess(cmd, 0, stdout=b"", stderr=b"")
+
+
+class FakeResponse:
+    def __init__(self, data: bytes, status: int = 200) -> None:
+        self.data = data
+        self.status = status
+        self.offset = 0
+
+    def read(self, size: int = -1) -> bytes:
+        if size < 0:
+            size = len(self.data) - self.offset
+        start = self.offset
+        end = min(len(self.data), start + size)
+        self.offset = end
+        return self.data[start:end]
+
+    def __enter__(self) -> "FakeResponse":
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> Literal[False]:
+        return False
+
+
+class FakeOpener:
+    def __init__(self, responses: dict[str, bytes]) -> None:
+        self.responses = responses
+        self.requests: list[str] = []
+
+    def open(self, request: str | object) -> FakeResponse:
+        if isinstance(request, str):
+            url = request
+        else:
+            url = cast(str, getattr(request, "full_url"))
+        self.requests.append(url)
+        return FakeResponse(self.responses[url])
 
 
 class TestApt(unittest.TestCase):
@@ -53,7 +92,7 @@ class TestApt(unittest.TestCase):
         runner = FakeRunner()
 
         with mock.patch.object(apt, "_has_repository", return_value=True):
-            failed = apt.add_repositories(runner, ["ppa:owner/name"])
+            failed = apt.add_repositories(cast(NightlyRunner, runner), ["ppa:owner/name"])
 
         self.assertEqual(failed, [])
         self.assertEqual(runner.commands, [])
@@ -63,7 +102,7 @@ class TestApt(unittest.TestCase):
         runner = FakeRunner()
 
         with mock.patch.object(apt, "_has_repository", return_value=False):
-            failed = apt.add_repositories(runner, ["ppa:owner/name"])
+            failed = apt.add_repositories(cast(NightlyRunner, runner), ["ppa:owner/name"])
 
         self.assertEqual(failed, [])
         self.assertEqual(
@@ -81,6 +120,148 @@ class TestApt(unittest.TestCase):
 
         self.assertTrue(apt._has_repository("ppa:owner/name", self.source_list, self.sources_dir))
         self.assertFalse(apt._has_repository("ppa:other/name", self.source_list, self.sources_dir))
+
+
+class TestCli(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp(prefix="cli-test-"))
+        self.old_cwd = Path.cwd()
+        os.chdir(self.tmpdir)
+
+    def tearDown(self) -> None:
+        os.chdir(self.old_cwd)
+        shutil.rmtree(self.tmpdir)
+
+    def fake_curl_run(
+        self,
+        responses: dict[str, bytes],
+    ) -> mock.Mock:
+        def run(cmd: list[str], check: bool) -> subprocess.CompletedProcess[bytes]:
+            self.assertTrue(check)
+            config_path = Path(cmd[cmd.index("--config") + 1])
+            lines = [line.strip() for line in config_path.read_text().splitlines() if line.strip()]
+            for i in range(0, len(lines), 2):
+                url = lines[i].removeprefix('url = "').removesuffix('"')
+                output = Path(lines[i + 1].removeprefix('output = "').removesuffix('"'))
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_bytes(responses[url])
+            return subprocess.CompletedProcess(cmd, 0, stdout=b"", stderr=b"")
+
+        return mock.Mock(side_effect=run)
+
+    def test_cmd_download_fetches_manifest_and_ungzips_files(self) -> None:
+        report_name = "1713570000:taylor-order0:deadbeef"
+        report_url = cli.REPORTS_URL + "herbie/" + report_name
+        manifest = {
+            "files": [
+                {"path": "index.html", "gzip": False},
+                {"path": "nightly_info.json", "gzip": False},
+                {"path": "results.json.gz", "gzip": True},
+            ]
+        }
+        opener = FakeOpener(
+            {
+                "https://nightly.cs.washington.edu/logs/taylor-order0.log": (
+                    "Publishing report directory /tmp/report to "
+                    f"/srv/reports/herbie/{report_name}\n"
+                ).encode("utf-8"),
+                report_url + "/nightly_info.json": json.dumps(manifest).encode("utf-8"),
+                report_url + "/index.html": b"<h1>ok</h1>\n",
+                report_url + "/results.json.gz": gzip.compress(b"{\"ok\":true}\n"),
+            }
+        )
+        entry = cli.LogEntry(
+            name="2026-04-19-123456-1-herbie-taylor-order0.log",
+            url="https://nightly.cs.washington.edu/logs/taylor-order0.log",
+        )
+
+        with (
+            mock.patch.object(cli, "make_opener", return_value=opener),
+            mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
+            mock.patch.object(cli.subprocess, "run", self.fake_curl_run({
+                report_url + "/index.html": b"<h1>ok</h1>\n",
+                report_url + "/nightly_info.json": json.dumps(manifest).encode("utf-8"),
+                report_url + "/results.json.gz": gzip.compress(b"{\"ok\":true}\n"),
+            })),
+        ):
+            rc = cli.cmd_download(
+                "uwplse/herbie",
+                cli.RunSelector("taylor-order0", "2026-04-19", "12:34:56"),
+            )
+
+        self.assertEqual(rc, 0)
+        report_dir = self.tmpdir / report_name
+        self.assertEqual((report_dir / "index.html").read_text(), "<h1>ok</h1>\n")
+        self.assertEqual(json.loads((report_dir / "nightly_info.json").read_text())["files"][2]["path"], "results.json.gz")
+        self.assertEqual((report_dir / "results.json").read_text(), "{\"ok\":true}\n")
+
+    def test_download_report_files_accepts_logical_manifest_paths_for_gzip(self) -> None:
+        report_url = cli.REPORTS_URL + "herbie/1713570001:taylor-order0:feedface"
+
+        with mock.patch.object(cli.subprocess, "run", self.fake_curl_run({
+            report_url + "/results.json.gz": gzip.compress(b"{\"ok\":true}\n"),
+        })):
+            stats = cli.download_report_files(
+                report_url,
+                [{"path": "results.json", "gzip": True}],
+                self.tmpdir / "downloaded",
+            )
+
+        self.assertEqual(stats.file_count, 1)
+        self.assertEqual((self.tmpdir / "downloaded" / "results.json").read_text(), "{\"ok\":true}\n")
+
+    def test_cmd_list_accepts_branch_date_and_time_filters(self) -> None:
+        entries = [
+            cli.LogEntry(
+                name="2026-04-19-123456-1-herbie-main.log",
+                url="https://nightly.cs.washington.edu/logs/main.log",
+            ),
+            cli.LogEntry(
+                name="2026-04-19-123456-1-herbie-taylor-order0.log",
+                url="https://nightly.cs.washington.edu/logs/taylor-old.log",
+            ),
+            cli.LogEntry(
+                name="2026-04-20-090832-1-herbie-taylor-order0.log",
+                url="https://nightly.cs.washington.edu/logs/taylor-new.log",
+            ),
+        ]
+
+        with (
+            mock.patch.object(cli, "iter_entries", return_value=iter(reversed(entries))),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            rc = cli.cmd_list(
+                "uwplse/herbie",
+                cli.RunSelector("taylor-order0", "2026-04-20", "090832"),
+            )
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(stdout.getvalue(), "2026-04-20 09:08:32 taylor-order0\n")
+
+    def test_cmd_list_branch_lists_all_matching_runs(self) -> None:
+        entries = [
+            cli.LogEntry(
+                name="2026-04-19-123456-1-herbie-taylor-order0.log",
+                url="https://nightly.cs.washington.edu/logs/taylor-old.log",
+            ),
+            cli.LogEntry(
+                name="2026-04-20-090832-1-herbie-taylor-order0.log",
+                url="https://nightly.cs.washington.edu/logs/taylor-new.log",
+            ),
+        ]
+
+        with (
+            mock.patch.object(cli, "iter_entries", return_value=iter(reversed(entries))),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            rc = cli.cmd_list("uwplse/herbie", cli.RunSelector("taylor-order0", None, None))
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(
+            stdout.getvalue(),
+            "2026-04-19 12:34:56 taylor-order0\n"
+            "2026-04-20 09:08:32 taylor-order0\n",
+        )
 
 
 class TestNightlyRunnerHarness(unittest.TestCase):
