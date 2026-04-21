@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 import configparser
 import json
@@ -11,6 +12,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
+from typing import Any, Literal, cast
 from unittest import mock
 
 # Ensure direct execution (uv run test/test_nightlies.py) resolves project modules from repo root.
@@ -523,6 +526,95 @@ class TestNightlyRunnerHarness(unittest.TestCase):
                 f"stdout:\n{result.stdout}\n"
                 f"stderr:\n{result.stderr}"
             )
+
+
+class TestServerRunNow(unittest.TestCase):
+    def import_server(self) -> Any:
+        class FakeHTTPError(Exception):
+            def __init__(self, status_code: int, body: str) -> None:
+                super().__init__(body)
+                self.status_code = status_code
+                self.body = body
+
+        class FakeBottleModule:
+            def __init__(self) -> None:
+                self.request = SimpleNamespace(forms={})
+                self.HTTPError = FakeHTTPError
+
+            def route(self, *_args: Any, **_kwargs: Any) -> Any:
+                return lambda fn: fn
+
+            def post(self, *_args: Any, **_kwargs: Any) -> Any:
+                return lambda fn: fn
+
+            def view(self, *_args: Any, **_kwargs: Any) -> Any:
+                return lambda fn: fn
+
+            def redirect(self, *_args: Any, **_kwargs: Any) -> None:
+                raise AssertionError("redirect should not be reached in error-path tests")
+
+            def static_file(self, *_args: Any, **_kwargs: Any) -> None:
+                raise AssertionError("static_file should not be reached in runnow tests")
+
+        sys.modules.pop("server", None)
+        fake_bottle = FakeBottleModule()
+        fake_status = SimpleNamespace(system_state_html=lambda: "")
+        with mock.patch.dict(sys.modules, {"bottle": fake_bottle, "status": fake_status}):
+            return importlib.import_module("server")
+
+    def make_runner(self, repo: str, branches: dict[str, Any]) -> tuple[Any, Any]:
+        repo_state = SimpleNamespace(
+            name=repo,
+            branches=branches,
+            read=mock.Mock(),
+        )
+        runner = SimpleNamespace(
+            data=None,
+            repos=[repo_state],
+            load=mock.Mock(),
+            load_pid=mock.Mock(),
+            config=configparser.ConfigParser(),
+        )
+        runner.config["testrepo"] = {}
+        return runner, repo_state
+
+    def test_runnow_rejects_branch_not_available_on_nightly(self) -> None:
+        server = self.import_server()
+        runner, repo_state = self.make_runner("testrepo", {})
+
+        with (
+            mock.patch.object(server.nightlies, "NightlyRunner", return_value=runner),
+            mock.patch.object(server.bottle, "request", SimpleNamespace(forms={"repo": "testrepo", "branch": "feature/test"})),
+            mock.patch.object(server, "run_nightlies") as run_nightlies,
+        ):
+            with self.assertRaises(server.bottle.HTTPError) as ctx:
+                server.runnow()
+
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(ctx.exception.body, "Branch feature/test is not available on nightly testrepo")
+        repo_state.read.assert_called_once_with()
+        run_nightlies.assert_not_called()
+
+    def test_runnow_reports_queued_branch_with_job_name(self) -> None:
+        server = self.import_server()
+        branch = SimpleNamespace(
+            badges=["queued"],
+            filename="feature_2ftest",
+        )
+        runner, repo_state = self.make_runner("testrepo", {"feature/test": branch})
+
+        with (
+            mock.patch.object(server.nightlies, "NightlyRunner", return_value=runner),
+            mock.patch.object(server.bottle, "request", SimpleNamespace(forms={"repo": "testrepo", "branch": "feature/test"})),
+            mock.patch.object(server, "run_nightlies") as run_nightlies,
+        ):
+            with self.assertRaises(server.bottle.HTTPError) as ctx:
+                server.runnow()
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.body, "Job nightly:testrepo:feature_2ftest already queued")
+        repo_state.read.assert_called_once_with()
+        run_nightlies.assert_not_called()
 
 
 if __name__ == "__main__":
