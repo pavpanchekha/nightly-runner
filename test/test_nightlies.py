@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import configparser
+import bottle
 import json
 import os
 import shutil
@@ -20,6 +21,7 @@ if str(ROOT) not in sys.path:
 
 from nightlies import NightlyRunner
 import apt
+import server
 
 
 class FakeRunner:
@@ -408,6 +410,32 @@ class TestNightlyRunnerHarness(unittest.TestCase):
         contents = metadata.read_text()
         self.assertIn('"commit"', contents)
         self.assertIn('"time"', contents)
+
+    def test_dryrun_rejects_when_sync_is_running(self) -> None:
+        self.write_config(repo_updates={})
+        self.pid_file.write_text(
+            json.dumps(
+                {
+                    "pid": os.getpid(),
+                    "start": "2026-04-21T15:00:00",
+                    "config": str(self.config_file),
+                    "log": str(self.logs_dir / "running.log"),
+                }
+            )
+        )
+
+        with (
+            mock.patch.object(server, "CONF_FILE", str(self.config_file)),
+            mock.patch.object(server, "run_nightlies") as run_nightlies,
+            mock.patch.object(bottle, "redirect") as redirect,
+        ):
+            with self.assertRaises(bottle.HTTPError) as ctx:
+                server.dryrun()
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.body, "Nightly sync already running")
+        run_nightlies.assert_not_called()
+        redirect.assert_not_called()
 
     def test_load_normalizes_baseurl_with_trailing_slash(self) -> None:
         self.write_config(repo_updates={}, default_updates={"baseurl": "https://nightlies.example"})
