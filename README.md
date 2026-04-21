@@ -1,7 +1,39 @@
-Nightly Test Runner
-===================
+Nightlies
+=========
 
-This script runs integration tests nightly.
+This repository runs nightly integration tests for a set of repositories,
+and it also publishes a small `nightlies` CLI for browsing the resulting logs
+and reports on `nightly.cs.washington.edu`.
+
+## CLI
+
+The published CLI is meant for one-shot use with `uvx`:
+
+```bash
+uvx nightlies --help
+uvx nightlies list --repo uwplse/herbie
+uvx nightlies log --repo uwplse/herbie main
+uvx nightlies status --repo uwplse/herbie main
+uvx nightlies download --repo uwplse/herbie main
+```
+
+If you are already in a Git checkout for a repository that has a GitHub
+remote, the CLI can infer the repo name:
+
+```bash
+uvx nightlies -C ~/src/herbie list
+uvx nightlies -C ~/src/herbie log main
+```
+
+To install it persistently instead of using `uvx`:
+
+```bash
+uv tool install nightlies
+```
+
+## Server
+
+The rest of this repository is the nightly test runner and web server.
 
 ## Usage
 
@@ -67,3 +99,18 @@ ensure the secrets file has a matching section like:
 
     [uw]
     token = xoxb-...
+
+## Releasing The CLI
+
+The PyPI package is also named `nightlies`, so users can run it directly with
+`uvx nightlies`.
+
+Build artifacts locally with:
+
+```bash
+uv build --no-sources
+```
+
+Publishing is handled by GitHub Actions via PyPI Trusted Publishing. Configure
+PyPI to trust `.github/workflows/publish.yml`, then publish a GitHub release to
+upload the new version to PyPI.

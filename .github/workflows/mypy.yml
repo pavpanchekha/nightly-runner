@@ -10,9 +10,9 @@ jobs:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
       with:
-        python-version: "3.12"
+        python-version: "3.14"
     - uses: astral-sh/setup-uv@v5
       with:
-        cache-dependency-glob: ".github/workflows/mypy.yml,setup.cfg"
+        cache-dependency-glob: ".github/workflows/*.yml,pyproject.toml,setup.cfg"
     - run: uv run test/test_nightlies.py
     - run: uv run --with mypy mypy
