@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 import configparser
-import bottle
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from unittest import mock
 
@@ -21,7 +22,6 @@ if str(ROOT) not in sys.path:
 
 from nightlies import NightlyRunner
 import apt
-import server
 
 
 class FakeRunner:
@@ -424,13 +424,41 @@ class TestNightlyRunnerHarness(unittest.TestCase):
             )
         )
 
-        with (
-            mock.patch.object(server, "CONF_FILE", str(self.config_file)),
-            mock.patch.object(server, "run_nightlies") as run_nightlies,
-            mock.patch.object(bottle, "redirect") as redirect,
-        ):
-            with self.assertRaises(bottle.HTTPError) as ctx:
-                server.dryrun()
+        bottle = types.ModuleType("bottle")
+
+        class HTTPError(Exception):
+            def __init__(self, status_code: int, body: str = "") -> None:
+                super().__init__(body)
+                self.status_code = status_code
+                self.body = body
+
+        def decorator(*_args: object, **_kwargs: object) -> object:
+            return lambda fn: fn
+
+        bottle.HTTPError = HTTPError
+        bottle.route = decorator
+        bottle.post = decorator
+        bottle.view = decorator
+        bottle.static_file = lambda *_args, **_kwargs: None
+        bottle.redirect = lambda _url: None
+        bottle.run = lambda *_args, **_kwargs: None
+
+        status = types.ModuleType("status")
+        status.system_state_html = lambda: ""
+
+        with mock.patch.dict(sys.modules, {"bottle": bottle, "status": status}):
+            sys.modules.pop("server", None)
+            server = importlib.import_module("server")
+            try:
+                with (
+                    mock.patch.object(server, "CONF_FILE", str(self.config_file)),
+                    mock.patch.object(server, "run_nightlies") as run_nightlies,
+                    mock.patch.object(bottle, "redirect") as redirect,
+                ):
+                    with self.assertRaises(HTTPError) as ctx:
+                        server.dryrun()
+            finally:
+                sys.modules.pop("server", None)
 
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertEqual(ctx.exception.body, "Nightly sync already running")
