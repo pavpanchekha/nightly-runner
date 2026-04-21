@@ -9,6 +9,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 import argparse
 import datetime
+import getpass
 import gzip
 import json
 import os
@@ -22,15 +23,34 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-BASE_URL = "https://nightly.cs.washington.edu/"
-LOGS_URL = BASE_URL + "logs/"
-LOGS_SORTED_URL = LOGS_URL + "?C=M&O=D"
-REPORTS_URL = BASE_URL + "reports/"
-USERNAME = "uwplse"
-PASSWORD = "uwplse"
 CURL_PARALLEL_MAX = 32
 COMPLETE_RE = re.compile(r"^Nightly used memory=.*timeout=.*$", re.MULTILINE)
 PUBLISH_RE = re.compile(r"^Publishing report directory .* to .*/reports/([^/]+)/([^/\n]+)$", re.MULTILINE)
+SETUP_COMMAND = "cli setup <url>"
+STATE_FILENAME = "state.json"
+
+
+@dataclass(frozen=True)
+class ClientConfig:
+    base_url: str
+    username: str
+    password: str
+
+    @property
+    def logs_url(self) -> str:
+        return urllib.parse.urljoin(self.base_url, "logs/")
+
+    @property
+    def logs_sorted_url(self) -> str:
+        return self.logs_url + "?C=M&O=D"
+
+    @property
+    def reports_url(self) -> str:
+        return urllib.parse.urljoin(self.base_url, "reports/")
+
+    @property
+    def curl_auth(self) -> str:
+        return f"{self.username}:{self.password}"
 
 
 @dataclass(frozen=True)
@@ -58,6 +78,10 @@ class DownloadStats:
     file_count: int
     curl_seconds: float
     ungzip_seconds: float
+
+
+class MissingClientConfig(ValueError):
+    pass
 
 
 class NginxIndexParser(HTMLParser):
@@ -95,14 +119,101 @@ class NginxIndexParser(HTMLParser):
         return entries
 
 
-def make_opener() -> urllib.request.OpenerDirector:
+def client_state_dir() -> Path:
+    if os.name == "nt":
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            return Path(appdata) / "nightlies"
+        return Path.home() / "AppData" / "Roaming" / "nightlies"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "nightlies"
+    xdg_data_home = os.environ.get("XDG_DATA_HOME")
+    if xdg_data_home:
+        return Path(xdg_data_home) / "nightlies"
+    return Path.home() / ".local" / "share" / "nightlies"
+
+
+def client_state_path() -> Path:
+    return client_state_dir() / STATE_FILENAME
+
+
+def setup_hint() -> str:
+    return f"Run `{SETUP_COMMAND}`."
+
+
+def normalize_base_url(url: str) -> str:
+    normalized = url.strip()
+    parsed = urllib.parse.urlsplit(normalized)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError("nightly URL must be an http or https URL")
+    if not normalized.endswith("/"):
+        normalized += "/"
+    return normalized
+
+
+def load_client_config() -> ClientConfig:
+    path = client_state_path()
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise MissingClientConfig(f"client is not configured. {setup_hint()}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid client config {path}: {exc}. {setup_hint()}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"invalid client config {path}: expected a JSON object. {setup_hint()}")
+
+    nightly_url = payload.get("nightly_url")
+    username = payload.get("username")
+    password = payload.get("password")
+    if not isinstance(nightly_url, str) or not isinstance(username, str) or not isinstance(password, str):
+        raise ValueError(
+            f"invalid client config {path}: expected string fields nightly_url, username, and password. {setup_hint()}"
+        )
+    return ClientConfig(normalize_base_url(nightly_url), username, password)
+
+
+def save_client_config(client_config: ClientConfig) -> Path:
+    path = client_state_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if os.name != "nt":
+        os.chmod(path.parent, 0o700)
+
+    temp_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            delete=False,
+        ) as handle:
+            json.dump(
+                {
+                    "nightly_url": client_config.base_url,
+                    "username": client_config.username,
+                    "password": client_config.password,
+                },
+                handle,
+                indent=2,
+            )
+            handle.write("\n")
+            temp_path = handle.name
+        if os.name != "nt":
+            os.chmod(temp_path, 0o600)
+        os.replace(temp_path, path)
+        return path
+    finally:
+        if temp_path is not None and os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+
+def make_opener(client_config: ClientConfig) -> urllib.request.OpenerDirector:
     password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-    password_mgr.add_password(None, BASE_URL, USERNAME, PASSWORD)
+    password_mgr.add_password(None, client_config.base_url, client_config.username, client_config.password)
     return urllib.request.build_opener(urllib.request.HTTPBasicAuthHandler(password_mgr))
 
 
-def fetch_logs_index(opener: urllib.request.OpenerDirector) -> str:
-    with opener.open(LOGS_URL) as response:
+def fetch_logs_index(opener: urllib.request.OpenerDirector, client_config: ClientConfig) -> str:
+    with opener.open(client_config.logs_url) as response:
         return response.read().decode("utf-8", errors="replace")
 
 
@@ -128,8 +239,8 @@ def fetch_log_bytes(opener: urllib.request.OpenerDirector, url: str, start: int)
         raise
 
 
-def parse_html_entries(payload: str) -> list[LogEntry]:
-    parser = NginxIndexParser(LOGS_URL)
+def parse_html_entries(payload: str, client_config: ClientConfig) -> list[LogEntry]:
+    parser = NginxIndexParser(client_config.logs_url)
     parser.feed(payload)
     deduped: dict[str, LogEntry] = {}
     for entry in parser.entries:
@@ -153,14 +264,19 @@ def iter_html_entries(response: urllib.response.addinfourl, base_url: str) -> It
     yield from parser.drain_entries()
 
 
-def iter_entries(opener: urllib.request.OpenerDirector, *, newest_first: bool) -> Iterator[LogEntry]:
-    url = LOGS_SORTED_URL if newest_first else LOGS_URL
+def iter_entries(
+    opener: urllib.request.OpenerDirector,
+    client_config: ClientConfig,
+    *,
+    newest_first: bool,
+) -> Iterator[LogEntry]:
+    url = client_config.logs_sorted_url if newest_first else client_config.logs_url
     with opener.open(url) as response:
         yield from iter_html_entries(response, url)
 
 
-def load_entries() -> list[LogEntry]:
-    return list(iter_entries(make_opener(), newest_first=False))
+def load_entries(client_config: ClientConfig) -> list[LogEntry]:
+    return list(iter_entries(make_opener(client_config), client_config, newest_first=False))
 
 
 def github_repo(url: str) -> str | None:
@@ -325,13 +441,13 @@ def tail_log(opener: urllib.request.OpenerDirector, url: str) -> None:
         time.sleep(1)
 
 
-def find_report_url_in_log(repo: str, log_text: str) -> str | None:
+def find_report_url_in_log(client_config: ClientConfig, repo: str, log_text: str) -> str | None:
     repo_name = repo.split("/")[-1]
     matched: str | None = None
     for match in PUBLISH_RE.finditer(log_text):
         if match.group(1) != repo_name:
             continue
-        matched = REPORTS_URL + repo_name + "/" + match.group(2)
+        matched = client_config.reports_url + repo_name + "/" + match.group(2)
     return matched
 
 
@@ -415,6 +531,7 @@ def download_report_files(
     report_url: str,
     files: list[object],
     output_dir: Path,
+    client_config: ClientConfig,
 ) -> DownloadStats:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -444,7 +561,7 @@ def download_report_files(
                 "--parallel-max",
                 str(min(CURL_PARALLEL_MAX, max(1, len(file_paths)))),
                 "--user",
-                f"{USERNAME}:{PASSWORD}",
+                client_config.curl_auth,
                 "--config",
                 config_file.name,
             ],
@@ -467,26 +584,44 @@ def download_report_files(
 
 def fetch_selected_manifest(
     opener: urllib.request.OpenerDirector,
+    client_config: ClientConfig,
     repo: str,
     selector: RunSelector,
 ) -> dict[str, object] | None:
-    entry = latest_matching_repo_entry(iter_entries(opener, newest_first=True), repo, selector)
+    entry = latest_matching_repo_entry(iter_entries(opener, client_config, newest_first=True), repo, selector)
     if entry is None:
         return None
     log_text = fetch_text(opener, entry.url)
-    report_url = find_report_url_in_log(repo, log_text)
+    report_url = find_report_url_in_log(client_config, repo, log_text)
     if report_url is None:
         raise ValueError("No published report found in log.")
     return fetch_manifest(opener, report_url)
 
 
-def cmd_download(repo: str, selector: RunSelector) -> int:
+def cmd_setup(url: str) -> int:
+    try:
+        username = input("Username: ").strip()
+        if not username:
+            raise ValueError("username must not be empty")
+        password = getpass.getpass("Password: ")
+        if not password:
+            raise ValueError("password must not be empty")
+        client_config = ClientConfig(normalize_base_url(url), username, password)
+        path = save_client_config(client_config)
+    except (EOFError, OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Saved CLI config to {path}")
+    return 0
+
+
+def cmd_download(client_config: ClientConfig, repo: str, selector: RunSelector) -> int:
     assert selector.branch is not None
-    opener = make_opener()
+    opener = make_opener(client_config)
     total_start = time.perf_counter()
     try:
         entries_start = time.perf_counter()
-        entries = iter_entries(opener, newest_first=True)
+        entries = iter_entries(opener, client_config, newest_first=True)
         entry = latest_matching_repo_entry(entries, repo, selector)
         entries_seconds = time.perf_counter() - entries_start
         print(timing_line("load/select run", entries_seconds), file=sys.stderr)
@@ -500,7 +635,7 @@ def cmd_download(repo: str, selector: RunSelector) -> int:
         print(timing_line("fetch log", log_fetch_seconds), file=sys.stderr)
 
         report_url_start = time.perf_counter()
-        report_url = find_report_url_in_log(repo, log_text)
+        report_url = find_report_url_in_log(client_config, repo, log_text)
         report_url_seconds = time.perf_counter() - report_url_start
         print(timing_line("parse report url", report_url_seconds), file=sys.stderr)
         if report_url is None:
@@ -514,11 +649,11 @@ def cmd_download(repo: str, selector: RunSelector) -> int:
         files = manifest["files"]
         assert isinstance(files, list)
         output_dir = Path(urllib.parse.urlsplit(report_url).path.rstrip("/")).name
-        stats = download_report_files(report_url, files, Path(output_dir))
+        stats = download_report_files(report_url, files, Path(output_dir), client_config)
         print(timing_line("curl download", stats.curl_seconds), file=sys.stderr)
         print(timing_line("ungzip files", stats.ungzip_seconds), file=sys.stderr)
     except urllib.error.URLError as exc:
-        print(f"error: failed to fetch {BASE_URL}: {exc}", file=sys.stderr)
+        print(f"error: failed to fetch {client_config.base_url}: {exc}", file=sys.stderr)
         return 1
     except (OSError, ValueError, gzip.BadGzipFile) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -530,17 +665,20 @@ def cmd_download(repo: str, selector: RunSelector) -> int:
 
 
 def cmd_list(
+    client_config: ClientConfig,
     repo: str,
     selector: RunSelector,
 ) -> int:
-    opener = make_opener()
+    opener = make_opener(client_config)
     try:
         if selector.branch is None and selector.date is None and selector.time is None:
-            entries = recent_repo_entries(iter_entries(opener, newest_first=True), repo)
+            entries = recent_repo_entries(iter_entries(opener, client_config, newest_first=True), repo)
         else:
-            entries = list(reversed(matching_repo_entries(iter_entries(opener, newest_first=True), repo, selector)))
+            entries = list(
+                reversed(matching_repo_entries(iter_entries(opener, client_config, newest_first=True), repo, selector))
+            )
     except urllib.error.URLError as exc:
-        print(f"error: failed to fetch {LOGS_URL}: {exc}", file=sys.stderr)
+        print(f"error: failed to fetch {client_config.logs_url}: {exc}", file=sys.stderr)
         return 1
     if not entries:
         print(f"No runs found for repo {repo.split('/')[-1]}.", file=sys.stderr)
@@ -551,11 +689,11 @@ def cmd_list(
     return 0
 
 
-def cmd_log(repo: str, selector: RunSelector, follow: bool) -> int:
+def cmd_log(client_config: ClientConfig, repo: str, selector: RunSelector, follow: bool) -> int:
     assert selector.branch is not None
-    opener = make_opener()
+    opener = make_opener(client_config)
     try:
-        entry = latest_matching_repo_entry(iter_entries(opener, newest_first=True), repo, selector)
+        entry = latest_matching_repo_entry(iter_entries(opener, client_config, newest_first=True), repo, selector)
         if entry is None:
             print("No matching log found.", file=sys.stderr)
             return 1
@@ -564,22 +702,22 @@ def cmd_log(repo: str, selector: RunSelector, follow: bool) -> int:
         else:
             print_log(opener, entry.url)
     except urllib.error.URLError as exc:
-        print(f"error: failed to fetch {LOGS_URL}: {exc}", file=sys.stderr)
+        print(f"error: failed to fetch {client_config.logs_url}: {exc}", file=sys.stderr)
         return 1
     return 0
 
 
-def cmd_status(repo: str, selector: RunSelector) -> int:
+def cmd_status(client_config: ClientConfig, repo: str, selector: RunSelector) -> int:
     assert selector.branch is not None
-    opener = make_opener()
+    opener = make_opener(client_config)
     try:
-        manifest = fetch_selected_manifest(opener, repo, selector)
+        manifest = fetch_selected_manifest(opener, client_config, repo, selector)
         if manifest is None:
             print("No matching log found.", file=sys.stderr)
             return 1
         print(manifest_text(manifest))
     except urllib.error.URLError as exc:
-        print(f"error: failed to fetch {LOGS_URL}: {exc}", file=sys.stderr)
+        print(f"error: failed to fetch {client_config.logs_url}: {exc}", file=sys.stderr)
         return 1
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -603,6 +741,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-C", dest="cwd", default=".", help="Change to this directory first.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    setup_parser = subparsers.add_parser("setup", help="Save the nightly URL and credentials.")
+    setup_parser.add_argument("url", help="Nightly base URL, such as https://nightly.cs.washington.edu/.")
+
     list_parser = subparsers.add_parser("list", help="List runs for a repo.")
     list_parser.add_argument("--repo", help="Repository name, such as herbie or owner/herbie.")
     add_run_selector_args(list_parser, branch_required=False)
@@ -625,6 +766,13 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     os.chdir(args.cwd)
+    if args.command == "setup":
+        return cmd_setup(args.url)
+    try:
+        client_config = load_client_config()
+    except (MissingClientConfig, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     selector = selector_from_args(args)
     try:
         repo = args.repo or infer_repo(".")
@@ -632,13 +780,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     if args.command == "list":
-        return cmd_list(repo, selector)
+        return cmd_list(client_config, repo, selector)
     if args.command == "log":
-        return cmd_log(repo, selector, args.follow)
+        return cmd_log(client_config, repo, selector, args.follow)
     if args.command == "status":
-        return cmd_status(repo, selector)
+        return cmd_status(client_config, repo, selector)
     if args.command == "download":
-        return cmd_download(repo, selector)
+        return cmd_download(client_config, repo, selector)
     raise AssertionError(f"unknown command {args.command}")
 
 

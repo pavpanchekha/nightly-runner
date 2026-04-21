@@ -126,11 +126,17 @@ class TestCli(unittest.TestCase):
     def setUp(self) -> None:
         self.tmpdir = Path(tempfile.mkdtemp(prefix="cli-test-"))
         self.old_cwd = Path.cwd()
+        self.env_patch = mock.patch.dict(os.environ, {"HOME": str(self.tmpdir)}, clear=False)
+        self.env_patch.start()
         os.chdir(self.tmpdir)
 
     def tearDown(self) -> None:
         os.chdir(self.old_cwd)
+        self.env_patch.stop()
         shutil.rmtree(self.tmpdir)
+
+    def client_config(self, base_url: str = "https://nightly.cs.washington.edu/") -> cli.ClientConfig:
+        return cli.ClientConfig(base_url, "uwplse", "uwplse")
 
     def fake_curl_run(
         self,
@@ -151,7 +157,8 @@ class TestCli(unittest.TestCase):
 
     def test_cmd_download_fetches_manifest_and_ungzips_files(self) -> None:
         report_name = "1713570000:taylor-order0:deadbeef"
-        report_url = cli.REPORTS_URL + "herbie/" + report_name
+        client_config = self.client_config()
+        report_url = client_config.reports_url + "herbie/" + report_name
         manifest = {
             "files": [
                 {"path": "index.html", "gzip": False},
@@ -185,6 +192,7 @@ class TestCli(unittest.TestCase):
             })),
         ):
             rc = cli.cmd_download(
+                client_config,
                 "uwplse/herbie",
                 cli.RunSelector("taylor-order0", "2026-04-19", "12:34:56"),
             )
@@ -196,7 +204,8 @@ class TestCli(unittest.TestCase):
         self.assertEqual((report_dir / "results.json").read_text(), "{\"ok\":true}\n")
 
     def test_download_report_files_accepts_logical_manifest_paths_for_gzip(self) -> None:
-        report_url = cli.REPORTS_URL + "herbie/1713570001:taylor-order0:feedface"
+        client_config = self.client_config()
+        report_url = client_config.reports_url + "herbie/1713570001:taylor-order0:feedface"
 
         with mock.patch.object(cli.subprocess, "run", self.fake_curl_run({
             report_url + "/results.json.gz": gzip.compress(b"{\"ok\":true}\n"),
@@ -205,6 +214,7 @@ class TestCli(unittest.TestCase):
                 report_url,
                 [{"path": "results.json", "gzip": True}],
                 self.tmpdir / "downloaded",
+                client_config,
             )
 
         self.assertEqual(stats.file_count, 1)
@@ -231,6 +241,7 @@ class TestCli(unittest.TestCase):
             mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
         ):
             rc = cli.cmd_list(
+                self.client_config(),
                 "uwplse/herbie",
                 cli.RunSelector("taylor-order0", "2026-04-20", "090832"),
             )
@@ -254,7 +265,7 @@ class TestCli(unittest.TestCase):
             mock.patch.object(cli, "iter_entries", return_value=iter(reversed(entries))),
             mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
         ):
-            rc = cli.cmd_list("uwplse/herbie", cli.RunSelector("taylor-order0", None, None))
+            rc = cli.cmd_list(self.client_config(), "uwplse/herbie", cli.RunSelector("taylor-order0", None, None))
 
         self.assertEqual(rc, 0)
         self.assertEqual(
@@ -265,7 +276,8 @@ class TestCli(unittest.TestCase):
 
     def test_cmd_status_prints_manifest_metadata(self) -> None:
         report_name = "1713570000:taylor-order0:deadbeef"
-        report_url = cli.REPORTS_URL + "herbie/" + report_name
+        client_config = self.client_config()
+        report_url = client_config.reports_url + "herbie/" + report_name
         manifest = {
             "repo": "herbie",
             "branch": "taylor-order0",
@@ -306,6 +318,7 @@ class TestCli(unittest.TestCase):
             mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
         ):
             rc = cli.cmd_status(
+                client_config,
                 "uwplse/herbie",
                 cli.RunSelector("taylor-order0", "2026-04-20", "150000"),
             )
@@ -338,12 +351,40 @@ class TestCli(unittest.TestCase):
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
             rc = cli.cmd_status(
+                self.client_config(),
                 "uwplse/herbie",
                 cli.RunSelector("taylor-order0", "2026-04-20", "150000"),
             )
 
         self.assertEqual(rc, 1)
         self.assertEqual(stderr.getvalue(), "error: No published report found in log.\n")
+
+    def test_cmd_setup_saves_client_config(self) -> None:
+        with (
+            mock.patch("builtins.input", return_value="alice"),
+            mock.patch.object(cli.getpass, "getpass", return_value="secret"),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            rc = cli.cmd_setup("https://nightlies.example")
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(stdout.getvalue(), f"Saved CLI config to {cli.client_state_path()}\n")
+        self.assertEqual(
+            json.loads(cli.client_state_path().read_text()),
+            {
+                "nightly_url": "https://nightlies.example/",
+                "username": "alice",
+                "password": "secret",
+            },
+        )
+        self.assertEqual(cli.load_client_config(), cli.ClientConfig("https://nightlies.example/", "alice", "secret"))
+
+    def test_main_requires_setup_before_other_commands(self) -> None:
+        with mock.patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            rc = cli.main(["list", "--repo", "uwplse/herbie"])
+
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.getvalue(), "error: client is not configured. Run `cli setup <url>`.\n")
 
 
 class TestNightlyRunnerHarness(unittest.TestCase):
