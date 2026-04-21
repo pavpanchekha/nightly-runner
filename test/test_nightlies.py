@@ -618,7 +618,7 @@ class TestReportExec(unittest.TestCase):
         )
         report, executable = server.resolve_report_exec(self.reports_dir, self.report, "bin/report-tool-fail")
         with self.assertRaises(server.bottle.HTTPError) as exc:
-            server.run_report_exec(self.report_dir.resolve(), executable, ["left", "right"])
+            server.run_report_exec(report, executable, ["left", "right"])
         self.assertEqual(exc.exception.status_code, 500)
         self.assertIn("status 2", exc.exception.body)
         self.assertIn("boom", exc.exception.body)
