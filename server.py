@@ -186,7 +186,9 @@ def runnow():
     for r in runner.repos:
         if r.name == repo:
             r.read()
-            if branch in r.branches and "queued" in r.branches[branch].badges:
+            if branch not in r.branches:
+                raise bottle.HTTPError(404, f"Branch {branch} is not available on nightly {repo}")
+            if "queued" in r.branches[branch].badges:
                 branch_filename = r.branches[branch].filename
                 raise bottle.HTTPError(409, f"Job nightly:{repo}:{branch_filename} already queued")
             break
