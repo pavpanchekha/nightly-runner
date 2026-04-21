@@ -20,6 +20,7 @@ if str(ROOT) not in sys.path:
 
 from nightlies import NightlyRunner
 import apt
+import server
 
 
 class FakeRunner:
@@ -557,6 +558,70 @@ class TestNightlyRunnerHarness(unittest.TestCase):
                 f"stdout:\n{result.stdout}\n"
                 f"stderr:\n{result.stderr}"
             )
+
+
+class TestReportExec(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp(prefix="nr-server-"))
+        self.reports_dir = self.tmpdir / "reports"
+        self.logs_dir = self.tmpdir / "logs"
+        self.repos_dir = self.tmpdir / "repos"
+        self.config_file = self.tmpdir / "nightlies.conf"
+        self.reports_dir.mkdir()
+        self.logs_dir.mkdir()
+        self.repos_dir.mkdir()
+
+        self.report = "testrepo/1776156991:main:dee549aa"
+        self.report_dir = self.reports_dir / self.report
+        self.report_dir.mkdir(parents=True)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmpdir)
+
+    def write_executable(self, relpath: str, script: str):
+        executable = self.report_dir / relpath
+        executable.parent.mkdir(parents=True, exist_ok=True)
+        executable.write_text(script)
+        executable.chmod(0o755)
+
+    def test_resolve_report_exec_rejects_path_traversal(self) -> None:
+        with self.assertRaises(server.bottle.HTTPError) as exc:
+            server.resolve_report_exec(self.reports_dir, self.report, "../outside")
+        self.assertEqual(exc.exception.status_code, 400)
+
+    def test_resolve_report_exec_rejects_missing_file(self) -> None:
+        with self.assertRaises(server.bottle.HTTPError) as exc:
+            server.resolve_report_exec(self.reports_dir, self.report, "missing-tool")
+        self.assertEqual(exc.exception.status_code, 404)
+        self.assertIn("Missing executable", exc.exception.body)
+
+    def test_run_report_exec_returns_stdout(self) -> None:
+        self.write_executable(
+            "bin/report-tool",
+            "#!/bin/sh\n"
+            "printf 'cwd=%s\\n' \"$PWD\"\n"
+            "printf 'args=%s,%s\\n' \"$1\" \"$2\"\n",
+        )
+        report, executable = server.resolve_report_exec(self.reports_dir, self.report, "bin/report-tool")
+        output = server.run_report_exec(report, executable, ["left", "right"])
+        self.assertEqual(
+            output,
+            f"cwd={self.report_dir.resolve()}\nargs=left,right\n",
+        )
+
+    def test_run_report_exec_returns_500_on_nonzero_exit(self) -> None:
+        self.write_executable(
+            "bin/report-tool-fail",
+            "#!/bin/sh\n"
+            "echo 'boom' >&2\n"
+            "exit 2\n",
+        )
+        report, executable = server.resolve_report_exec(self.reports_dir, self.report, "bin/report-tool-fail")
+        with self.assertRaises(server.bottle.HTTPError) as exc:
+            server.run_report_exec(report, executable, ["left", "right"])
+        self.assertEqual(exc.exception.status_code, 500)
+        self.assertIn("status 2", exc.exception.body)
+        self.assertIn("boom", exc.exception.body)
 
 
 if __name__ == "__main__":

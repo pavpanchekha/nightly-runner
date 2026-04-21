@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Optional
+from typing import Optional, Sequence
 from dataclasses import dataclass
 import bottle
 from pathlib import Path
@@ -34,6 +34,59 @@ class NightlyJob:
     log: str
     last_print: Optional[float] = None
     elapsed: Optional[float] = None
+
+
+def validate_relative_path(root: Path, path: Path, *, what: str) -> Path:
+    """
+    Returns the absolute path to `path` if it is a child of `root`; otherwise,
+    raises HTTP Error 400 with the message "Invalid {`what`}".
+    """
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(root.resolve())
+    except ValueError:
+        raise bottle.HTTPError(400, f"Invalid {what}")
+    return resolved
+
+
+def resolve_report_exec(reports_dir: Path, report: str, filepath: str) -> tuple[Path, Path]:
+    """
+    Returns (`reports_dir`/`report`, `reports_dir`/`report`/`filepath`) as
+    absolute paths. If any component is not a child of the previous component,
+    raises HTTP error 400. If any component of `reports_dir`/`report`/`filepath`
+    doesn't exist, raises HTTP error 404.
+    """
+    report_dir = validate_relative_path(reports_dir, reports_dir / report, what="report")
+    if not report_dir.is_dir():
+        raise bottle.HTTPError(404, f"Unknown report {report}")
+
+    target = validate_relative_path(report_dir, report_dir / filepath, what="filepath")
+    if not target.is_file():
+        raise bottle.HTTPError(404, f"Missing executable {filepath}")
+
+    return report_dir, target
+
+
+def run_report_exec(report_dir: Path, target: Path, args: Sequence[str]) -> str:
+    """
+    Runs the file `target` with cwd set to `report_dir`. Passes `args`.  Raises
+    HTTP error 500 if the command returns status code != 0 or if
+    `subprocess.run(...)` fails with `OSError`.
+    """
+    try:
+        result = subprocess.run(
+            [str(target), *args],
+            cwd=report_dir,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as e:
+        raise bottle.HTTPError(500, str(e))
+
+    if result.returncode != 0:
+        message = f"Command exited with status {result.returncode}:\n{result.stderr or result.stdout}"
+        raise bottle.HTTPError(500, message)
+    return result.stdout
 
 def get_nightly_jobs(log_dir: Path) -> list[NightlyJob]:
     """Query slurm for running nightly jobs."""
@@ -155,6 +208,17 @@ def server_static(filepath):
 @bottle.route("/robots.txt")
 def robots_txt():
     return bottle.static_file("robots.txt", root='static/')
+
+
+@bottle.post("/exec/<repo>/<run>/<filepath:path>")
+def exec_report_file(repo: str, run: str, filepath: str):
+    args = bottle.request.forms.getall("arg")
+    runner = nightlies.NightlyRunner(CONF_FILE)
+    runner.load()
+    report = f"{repo}/{run}"
+    report_dir, target = resolve_report_exec(runner.report_dir, report, filepath)
+    bottle.response.content_type = "text/html; charset=UTF-8"
+    return run_report_exec(report_dir, target, args)
 
 @bottle.route("/dryrun", ["GET", "POST"])
 def dryrun():
