@@ -10,6 +10,7 @@ and reports on `nightly.cs.washington.edu`.
 The published CLI is meant for one-shot use with `uvx`:
 
 ```bash
+uvx nightlies setup https://nightly.cs.washington.edu/
 uvx nightlies --help
 uvx nightlies list --repo uwplse/herbie
 uvx nightlies log --repo uwplse/herbie main
@@ -30,6 +31,11 @@ To install it persistently instead of using `uvx`:
 ```bash
 uv tool install nightlies
 ```
+
+Before you can use `list`, `log`, `status`, or `download`, run
+`nightlies setup <url>`. The setup command prompts for a username and
+password, then saves the nightly URL and credentials in an OS-appropriate
+data directory so later commands can reuse them.
 
 ## Server
 
