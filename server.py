@@ -210,11 +210,12 @@ def robots_txt():
     return bottle.static_file("robots.txt", root='static/')
 
 
-@bottle.post("/exec/<report>/<filepath:path>")
-def exec_report_file(report: str, filepath: str):
+@bottle.post("/exec/<repo>/<run>/<filepath:path>")
+def exec_report_file(repo: str, run: str, filepath: str):
     args = bottle.request.forms.getall("arg")
     runner = nightlies.NightlyRunner(CONF_FILE)
     runner.load()
+    report = f"{repo}/{run}"
     report_dir, target = resolve_report_exec(runner.report_dir, report, filepath)
     bottle.response.content_type = "text/html; charset=UTF-8"
     return run_report_exec(report_dir, target, args)
