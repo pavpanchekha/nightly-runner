@@ -263,6 +263,88 @@ class TestCli(unittest.TestCase):
             "2026-04-20 09:08:32 taylor-order0\n",
         )
 
+    def test_cmd_status_prints_manifest_metadata(self) -> None:
+        report_name = "1713570000:taylor-order0:deadbeef"
+        report_url = cli.REPORTS_URL + "herbie/" + report_name
+        manifest = {
+            "repo": "herbie",
+            "branch": "taylor-order0",
+            "branch_filename": "taylor-order0",
+            "commit": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+            "commit_short": "deadbeef",
+            "status": "success",
+            "started_at": "2026-04-20T15:00:00Z",
+            "finished_at": "2026-04-20T15:04:30Z",
+            "duration_seconds": 270.0,
+            "duration_human": "4.5m",
+            "log": "taylor-order0.log",
+            "log_url": "https://nightly.cs.washington.edu/logs/taylor-order0.log",
+            "report_url": report_url,
+            "image_url": None,
+            "files": [
+                {"path": "index.html", "gzip": False},
+                {"path": "nightly_info.json", "gzip": False},
+            ],
+        }
+        entry = cli.LogEntry(
+            name="2026-04-20-150000-1-herbie-taylor-order0.log",
+            url="https://nightly.cs.washington.edu/logs/taylor-order0.log",
+        )
+        opener = FakeOpener(
+            {
+                entry.url: (
+                    "Publishing report directory /tmp/report to "
+                    f"/srv/reports/herbie/{report_name}\n"
+                ).encode("utf-8"),
+                report_url + "/nightly_info.json": json.dumps(manifest).encode("utf-8"),
+            }
+        )
+
+        with (
+            mock.patch.object(cli, "make_opener", return_value=opener),
+            mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            rc = cli.cmd_status(
+                "uwplse/herbie",
+                cli.RunSelector("taylor-order0", "2026-04-20", "150000"),
+            )
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(
+            stdout.getvalue(),
+            "herbie / taylor-order0\n"
+            "\n"
+            "Status   success\n"
+            "Commit   deadbeef\n"
+            "Started  2026-04-20 15:00:00 UTC\n"
+            "Finished 2026-04-20 15:04:30 UTC\n"
+            "Duration 4.5m\n"
+            "Files    2\n"
+            f"Report   {report_url}\n"
+            "Log      https://nightly.cs.washington.edu/logs/taylor-order0.log\n",
+        )
+
+    def test_cmd_status_requires_published_report(self) -> None:
+        entry = cli.LogEntry(
+            name="2026-04-20-150000-1-herbie-taylor-order0.log",
+            url="https://nightly.cs.washington.edu/logs/taylor-order0.log",
+        )
+        opener = FakeOpener({entry.url: b"still running\n"})
+
+        with (
+            mock.patch.object(cli, "make_opener", return_value=opener),
+            mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
+            mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            rc = cli.cmd_status(
+                "uwplse/herbie",
+                cli.RunSelector("taylor-order0", "2026-04-20", "150000"),
+            )
+
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.getvalue(), "error: No published report found in log.\n")
+
 
 class TestNightlyRunnerHarness(unittest.TestCase):
     def setUp(self) -> None:

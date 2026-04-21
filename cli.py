@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
 import argparse
+import datetime
 import gzip
 import json
 import os
@@ -344,6 +345,57 @@ def fetch_manifest(opener: urllib.request.OpenerDirector, report_url: str) -> di
     return manifest
 
 
+def format_manifest_time(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return value
+    if parsed.utcoffset() == datetime.timedelta(0):
+        return parsed.strftime("%Y-%m-%d %H:%M:%S UTC")
+    return parsed.isoformat(sep=" ")
+
+
+def manifest_text(manifest: dict[str, object]) -> str:
+    repo = manifest.get("repo")
+    branch = manifest.get("branch")
+    lines: list[str] = []
+    if isinstance(repo, str) and isinstance(branch, str):
+        lines.append(f"{repo} / {branch}")
+        lines.append("")
+
+    details: list[tuple[str, object]] = []
+    if "status" in manifest:
+        details.append(("Status", manifest["status"]))
+    commit = manifest.get("commit_short", manifest.get("commit"))
+    if commit is not None:
+        details.append(("Commit", commit))
+    started = format_manifest_time(manifest.get("started_at"))
+    if started is not None:
+        details.append(("Started", started))
+    finished = format_manifest_time(manifest.get("finished_at"))
+    if finished is not None:
+        details.append(("Finished", finished))
+    duration = manifest.get("duration_human", manifest.get("duration_seconds"))
+    if duration is not None:
+        details.append(("Duration", duration))
+    files = manifest["files"]
+    assert isinstance(files, list)
+    details.append(("Files", len(files)))
+    if "report_url" in manifest:
+        details.append(("Report", manifest["report_url"]))
+    if "log_url" in manifest:
+        details.append(("Log", manifest["log_url"]))
+    image_url = manifest.get("image_url")
+    if image_url:
+        details.append(("Image", image_url))
+
+    for label, value in details:
+        lines.append(f"{label:8} {value}")
+    return "\n".join(lines)
+
+
 def manifest_paths(path_value: object, gzip_value: object) -> tuple[str, str]:
     if not isinstance(path_value, str):
         raise ValueError("manifest file path was not a string")
@@ -411,6 +463,21 @@ def download_report_files(
         remote_path.unlink()
     ungzip_seconds = time.perf_counter() - ungzip_start
     return DownloadStats(len(file_paths), curl_seconds, ungzip_seconds)
+
+
+def fetch_selected_manifest(
+    opener: urllib.request.OpenerDirector,
+    repo: str,
+    selector: RunSelector,
+) -> dict[str, object] | None:
+    entry = latest_matching_repo_entry(iter_entries(opener, newest_first=True), repo, selector)
+    if entry is None:
+        return None
+    log_text = fetch_text(opener, entry.url)
+    report_url = find_report_url_in_log(repo, log_text)
+    if report_url is None:
+        raise ValueError("No published report found in log.")
+    return fetch_manifest(opener, report_url)
 
 
 def cmd_download(repo: str, selector: RunSelector) -> int:
@@ -502,6 +569,24 @@ def cmd_log(repo: str, selector: RunSelector, follow: bool) -> int:
     return 0
 
 
+def cmd_status(repo: str, selector: RunSelector) -> int:
+    assert selector.branch is not None
+    opener = make_opener()
+    try:
+        manifest = fetch_selected_manifest(opener, repo, selector)
+        if manifest is None:
+            print("No matching log found.", file=sys.stderr)
+            return 1
+        print(manifest_text(manifest))
+    except urllib.error.URLError as exc:
+        print(f"error: failed to fetch {LOGS_URL}: {exc}", file=sys.stderr)
+        return 1
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def add_run_selector_args(parser: argparse.ArgumentParser, *, branch_required: bool) -> None:
     branch_nargs = None if branch_required else "?"
     parser.add_argument("branch", nargs=branch_nargs, default=None, help="Branch name.")
@@ -527,6 +612,10 @@ def build_parser() -> argparse.ArgumentParser:
     log_parser.add_argument("-f", action="store_true", dest="follow", help="Follow the log until it completes.")
     add_run_selector_args(log_parser, branch_required=True)
 
+    status_parser = subparsers.add_parser("status", help="Show published report status for a repo branch run.")
+    status_parser.add_argument("--repo", help="Repository name, such as herbie or owner/herbie.")
+    add_run_selector_args(status_parser, branch_required=True)
+
     download_parser = subparsers.add_parser("download", help="Download a published report for a repo branch run.")
     download_parser.add_argument("--repo", help="Repository name, such as herbie or owner/herbie.")
     add_run_selector_args(download_parser, branch_required=True)
@@ -546,6 +635,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_list(repo, selector)
     if args.command == "log":
         return cmd_log(repo, selector, args.follow)
+    if args.command == "status":
+        return cmd_status(repo, selector)
     if args.command == "download":
         return cmd_download(repo, selector)
     raise AssertionError(f"unknown command {args.command}")
