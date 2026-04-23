@@ -1,9 +1,22 @@
 [project]
-name = "nightly-runner"
+name = "nightlies"
 version = "0.1.0"
 description = "A script that runs integration tests nightly"
 readme = "README.md"
-requires-python = "~=3.14.0"
+authors = [
+    { name = "Pavel Panchekha", email = "me@pavpanchekha.com" },
+]
+requires-python = ">=3.14"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["nightlies", "logs", "reports"]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Utilities",
+]
 dependencies = [
     "bottle>=0.13.4",
     "dbus-python>=1.4.0",
