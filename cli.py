@@ -112,7 +112,6 @@ def short_repo_name(repo_name: str) -> str:
 class MissingClientConfig(ValueError):
     pass
 
-
 class NginxIndexParser(HTMLParser):
     def __init__(self, base_url: str):
         super().__init__()

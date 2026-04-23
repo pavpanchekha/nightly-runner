@@ -221,6 +221,39 @@ class TestCli(unittest.TestCase):
         self.assertEqual(stats.file_count, 1)
         self.assertEqual((self.tmpdir / "downloaded" / "results.json").read_text(), "{\"ok\":true}\n")
 
+    def test_cmd_download_reports_curl_failures_cleanly(self) -> None:
+        report_name = "1713570002:taylor-order0:badc0de"
+        report_url = cli.REPORTS_URL + "herbie/" + report_name
+        manifest = {"files": [{"path": "results.json", "gzip": False}]}
+        entry = cli.LogEntry(
+            name="2026-04-19-123456-1-herbie-taylor-order0.log",
+            url="https://nightly.cs.washington.edu/logs/taylor-order0.log",
+        )
+        opener = FakeOpener(
+            {
+                entry.url: (
+                    "Publishing report directory /tmp/report to "
+                    f"/srv/reports/herbie/{report_name}\n"
+                ).encode("utf-8"),
+                report_url + "/nightly_info.json": json.dumps(manifest).encode("utf-8"),
+            }
+        )
+        error = subprocess.CalledProcessError(22, ["curl", "--fail"])
+
+        with (
+            mock.patch.object(cli, "make_opener", return_value=opener),
+            mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
+            mock.patch.object(cli.subprocess, "run", side_effect=error),
+            mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            rc = cli.cmd_download(
+                "uwplse/herbie",
+                cli.RunSelector("taylor-order0", "2026-04-19", "12:34:56"),
+            )
+
+        self.assertEqual(rc, 1)
+        self.assertIn("error: Command '['curl', '--fail']' returned non-zero exit status 22.", stderr.getvalue())
+
     def test_cmd_list_accepts_branch_date_and_time_filters(self) -> None:
         entries = [
             cli.LogEntry(
