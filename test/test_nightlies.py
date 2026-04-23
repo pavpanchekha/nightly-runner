@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import urllib.error
 from typing import Any, Literal, cast
 from unittest import mock
 
@@ -385,6 +386,134 @@ class TestCli(unittest.TestCase):
 
         self.assertEqual(rc, 1)
         self.assertEqual(stderr.getvalue(), "error: client is not configured. Run `cli setup <url>`.\n")
+
+    def test_parse_index_state_reads_sync_and_start_controls(self) -> None:
+        state = cli.parse_index_state(
+            """
+            <form action="https://nightly.cs.washington.edu/dryrun" method="post">
+              <button disabled>Sync with Github</button>
+            </form>
+            <form action="https://nightly.cs.washington.edu/runnow" method="post">
+              <input type="hidden" name="repo" value="herbie" />
+              <input type="hidden" name="branch" value="main" />
+              <button>Run</button>
+            </form>
+            <form action="https://nightly.cs.washington.edu/runnow" method="post">
+              <input type="hidden" name="repo" value="uwplse/ruler" />
+              <input type="hidden" name="branch" value="feature/test" />
+              <button disabled>Run</button>
+            </form>
+            """,
+            self.client_config(),
+        )
+
+        self.assertTrue(state.sync_disabled)
+        self.assertEqual(
+            state.start_targets,
+            [
+                cli.StartTarget("herbie", "main", False),
+                cli.StartTarget("uwplse/ruler", "feature/test", True),
+            ],
+        )
+
+    def test_cmd_sync_refuses_when_ui_disables_sync(self) -> None:
+        with (
+            mock.patch.object(cli, "make_opener", return_value=mock.Mock()),
+            mock.patch.object(cli, "fetch_index_state", return_value=cli.IndexState(True, [])),
+            mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            rc = cli.cmd_sync(self.client_config())
+
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.getvalue(), "error: Nightly sync already running\n")
+
+    def test_cmd_sync_posts_to_dryrun_endpoint(self) -> None:
+        requests: list[urllib.request.Request] = []
+
+        class CapturingOpener:
+            def open(self, request: object) -> FakeResponse:
+                assert not isinstance(request, str)
+                requests.append(cast(urllib.request.Request, request))
+                return FakeResponse(b"ok")
+
+        with (
+            mock.patch.object(cli, "make_opener", return_value=CapturingOpener()),
+            mock.patch.object(cli, "fetch_index_state", return_value=cli.IndexState(False, [])),
+        ):
+            rc = cli.cmd_sync(self.client_config())
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(requests), 1)
+        request = requests[0]
+        self.assertEqual(request.full_url, self.client_config().sync_url)
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(request.data, b"")
+
+    def test_cmd_start_maps_full_repo_name_to_server_repo_token(self) -> None:
+        requests: list[urllib.request.Request] = []
+
+        class CapturingOpener:
+            def open(self, request: object) -> FakeResponse:
+                assert not isinstance(request, str)
+                requests.append(cast(urllib.request.Request, request))
+                return FakeResponse(b"ok")
+
+        state = cli.IndexState(False, [cli.StartTarget("herbie", "feature/test", False)])
+
+        with (
+            mock.patch.object(cli, "make_opener", return_value=CapturingOpener()),
+            mock.patch.object(cli, "fetch_index_state", return_value=state),
+        ):
+            rc = cli.cmd_start(self.client_config(), "uwplse/herbie", "feature/test")
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(requests), 1)
+        request = requests[0]
+        self.assertEqual(request.full_url, self.client_config().start_url)
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(request.data, b"repo=herbie&branch=feature%2Ftest")
+
+    def test_cmd_start_refuses_queued_branch(self) -> None:
+        state = cli.IndexState(False, [cli.StartTarget("herbie", "feature/test", True)])
+
+        with (
+            mock.patch.object(cli, "make_opener", return_value=mock.Mock()),
+            mock.patch.object(cli, "fetch_index_state", return_value=state),
+            mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            rc = cli.cmd_start(self.client_config(), "uwplse/herbie", "feature/test")
+
+        self.assertEqual(rc, 1)
+        self.assertEqual(
+            stderr.getvalue(),
+            "error: Job nightly:herbie:feature_2ftest already queued\n",
+        )
+
+    def test_cmd_start_surfaces_http_error_message(self) -> None:
+        client_config = self.client_config()
+
+        class ErrorOpener:
+            def open(self, request: object) -> FakeResponse:
+                assert not isinstance(request, str)
+                raise urllib.error.HTTPError(
+                    client_config.start_url,
+                    409,
+                    "Conflict",
+                    hdrs=None,
+                    fp=io.BytesIO(b"Nightly sync already running"),
+                )
+
+        state = cli.IndexState(False, [cli.StartTarget("herbie", "main", False)])
+
+        with (
+            mock.patch.object(cli, "make_opener", return_value=ErrorOpener()),
+            mock.patch.object(cli, "fetch_index_state", return_value=state),
+            mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            rc = cli.cmd_start(client_config, "herbie", "main")
+
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.getvalue(), "error: Nightly sync already running\n")
 
 
 class TestNightlyRunnerHarness(unittest.TestCase):

@@ -49,6 +49,18 @@ class ClientConfig:
         return urllib.parse.urljoin(self.base_url, "reports/")
 
     @property
+    def index_url(self) -> str:
+        return self.base_url
+
+    @property
+    def sync_url(self) -> str:
+        return urllib.parse.urljoin(self.base_url, "dryrun")
+
+    @property
+    def start_url(self) -> str:
+        return urllib.parse.urljoin(self.base_url, "runnow")
+
+    @property
     def curl_auth(self) -> str:
         return f"{self.username}:{self.password}"
 
@@ -74,10 +86,27 @@ class RunSelector:
 
 
 @dataclass(frozen=True)
+class StartTarget:
+    repo: str
+    branch: str
+    disabled: bool
+
+
+@dataclass(frozen=True)
+class IndexState:
+    sync_disabled: bool
+    start_targets: list[StartTarget]
+
+
+@dataclass(frozen=True)
 class DownloadStats:
     file_count: int
     curl_seconds: float
     ungzip_seconds: float
+
+
+def short_repo_name(repo_name: str) -> str:
+    return repo_name.split("/")[-1]
 
 
 class MissingClientConfig(ValueError):
@@ -206,6 +235,51 @@ def save_client_config(client_config: ClientConfig) -> Path:
             os.unlink(temp_path)
 
 
+class IndexParser(HTMLParser):
+    def __init__(self, base_url: str):
+        super().__init__()
+        self.base_url = base_url
+        self.sync_disabled = False
+        self.start_targets: list[StartTarget] = []
+        self._form_action: str | None = None
+        self._form_inputs: dict[str, str] = {}
+        self._button_disabled = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attr_map = dict(attrs)
+        if tag == "form":
+            action = attr_map.get("action")
+            self._form_action = urllib.parse.urljoin(self.base_url, action) if action else None
+            self._form_inputs = {}
+            self._button_disabled = False
+            return
+        if self._form_action is None:
+            return
+        if tag == "input":
+            name = attr_map.get("name")
+            value = attr_map.get("value")
+            if name is not None and value is not None:
+                self._form_inputs[name] = value
+            return
+        if tag == "button":
+            self._button_disabled = "disabled" in attr_map
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag != "form" or self._form_action is None:
+            return
+        form_path = urllib.parse.urlsplit(self._form_action).path.rstrip("/")
+        if form_path == urllib.parse.urlsplit(urllib.parse.urljoin(self.base_url, "dryrun")).path.rstrip("/"):
+            self.sync_disabled = self._button_disabled
+        elif form_path == urllib.parse.urlsplit(urllib.parse.urljoin(self.base_url, "runnow")).path.rstrip("/"):
+            repo = self._form_inputs.get("repo")
+            branch = self._form_inputs.get("branch")
+            if repo is not None and branch is not None:
+                self.start_targets.append(StartTarget(repo, branch, self._button_disabled))
+        self._form_action = None
+        self._form_inputs = {}
+        self._button_disabled = False
+
+
 def make_opener(client_config: ClientConfig) -> urllib.request.OpenerDirector:
     password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
     password_mgr.add_password(None, client_config.base_url, client_config.username, client_config.password)
@@ -214,6 +288,11 @@ def make_opener(client_config: ClientConfig) -> urllib.request.OpenerDirector:
 
 def fetch_logs_index(opener: urllib.request.OpenerDirector, client_config: ClientConfig) -> str:
     with opener.open(client_config.logs_url) as response:
+        return response.read().decode("utf-8", errors="replace")
+
+
+def fetch_index(opener: urllib.request.OpenerDirector, client_config: ClientConfig) -> str:
+    with opener.open(client_config.index_url) as response:
         return response.read().decode("utf-8", errors="replace")
 
 
@@ -248,6 +327,13 @@ def parse_html_entries(payload: str, client_config: ClientConfig) -> list[LogEnt
     return list(deduped.values())
 
 
+def parse_index_state(payload: str, client_config: ClientConfig) -> IndexState:
+    parser = IndexParser(client_config.base_url)
+    parser.feed(payload)
+    parser.close()
+    return IndexState(parser.sync_disabled, parser.start_targets)
+
+
 def iter_html_entries(response: urllib.response.addinfourl, base_url: str) -> Iterator[LogEntry]:
     parser = NginxIndexParser(base_url)
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
@@ -277,6 +363,10 @@ def iter_entries(
 
 def load_entries(client_config: ClientConfig) -> list[LogEntry]:
     return list(iter_entries(make_opener(client_config), client_config, newest_first=False))
+
+
+def fetch_index_state(opener: urllib.request.OpenerDirector, client_config: ClientConfig) -> IndexState:
+    return parse_index_state(fetch_index(opener, client_config), client_config)
 
 
 def github_repo(url: str) -> str | None:
@@ -310,6 +400,10 @@ def infer_repo(cwd: str) -> str:
     raise ValueError(f"could not infer GitHub repo from git remotes in {cwd}")
 
 
+def escape_branch_filename(branch: str) -> str:
+    return branch.replace("%", "_25").replace("/", "_2f")
+
+
 def strip_timestamp_prefix(stem: str) -> str | None:
     parts = stem.split("-")
     if len(parts) < 4:
@@ -325,7 +419,7 @@ def strip_timestamp_prefix(stem: str) -> str | None:
 
 
 def repo_entries(entries: Iterable[LogEntry], repo: str) -> Iterator[LogEntry]:
-    repo_name = repo.split("/")[-1]
+    repo_name = short_repo_name(repo)
     for entry in entries:
         rest = strip_timestamp_prefix(Path(entry.name).stem)
         if rest and rest.startswith(repo_name + "-"):
@@ -343,7 +437,7 @@ def recent_repo_entries(entries: Iterable[LogEntry], repo: str) -> list[LogEntry
 
 def parse_repo_run(repo: str, entry: LogEntry) -> RepoRun:
     parts = Path(entry.name).stem.split("-")
-    repo_name = repo.split("/")[-1]
+    repo_name = short_repo_name(repo)
     branch_parts = parts[5 + len(repo_name.split("-")) :]
     raw_time = parts[3]
     return RepoRun(
@@ -415,6 +509,45 @@ def latest_matching_repo_entry(
     return None
 
 
+def resolve_start_target(
+    index_state: IndexState,
+    client_config: ClientConfig,
+    repo: str,
+    branch: str,
+) -> StartTarget:
+    exact_matches = [
+        target
+        for target in index_state.start_targets
+        if target.branch == branch and target.repo == repo
+    ]
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+    if len(exact_matches) > 1:
+        raise ValueError(f"multiple configured start targets matched repo {repo!r} and branch {branch!r}")
+
+    repo_name = short_repo_name(repo)
+    short_matches = [
+        target
+        for target in index_state.start_targets
+        if target.branch == branch and short_repo_name(target.repo) == repo_name
+    ]
+    if len(short_matches) == 1:
+        return short_matches[0]
+    if len(short_matches) > 1:
+        options = ", ".join(sorted({target.repo for target in short_matches}))
+        raise ValueError(
+            f"branch {branch!r} exists in multiple configured repos matching {repo!r}: {options}"
+        )
+
+    configured_repos = {target.repo for target in index_state.start_targets if target.repo == repo}
+    configured_repos.update(
+        target.repo for target in index_state.start_targets if short_repo_name(target.repo) == repo_name
+    )
+    if configured_repos:
+        raise ValueError(f"branch {branch!r} is not available for repo {repo!r}")
+    raise ValueError(f"repo {repo!r} is not configured on {client_config.base_url}")
+
+
 def timing_line(step: str, seconds: float) -> str:
     return f"download timing: {step:<18} {seconds:.3f}s"
 
@@ -442,7 +575,7 @@ def tail_log(opener: urllib.request.OpenerDirector, url: str) -> None:
 
 
 def find_report_url_in_log(client_config: ClientConfig, repo: str, log_text: str) -> str | None:
-    repo_name = repo.split("/")[-1]
+    repo_name = short_repo_name(repo)
     matched: str | None = None
     for match in PUBLISH_RE.finditer(log_text):
         if match.group(1) != repo_name:
@@ -615,6 +748,84 @@ def cmd_setup(url: str) -> int:
     return 0
 
 
+def post_form(
+    opener: urllib.request.OpenerDirector,
+    url: str,
+    fields: dict[str, str],
+) -> None:
+    request = urllib.request.Request(
+        url,
+        data=urllib.parse.urlencode(fields).encode("utf-8"),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with opener.open(request) as response:
+        response.read()
+
+
+def format_http_error(exc: urllib.error.HTTPError) -> str:
+    try:
+        payload = exc.read().decode("utf-8", errors="replace")
+    except OSError:
+        payload = ""
+    finally:
+        exc.close()
+    text = " ".join(re.sub(r"<[^>]+>", " ", payload).split())
+    if "Nightly sync already running" in text:
+        return "Nightly sync already running"
+    queued_match = re.search(r"Job nightly:[^ ]+ already queued", text)
+    if queued_match is not None:
+        return queued_match.group(0)
+    if text:
+        return f"HTTP {exc.code}: {text}"
+    return f"HTTP {exc.code}: {exc.reason}"
+
+
+def cmd_sync(client_config: ClientConfig) -> int:
+    opener = make_opener(client_config)
+    try:
+        index_state = fetch_index_state(opener, client_config)
+        if index_state.sync_disabled:
+            print("error: Nightly sync already running", file=sys.stderr)
+            return 1
+        post_form(opener, client_config.sync_url, {})
+    except urllib.error.HTTPError as exc:
+        print(f"error: {format_http_error(exc)}", file=sys.stderr)
+        return 1
+    except urllib.error.URLError as exc:
+        print(f"error: failed to fetch {client_config.base_url}: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def cmd_start(client_config: ClientConfig, repo: str, branch: str) -> int:
+    opener = make_opener(client_config)
+    try:
+        index_state = fetch_index_state(opener, client_config)
+        target = resolve_start_target(index_state, client_config, repo, branch)
+        if index_state.sync_disabled:
+            print("error: Nightly sync already running", file=sys.stderr)
+            return 1
+        if target.disabled:
+            branch_filename = escape_branch_filename(target.branch)
+            print(
+                f"error: Job nightly:{target.repo}:{branch_filename} already queued",
+                file=sys.stderr,
+            )
+            return 1
+        post_form(opener, client_config.start_url, {"repo": target.repo, "branch": target.branch})
+    except urllib.error.HTTPError as exc:
+        print(f"error: {format_http_error(exc)}", file=sys.stderr)
+        return 1
+    except urllib.error.URLError as exc:
+        print(f"error: failed to fetch {client_config.base_url}: {exc}", file=sys.stderr)
+        return 1
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_download(client_config: ClientConfig, repo: str, selector: RunSelector) -> int:
     assert selector.branch is not None
     opener = make_opener(client_config)
@@ -655,6 +866,9 @@ def cmd_download(client_config: ClientConfig, repo: str, selector: RunSelector) 
     except urllib.error.URLError as exc:
         print(f"error: failed to fetch {client_config.base_url}: {exc}", file=sys.stderr)
         return 1
+    except subprocess.CalledProcessError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     except (OSError, ValueError, gzip.BadGzipFile) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -681,7 +895,7 @@ def cmd_list(
         print(f"error: failed to fetch {client_config.logs_url}: {exc}", file=sys.stderr)
         return 1
     if not entries:
-        print(f"No runs found for repo {repo.split('/')[-1]}.", file=sys.stderr)
+        print(f"No runs found for repo {short_repo_name(repo)}.", file=sys.stderr)
         return 1
     for entry in entries:
         run = parse_repo_run(repo, entry)
@@ -744,9 +958,15 @@ def build_parser() -> argparse.ArgumentParser:
     setup_parser = subparsers.add_parser("setup", help="Save the nightly URL and credentials.")
     setup_parser.add_argument("url", help="Nightly base URL, such as https://nightly.cs.washington.edu/.")
 
+    subparsers.add_parser("sync", help="Start a sync-with-GitHub dry run from the web UI.")
+
     list_parser = subparsers.add_parser("list", help="List runs for a repo.")
     list_parser.add_argument("--repo", help="Repository name, such as herbie or owner/herbie.")
     add_run_selector_args(list_parser, branch_required=False)
+
+    start_parser = subparsers.add_parser("start", help="Start a single repo branch run from the web UI.")
+    start_parser.add_argument("--repo", help="Repository name, such as herbie or owner/herbie.")
+    start_parser.add_argument("branch", help="Branch name.")
 
     log_parser = subparsers.add_parser("log", help="Print a log for a repo branch.")
     log_parser.add_argument("--repo", help="Repository name, such as herbie or owner/herbie.")
@@ -773,6 +993,15 @@ def main(argv: list[str] | None = None) -> int:
     except (MissingClientConfig, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    if args.command == "sync":
+        return cmd_sync(client_config)
+    if args.command == "start":
+        try:
+            repo = args.repo or infer_repo(".")
+        except (subprocess.CalledProcessError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        return cmd_start(client_config, repo, args.branch)
     selector = selector_from_args(args)
     try:
         repo = args.repo or infer_repo(".")
