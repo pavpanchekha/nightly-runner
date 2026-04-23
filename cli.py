@@ -266,10 +266,10 @@ class IndexParser(HTMLParser):
     def handle_endtag(self, tag: str) -> None:
         if tag != "form" or self._form_action is None:
             return
-        form_path = urllib.parse.urlsplit(self._form_action).path.rstrip("/")
-        if form_path == urllib.parse.urlsplit(urllib.parse.urljoin(self.base_url, "dryrun")).path.rstrip("/"):
+        form_path = "/" + urllib.parse.urlsplit(self._form_action).path.strip("/")
+        if form_path == "/" + urllib.parse.urlsplit(urllib.parse.urljoin(self.base_url, "dryrun")).path.strip("/"):
             self.sync_disabled = self._button_disabled
-        elif form_path == urllib.parse.urlsplit(urllib.parse.urljoin(self.base_url, "runnow")).path.rstrip("/"):
+        elif form_path == "/" + urllib.parse.urlsplit(urllib.parse.urljoin(self.base_url, "runnow")).path.strip("/"):
             repo = self._form_inputs.get("repo")
             branch = self._form_inputs.get("branch")
             if repo is not None and branch is not None:

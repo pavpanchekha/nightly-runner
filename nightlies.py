@@ -75,7 +75,8 @@ class NightlyRunner:
 
         defaults = self.config.defaults()
         self.base_url = defaults.get("baseurl")
-        if self.base_url and not self.base_url.endswith("/"): self.base_url += "/"
+        if self.base_url:
+            self.base_url = self.base_url.rstrip("/")
         self.dir = Path(defaults.get("repos", ".")).resolve()
         self.log_dir = Path(defaults.get("logs", "logs")).resolve()
         self.dryrun = "dryrun" in defaults
