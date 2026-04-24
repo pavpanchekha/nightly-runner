@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-from __future__ import annotations
-
 import codecs
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
@@ -41,7 +39,7 @@ class ClientConfig:
         return urllib.parse.urljoin(self.base_url, "logs/")
 
     @property
-    def logs_sorted_url(self) -> str:
+    def logs_url_sorted(self) -> str:
         return self.logs_url + "?C=M&O=D"
 
     @property
@@ -63,6 +61,12 @@ class ClientConfig:
     @property
     def curl_auth(self) -> str:
         return f"{self.username}:{self.password}"
+
+    def open(self, request: str | urllib.request.Request) -> urllib.response.addinfourl:
+        password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+        password_mgr.add_password(None, self.base_url, self.username, self.password)
+        opener = urllib.request.build_opener(urllib.request.HTTPBasicAuthHandler(password_mgr))
+        return opener.open(request)
 
 
 @dataclass(frozen=True)
@@ -112,6 +116,11 @@ def short_repo_name(repo_name: str) -> str:
 class MissingClientConfig(ValueError):
     pass
 
+
+class InvalidClientConfig(ValueError):
+    pass
+
+
 class NginxIndexParser(HTMLParser):
     def __init__(self, base_url: str):
         super().__init__()
@@ -146,6 +155,16 @@ class NginxIndexParser(HTMLParser):
         self.entries = []
         return entries
 
+    @classmethod
+    def parse(cls, payload: str, base_url: str) -> list[LogEntry]:
+        parser = cls(base_url)
+        parser.feed(payload)
+        parser.close()
+        deduped: dict[str, LogEntry] = {}
+        for entry in parser.entries:
+            deduped[entry.name] = entry
+        return list(deduped.values())
+
 
 def client_state_dir() -> Path:
     if os.name == "nt":
@@ -169,6 +188,10 @@ def setup_hint() -> str:
     return f"Run `{SETUP_COMMAND}`."
 
 
+def format_client_config_error(exc: MissingClientConfig | InvalidClientConfig) -> str:
+    return f"{exc}. {setup_hint()}"
+
+
 def normalize_base_url(url: str) -> str:
     normalized = url.strip()
     parsed = urllib.parse.urlsplit(normalized)
@@ -184,20 +207,24 @@ def load_client_config() -> ClientConfig:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
-        raise MissingClientConfig(f"client is not configured. {setup_hint()}") from exc
+        raise MissingClientConfig("client is not configured") from exc
     except json.JSONDecodeError as exc:
-        raise ValueError(f"invalid client config {path}: {exc}. {setup_hint()}") from exc
+        raise InvalidClientConfig(f"invalid client config {path}: {exc}") from exc
     if not isinstance(payload, dict):
-        raise ValueError(f"invalid client config {path}: expected a JSON object. {setup_hint()}")
+        raise InvalidClientConfig(f"invalid client config {path}: expected a JSON object")
 
     nightly_url = payload.get("nightly_url")
     username = payload.get("username")
     password = payload.get("password")
     if not isinstance(nightly_url, str) or not isinstance(username, str) or not isinstance(password, str):
-        raise ValueError(
-            f"invalid client config {path}: expected string fields nightly_url, username, and password. {setup_hint()}"
+        raise InvalidClientConfig(
+            f"invalid client config {path}: expected string fields nightly_url, username, and password"
         )
-    return ClientConfig(normalize_base_url(nightly_url), username, password)
+    try:
+        base_url = normalize_base_url(nightly_url)
+    except ValueError as exc:
+        raise InvalidClientConfig(f"invalid client config {path}: {exc}") from exc
+    return ClientConfig(base_url, username, password)
 
 
 def save_client_config(client_config: ClientConfig) -> Path:
@@ -206,32 +233,20 @@ def save_client_config(client_config: ClientConfig) -> Path:
     if os.name != "nt":
         os.chmod(path.parent, 0o700)
 
-    temp_path: str | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            "w",
-            encoding="utf-8",
-            dir=path.parent,
-            delete=False,
-        ) as handle:
-            json.dump(
-                {
-                    "nightly_url": client_config.base_url,
-                    "username": client_config.username,
-                    "password": client_config.password,
-                },
-                handle,
-                indent=2,
-            )
-            handle.write("\n")
-            temp_path = handle.name
-        if os.name != "nt":
-            os.chmod(temp_path, 0o600)
-        os.replace(temp_path, path)
-        return path
-    finally:
-        if temp_path is not None and os.path.exists(temp_path):
-            os.unlink(temp_path)
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(
+            {
+                "nightly_url": client_config.base_url,
+                "username": client_config.username,
+                "password": client_config.password,
+            },
+            handle,
+            indent=2,
+        )
+        handle.write("\n")
+    if os.name != "nt":
+        os.chmod(path, 0o600)
+    return path
 
 
 class IndexParser(HTMLParser):
@@ -278,33 +293,24 @@ class IndexParser(HTMLParser):
         self._form_inputs = {}
         self._button_disabled = False
 
+    @classmethod
+    def parse(cls, payload: str, base_url: str) -> IndexState:
+        parser = cls(base_url)
+        parser.feed(payload)
+        parser.close()
+        return IndexState(parser.sync_disabled, parser.start_targets)
 
-def make_opener(client_config: ClientConfig) -> urllib.request.OpenerDirector:
-    password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-    password_mgr.add_password(None, client_config.base_url, client_config.username, client_config.password)
-    return urllib.request.build_opener(urllib.request.HTTPBasicAuthHandler(password_mgr))
 
-
-def fetch_logs_index(opener: urllib.request.OpenerDirector, client_config: ClientConfig) -> str:
-    with opener.open(client_config.logs_url) as response:
+def fetch_text(client_config: ClientConfig, url: str) -> str:
+    with client_config.open(url) as response:
         return response.read().decode("utf-8", errors="replace")
 
 
-def fetch_index(opener: urllib.request.OpenerDirector, client_config: ClientConfig) -> str:
-    with opener.open(client_config.index_url) as response:
-        return response.read().decode("utf-8", errors="replace")
-
-
-def fetch_text(opener: urllib.request.OpenerDirector, url: str) -> str:
-    with opener.open(url) as response:
-        return response.read().decode("utf-8", errors="replace")
-
-
-def fetch_log_bytes(opener: urllib.request.OpenerDirector, url: str, start: int) -> tuple[str, int]:
+def fetch_log_bytes(client_config: ClientConfig, url: str, start: int) -> tuple[str, int]:
     req = urllib.request.Request(url)
     req.add_header("Range", f"bytes={start}-")
     try:
-        with opener.open(req) as response:
+        with client_config.open(req) as response:
             data = response.read()
             if response.status == 206:
                 return data.decode("utf-8", errors="replace"), start + len(data)
@@ -315,22 +321,6 @@ def fetch_log_bytes(opener: urllib.request.OpenerDirector, url: str, start: int)
         if exc.code == 416:
             return "", start
         raise
-
-
-def parse_html_entries(payload: str, client_config: ClientConfig) -> list[LogEntry]:
-    parser = NginxIndexParser(client_config.logs_url)
-    parser.feed(payload)
-    deduped: dict[str, LogEntry] = {}
-    for entry in parser.entries:
-        deduped[entry.name] = entry
-    return list(deduped.values())
-
-
-def parse_index_state(payload: str, client_config: ClientConfig) -> IndexState:
-    parser = IndexParser(client_config.base_url)
-    parser.feed(payload)
-    parser.close()
-    return IndexState(parser.sync_disabled, parser.start_targets)
 
 
 def iter_html_entries(response: urllib.response.addinfourl, base_url: str) -> Iterator[LogEntry]:
@@ -349,23 +339,14 @@ def iter_html_entries(response: urllib.response.addinfourl, base_url: str) -> It
     yield from parser.drain_entries()
 
 
-def iter_entries(
-    opener: urllib.request.OpenerDirector,
-    client_config: ClientConfig,
-    *,
-    newest_first: bool,
-) -> Iterator[LogEntry]:
-    url = client_config.logs_sorted_url if newest_first else client_config.logs_url
-    with opener.open(url) as response:
+def iter_entries(client_config: ClientConfig) -> Iterator[LogEntry]:
+    url = client_config.logs_url_sorted
+    with client_config.open(url) as response:
         yield from iter_html_entries(response, url)
 
 
-def load_entries(client_config: ClientConfig) -> list[LogEntry]:
-    return list(iter_entries(make_opener(client_config), client_config, newest_first=False))
-
-
-def fetch_index_state(opener: urllib.request.OpenerDirector, client_config: ClientConfig) -> IndexState:
-    return parse_index_state(fetch_index(opener, client_config), client_config)
+def fetch_index_state(client_config: ClientConfig) -> IndexState:
+    return IndexParser.parse(fetch_text(client_config, client_config.index_url), client_config.base_url)
 
 
 def github_repo(url: str) -> str | None:
@@ -555,15 +536,15 @@ def log_complete(text: str) -> bool:
     return COMPLETE_RE.search(text) is not None
 
 
-def print_log(opener: urllib.request.OpenerDirector, url: str) -> None:
-    sys.stdout.write(fetch_text(opener, url))
+def print_log(client_config: ClientConfig, url: str) -> None:
+    sys.stdout.write(fetch_text(client_config, url))
 
 
-def tail_log(opener: urllib.request.OpenerDirector, url: str) -> None:
+def tail_log(client_config: ClientConfig, url: str) -> None:
     offset = 0
     recent = ""
     while True:
-        chunk, offset = fetch_log_bytes(opener, url, offset)
+        chunk, offset = fetch_log_bytes(client_config, url, offset)
         if chunk:
             sys.stdout.write(chunk)
             sys.stdout.flush()
@@ -583,8 +564,8 @@ def find_report_url_in_log(client_config: ClientConfig, repo: str, log_text: str
     return matched
 
 
-def fetch_manifest(opener: urllib.request.OpenerDirector, report_url: str) -> dict[str, object]:
-    manifest = json.loads(fetch_text(opener, report_url + "/nightly_info.json"))
+def fetch_manifest(client_config: ClientConfig, report_url: str) -> dict[str, object]:
+    manifest = json.loads(fetch_text(client_config, report_url + "/nightly_info.json"))
     if not isinstance(manifest, dict):
         raise ValueError("nightly_info.json did not contain a JSON object")
     files = manifest.get("files")
@@ -714,20 +695,15 @@ def download_report_files(
     return DownloadStats(len(file_paths), curl_seconds, ungzip_seconds)
 
 
-def fetch_selected_manifest(
-    opener: urllib.request.OpenerDirector,
-    client_config: ClientConfig,
-    repo: str,
-    selector: RunSelector,
-) -> dict[str, object] | None:
-    entry = latest_matching_repo_entry(iter_entries(opener, client_config, newest_first=True), repo, selector)
+def fetch_selected_manifest(client_config: ClientConfig, repo: str, selector: RunSelector) -> dict[str, object] | None:
+    entry = latest_matching_repo_entry(iter_entries(client_config), repo, selector)
     if entry is None:
         return None
-    log_text = fetch_text(opener, entry.url)
+    log_text = fetch_text(client_config, entry.url)
     report_url = find_report_url_in_log(client_config, repo, log_text)
     if report_url is None:
         raise ValueError("No published report found in log.")
-    return fetch_manifest(opener, report_url)
+    return fetch_manifest(client_config, report_url)
 
 
 def cmd_setup(url: str) -> int:
@@ -747,18 +723,14 @@ def cmd_setup(url: str) -> int:
     return 0
 
 
-def post_form(
-    opener: urllib.request.OpenerDirector,
-    url: str,
-    fields: dict[str, str],
-) -> None:
+def post_form(client_config: ClientConfig, url: str, fields: dict[str, str]) -> None:
     request = urllib.request.Request(
         url,
         data=urllib.parse.urlencode(fields).encode("utf-8"),
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         method="POST",
     )
-    with opener.open(request) as response:
+    with client_config.open(request) as response:
         response.read()
 
 
@@ -781,13 +753,12 @@ def format_http_error(exc: urllib.error.HTTPError) -> str:
 
 
 def cmd_sync(client_config: ClientConfig) -> int:
-    opener = make_opener(client_config)
     try:
-        index_state = fetch_index_state(opener, client_config)
+        index_state = fetch_index_state(client_config)
         if index_state.sync_disabled:
             print("error: Nightly sync already running", file=sys.stderr)
             return 1
-        post_form(opener, client_config.sync_url, {})
+        post_form(client_config, client_config.sync_url, {})
     except urllib.error.HTTPError as exc:
         print(f"error: {format_http_error(exc)}", file=sys.stderr)
         return 1
@@ -798,9 +769,8 @@ def cmd_sync(client_config: ClientConfig) -> int:
 
 
 def cmd_start(client_config: ClientConfig, repo: str, branch: str) -> int:
-    opener = make_opener(client_config)
     try:
-        index_state = fetch_index_state(opener, client_config)
+        index_state = fetch_index_state(client_config)
         target = resolve_start_target(index_state, client_config, repo, branch)
         if index_state.sync_disabled:
             print("error: Nightly sync already running", file=sys.stderr)
@@ -812,7 +782,7 @@ def cmd_start(client_config: ClientConfig, repo: str, branch: str) -> int:
                 file=sys.stderr,
             )
             return 1
-        post_form(opener, client_config.start_url, {"repo": target.repo, "branch": target.branch})
+        post_form(client_config, client_config.start_url, {"repo": target.repo, "branch": target.branch})
     except urllib.error.HTTPError as exc:
         print(f"error: {format_http_error(exc)}", file=sys.stderr)
         return 1
@@ -827,11 +797,10 @@ def cmd_start(client_config: ClientConfig, repo: str, branch: str) -> int:
 
 def cmd_download(client_config: ClientConfig, repo: str, selector: RunSelector) -> int:
     assert selector.branch is not None
-    opener = make_opener(client_config)
     total_start = time.perf_counter()
     try:
         entries_start = time.perf_counter()
-        entries = iter_entries(opener, client_config, newest_first=True)
+        entries = iter_entries(client_config)
         entry = latest_matching_repo_entry(entries, repo, selector)
         entries_seconds = time.perf_counter() - entries_start
         print(timing_line("load/select run", entries_seconds), file=sys.stderr)
@@ -840,7 +809,7 @@ def cmd_download(client_config: ClientConfig, repo: str, selector: RunSelector) 
             return 1
 
         log_fetch_start = time.perf_counter()
-        log_text = fetch_text(opener, entry.url)
+        log_text = fetch_text(client_config, entry.url)
         log_fetch_seconds = time.perf_counter() - log_fetch_start
         print(timing_line("fetch log", log_fetch_seconds), file=sys.stderr)
 
@@ -853,7 +822,7 @@ def cmd_download(client_config: ClientConfig, repo: str, selector: RunSelector) 
             return 1
 
         manifest_start = time.perf_counter()
-        manifest = fetch_manifest(opener, report_url)
+        manifest = fetch_manifest(client_config, report_url)
         manifest_seconds = time.perf_counter() - manifest_start
         print(timing_line("fetch manifest", manifest_seconds), file=sys.stderr)
         files = manifest["files"]
@@ -882,14 +851,11 @@ def cmd_list(
     repo: str,
     selector: RunSelector,
 ) -> int:
-    opener = make_opener(client_config)
     try:
         if selector.branch is None and selector.date is None and selector.time is None:
-            entries = recent_repo_entries(iter_entries(opener, client_config, newest_first=True), repo)
+            entries = recent_repo_entries(iter_entries(client_config), repo)
         else:
-            entries = list(
-                reversed(matching_repo_entries(iter_entries(opener, client_config, newest_first=True), repo, selector))
-            )
+            entries = list(reversed(matching_repo_entries(iter_entries(client_config), repo, selector)))
     except urllib.error.URLError as exc:
         print(f"error: failed to fetch {client_config.logs_url}: {exc}", file=sys.stderr)
         return 1
@@ -904,16 +870,15 @@ def cmd_list(
 
 def cmd_log(client_config: ClientConfig, repo: str, selector: RunSelector, follow: bool) -> int:
     assert selector.branch is not None
-    opener = make_opener(client_config)
     try:
-        entry = latest_matching_repo_entry(iter_entries(opener, client_config, newest_first=True), repo, selector)
+        entry = latest_matching_repo_entry(iter_entries(client_config), repo, selector)
         if entry is None:
             print("No matching log found.", file=sys.stderr)
             return 1
         if follow:
-            tail_log(opener, entry.url)
+            tail_log(client_config, entry.url)
         else:
-            print_log(opener, entry.url)
+            print_log(client_config, entry.url)
     except urllib.error.URLError as exc:
         print(f"error: failed to fetch {client_config.logs_url}: {exc}", file=sys.stderr)
         return 1
@@ -922,9 +887,8 @@ def cmd_log(client_config: ClientConfig, repo: str, selector: RunSelector, follo
 
 def cmd_status(client_config: ClientConfig, repo: str, selector: RunSelector) -> int:
     assert selector.branch is not None
-    opener = make_opener(client_config)
     try:
-        manifest = fetch_selected_manifest(opener, client_config, repo, selector)
+        manifest = fetch_selected_manifest(client_config, repo, selector)
         if manifest is None:
             print("No matching log found.", file=sys.stderr)
             return 1
@@ -989,8 +953,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_setup(args.url)
     try:
         client_config = load_client_config()
-    except (MissingClientConfig, ValueError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
+    except (MissingClientConfig, InvalidClientConfig) as exc:
+        print(f"error: {format_client_config_error(exc)}", file=sys.stderr)
         return 1
     if args.command == "sync":
         return cmd_sync(client_config)

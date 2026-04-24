@@ -139,6 +139,14 @@ class TestCli(unittest.TestCase):
     def client_config(self, base_url: str = "https://nightly.cs.washington.edu/") -> cli.ClientConfig:
         return cli.ClientConfig(base_url, "uwplse", "uwplse")
 
+    def client_open_patch(self, opener: object) -> Any:
+        return mock.patch.object(
+            cli.ClientConfig,
+            "open",
+            autospec=True,
+            side_effect=lambda _client_config, request: cast(Any, opener).open(request),
+        )
+
     def fake_curl_run(
         self,
         responses: dict[str, bytes],
@@ -184,7 +192,7 @@ class TestCli(unittest.TestCase):
         )
 
         with (
-            mock.patch.object(cli, "make_opener", return_value=opener),
+            self.client_open_patch(opener),
             mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
             mock.patch.object(cli.subprocess, "run", self.fake_curl_run({
                 report_url + "/index.html": b"<h1>ok</h1>\n",
@@ -223,7 +231,8 @@ class TestCli(unittest.TestCase):
 
     def test_cmd_download_reports_curl_failures_cleanly(self) -> None:
         report_name = "1713570002:taylor-order0:badc0de"
-        report_url = cli.REPORTS_URL + "herbie/" + report_name
+        client_config = self.client_config()
+        report_url = client_config.reports_url + "herbie/" + report_name
         manifest = {"files": [{"path": "results.json", "gzip": False}]}
         entry = cli.LogEntry(
             name="2026-04-19-123456-1-herbie-taylor-order0.log",
@@ -241,12 +250,13 @@ class TestCli(unittest.TestCase):
         error = subprocess.CalledProcessError(22, ["curl", "--fail"])
 
         with (
-            mock.patch.object(cli, "make_opener", return_value=opener),
+            self.client_open_patch(opener),
             mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
             mock.patch.object(cli.subprocess, "run", side_effect=error),
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
             rc = cli.cmd_download(
+                client_config,
                 "uwplse/herbie",
                 cli.RunSelector("taylor-order0", "2026-04-19", "12:34:56"),
             )
@@ -347,7 +357,7 @@ class TestCli(unittest.TestCase):
         )
 
         with (
-            mock.patch.object(cli, "make_opener", return_value=opener),
+            self.client_open_patch(opener),
             mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
             mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
         ):
@@ -380,7 +390,7 @@ class TestCli(unittest.TestCase):
         opener = FakeOpener({entry.url: b"still running\n"})
 
         with (
-            mock.patch.object(cli, "make_opener", return_value=opener),
+            self.client_open_patch(opener),
             mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
@@ -421,7 +431,7 @@ class TestCli(unittest.TestCase):
         self.assertEqual(stderr.getvalue(), "error: client is not configured. Run `cli setup <url>`.\n")
 
     def test_parse_index_state_reads_sync_and_start_controls(self) -> None:
-        state = cli.parse_index_state(
+        state = cli.IndexParser.parse(
             """
             <form action="https://nightly.cs.washington.edu/dryrun" method="post">
               <button disabled>Sync with Github</button>
@@ -437,7 +447,7 @@ class TestCli(unittest.TestCase):
               <button disabled>Run</button>
             </form>
             """,
-            self.client_config(),
+            self.client_config().base_url,
         )
 
         self.assertTrue(state.sync_disabled)
@@ -451,7 +461,6 @@ class TestCli(unittest.TestCase):
 
     def test_cmd_sync_refuses_when_ui_disables_sync(self) -> None:
         with (
-            mock.patch.object(cli, "make_opener", return_value=mock.Mock()),
             mock.patch.object(cli, "fetch_index_state", return_value=cli.IndexState(True, [])),
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
@@ -470,7 +479,7 @@ class TestCli(unittest.TestCase):
                 return FakeResponse(b"ok")
 
         with (
-            mock.patch.object(cli, "make_opener", return_value=CapturingOpener()),
+            self.client_open_patch(CapturingOpener()),
             mock.patch.object(cli, "fetch_index_state", return_value=cli.IndexState(False, [])),
         ):
             rc = cli.cmd_sync(self.client_config())
@@ -494,7 +503,7 @@ class TestCli(unittest.TestCase):
         state = cli.IndexState(False, [cli.StartTarget("herbie", "feature/test", False)])
 
         with (
-            mock.patch.object(cli, "make_opener", return_value=CapturingOpener()),
+            self.client_open_patch(CapturingOpener()),
             mock.patch.object(cli, "fetch_index_state", return_value=state),
         ):
             rc = cli.cmd_start(self.client_config(), "uwplse/herbie", "feature/test")
@@ -510,7 +519,6 @@ class TestCli(unittest.TestCase):
         state = cli.IndexState(False, [cli.StartTarget("herbie", "feature/test", True)])
 
         with (
-            mock.patch.object(cli, "make_opener", return_value=mock.Mock()),
             mock.patch.object(cli, "fetch_index_state", return_value=state),
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
@@ -539,7 +547,7 @@ class TestCli(unittest.TestCase):
         state = cli.IndexState(False, [cli.StartTarget("herbie", "main", False)])
 
         with (
-            mock.patch.object(cli, "make_opener", return_value=ErrorOpener()),
+            self.client_open_patch(ErrorOpener()),
             mock.patch.object(cli, "fetch_index_state", return_value=state),
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
