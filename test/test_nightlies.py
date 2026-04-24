@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from types import SimpleNamespace
 from typing import Any, Literal, cast
@@ -446,6 +447,60 @@ class TestNightlyRunnerHarness(unittest.TestCase):
         contents = metadata.read_text()
         self.assertIn('"commit"', contents)
         self.assertIn('"time"', contents)
+
+    def test_dryrun_rejects_when_sync_is_running(self) -> None:
+        self.write_config(repo_updates={})
+        self.pid_file.write_text(
+            json.dumps(
+                {
+                    "pid": os.getpid(),
+                    "start": "2026-04-21T15:00:00",
+                    "config": str(self.config_file),
+                    "log": str(self.logs_dir / "running.log"),
+                }
+            )
+        )
+
+        bottle = types.ModuleType("bottle")
+
+        class HTTPError(Exception):
+            def __init__(self, status_code: int, body: str = "") -> None:
+                super().__init__(body)
+                self.status_code = status_code
+                self.body = body
+
+        def decorator(*_args: object, **_kwargs: object) -> object:
+            return lambda fn: fn
+
+        bottle.HTTPError = HTTPError
+        bottle.route = decorator
+        bottle.post = decorator
+        bottle.view = decorator
+        bottle.static_file = lambda *_args, **_kwargs: None
+        bottle.redirect = lambda _url: None
+        bottle.run = lambda *_args, **_kwargs: None
+
+        status = types.ModuleType("status")
+        status.system_state_html = lambda: ""
+
+        with mock.patch.dict(sys.modules, {"bottle": bottle, "status": status}):
+            sys.modules.pop("server", None)
+            server = importlib.import_module("server")
+            try:
+                with (
+                    mock.patch.object(server, "CONF_FILE", str(self.config_file)),
+                    mock.patch.object(server, "run_nightlies") as run_nightlies,
+                    mock.patch.object(bottle, "redirect") as redirect,
+                ):
+                    with self.assertRaises(HTTPError) as ctx:
+                        server.dryrun()
+            finally:
+                sys.modules.pop("server", None)
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.body, "Nightly sync already running")
+        run_nightlies.assert_not_called()
+        redirect.assert_not_called()
 
     def test_load_normalizes_baseurl_with_trailing_slash(self) -> None:
         self.write_config(repo_updates={}, default_updates={"baseurl": "https://nightlies.example"})
