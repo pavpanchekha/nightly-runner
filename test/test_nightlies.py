@@ -428,7 +428,7 @@ class TestCli(unittest.TestCase):
             rc = cli.main(["list", "--repo", "uwplse/herbie"])
 
         self.assertEqual(rc, 1)
-        self.assertEqual(stderr.getvalue(), "error: client is not configured. Run `cli setup <url>`.\n")
+        self.assertEqual(stderr.getvalue(), "error: client is not configured. Run `cli setup <url>` to fix.\n")
 
     def test_parse_index_state_reads_sync_and_start_controls(self) -> None:
         state = cli.IndexParser.parse(
@@ -447,7 +447,7 @@ class TestCli(unittest.TestCase):
               <button disabled>Run</button>
             </form>
             """,
-            self.client_config().base_url,
+            self.client_config().index_url,
         )
 
         self.assertTrue(state.sync_disabled)
