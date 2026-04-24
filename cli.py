@@ -21,34 +21,34 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-CURL_PARALLEL_MAX = 32
-COMPLETE_RE = re.compile(r"^Nightly used memory=.*timeout=.*$", re.MULTILINE)
-PUBLISH_RE = re.compile(r"^Publishing report directory .* to .*/reports/([^/]+)/([^/\n]+)$", re.MULTILINE)
+
+## Setup & config file
+
 SETUP_COMMAND = "cli setup <url>"
 STATE_FILENAME = "state.json"
 
 
+class MissingClientConfig(ValueError):
+    pass
+
+
+class InvalidClientConfig(ValueError):
+    pass
+
+
 @dataclass(frozen=True)
 class ClientConfig:
-    base_url: str
+    index_url: str
     username: str
     password: str
 
     @property
     def logs_url(self) -> str:
-        return urllib.parse.urljoin(self.base_url, "logs/")
-
-    @property
-    def logs_url_sorted(self) -> str:
-        return self.logs_url + "?C=M&O=D"
+        return urllib.parse.urljoin(self.base_url, "logs/") + "?C=M&O=D"
 
     @property
     def reports_url(self) -> str:
         return urllib.parse.urljoin(self.base_url, "reports/")
-
-    @property
-    def index_url(self) -> str:
-        return self.base_url
 
     @property
     def sync_url(self) -> str:
@@ -58,16 +58,75 @@ class ClientConfig:
     def start_url(self) -> str:
         return urllib.parse.urljoin(self.base_url, "runnow")
 
-    @property
-    def curl_auth(self) -> str:
-        return f"{self.username}:{self.password}"
-
     def open(self, request: str | urllib.request.Request) -> urllib.response.addinfourl:
         password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
         password_mgr.add_password(None, self.base_url, self.username, self.password)
         opener = urllib.request.build_opener(urllib.request.HTTPBasicAuthHandler(password_mgr))
         return opener.open(request)
 
+
+def client_state_path() -> Path:
+    if os.name == "nt":
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            return Path(appdata) / "nightlies" / STATE_FILENAME
+        return Path.home() / "AppData" / "Roaming" / "nightlies" / STATE_FILENAME
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "nightlies" / STATE_FILENAME
+    xdg_data_home = os.environ.get("XDG_DATA_HOME")
+    if xdg_data_home:
+        return Path(xdg_data_home) / "nightlies" / STATE_FILENAME
+    return Path.home() / ".local" / "share" / "nightlies" / STATE_FILENAME
+
+
+def save_client_config(client_config: ClientConfig) -> Path:
+    path = client_state_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if os.name != "nt":
+        os.chmod(path.parent, 0o700)
+
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(
+            {
+                "nightly_url": client_config.base_url,
+                "username": client_config.username,
+                "password": client_config.password,
+            },
+            handle,
+            indent=2,
+        )
+        handle.write("\n")
+    if os.name != "nt":
+        os.chmod(path, 0o600)
+    return path
+
+
+def load_client_config() -> ClientConfig:
+    path = client_state_path()
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise MissingClientConfig("client is not configured") from exc
+    except json.JSONDecodeError as exc:
+        raise InvalidClientConfig(f"invalid client config {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise InvalidClientConfig(f"invalid client config {path}: expected a JSON object")
+
+    nightly_url = payload.get("nightly_url")
+    username = payload.get("username")
+    password = payload.get("password")
+    if not isinstance(nightly_url, str) or not isinstance(username, str) or not isinstance(password, str):
+        raise InvalidClientConfig(
+            f"invalid client config {path}: expected string fields nightly_url, username, and password"
+        )
+    try:
+        base_url = normalize_base_url(nightly_url)
+    except ValueError as exc:
+        raise InvalidClientConfig(f"invalid client config {path}: {exc}") from exc
+    return ClientConfig(base_url, username, password)
+
+
+## Parsers; eventually the server should offer an API for all this
 
 @dataclass(frozen=True)
 class LogEntry:
@@ -102,23 +161,13 @@ class IndexState:
     start_targets: list[StartTarget]
 
 
-@dataclass(frozen=True)
-class DownloadStats:
-    file_count: int
-    curl_seconds: float
-    ungzip_seconds: float
-
-
 def short_repo_name(repo_name: str) -> str:
     return repo_name.split("/")[-1]
 
 
-class MissingClientConfig(ValueError):
-    pass
-
-
-class InvalidClientConfig(ValueError):
-    pass
+CURL_PARALLEL_MAX = 32
+COMPLETE_RE = re.compile(r"^Nightly used memory=.*timeout=.*$", re.MULTILINE)
+PUBLISH_RE = re.compile(r"^Publishing report directory .* to .*/reports/([^/]+)/([^/\n]+)$", re.MULTILINE)
 
 
 class NginxIndexParser(HTMLParser):
@@ -166,24 +215,6 @@ class NginxIndexParser(HTMLParser):
         return list(deduped.values())
 
 
-def client_state_dir() -> Path:
-    if os.name == "nt":
-        appdata = os.environ.get("APPDATA")
-        if appdata:
-            return Path(appdata) / "nightlies"
-        return Path.home() / "AppData" / "Roaming" / "nightlies"
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "nightlies"
-    xdg_data_home = os.environ.get("XDG_DATA_HOME")
-    if xdg_data_home:
-        return Path(xdg_data_home) / "nightlies"
-    return Path.home() / ".local" / "share" / "nightlies"
-
-
-def client_state_path() -> Path:
-    return client_state_dir() / STATE_FILENAME
-
-
 def setup_hint() -> str:
     return f"Run `{SETUP_COMMAND}`."
 
@@ -200,53 +231,6 @@ def normalize_base_url(url: str) -> str:
     if not normalized.endswith("/"):
         normalized += "/"
     return normalized
-
-
-def load_client_config() -> ClientConfig:
-    path = client_state_path()
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise MissingClientConfig("client is not configured") from exc
-    except json.JSONDecodeError as exc:
-        raise InvalidClientConfig(f"invalid client config {path}: {exc}") from exc
-    if not isinstance(payload, dict):
-        raise InvalidClientConfig(f"invalid client config {path}: expected a JSON object")
-
-    nightly_url = payload.get("nightly_url")
-    username = payload.get("username")
-    password = payload.get("password")
-    if not isinstance(nightly_url, str) or not isinstance(username, str) or not isinstance(password, str):
-        raise InvalidClientConfig(
-            f"invalid client config {path}: expected string fields nightly_url, username, and password"
-        )
-    try:
-        base_url = normalize_base_url(nightly_url)
-    except ValueError as exc:
-        raise InvalidClientConfig(f"invalid client config {path}: {exc}") from exc
-    return ClientConfig(base_url, username, password)
-
-
-def save_client_config(client_config: ClientConfig) -> Path:
-    path = client_state_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if os.name != "nt":
-        os.chmod(path.parent, 0o700)
-
-    with path.open("w", encoding="utf-8") as handle:
-        json.dump(
-            {
-                "nightly_url": client_config.base_url,
-                "username": client_config.username,
-                "password": client_config.password,
-            },
-            handle,
-            indent=2,
-        )
-        handle.write("\n")
-    if os.name != "nt":
-        os.chmod(path, 0o600)
-    return path
 
 
 class IndexParser(HTMLParser):
@@ -340,8 +324,7 @@ def iter_html_entries(response: urllib.response.addinfourl, base_url: str) -> It
 
 
 def iter_entries(client_config: ClientConfig) -> Iterator[LogEntry]:
-    url = client_config.logs_url_sorted
-    with client_config.open(url) as response:
+    with client_config.open(client_config.logs_url) as response:
         yield from iter_html_entries(response, url)
 
 
@@ -528,10 +511,6 @@ def resolve_start_target(
     raise ValueError(f"repo {repo!r} is not configured on {client_config.base_url}")
 
 
-def timing_line(step: str, seconds: float) -> str:
-    return f"download timing: {step:<18} {seconds:.3f}s"
-
-
 def log_complete(text: str) -> bool:
     return COMPLETE_RE.search(text) is not None
 
@@ -645,7 +624,7 @@ def download_report_files(
     files: list[object],
     output_dir: Path,
     client_config: ClientConfig,
-) -> DownloadStats:
+) -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     file_paths: list[tuple[str, str]] = []
@@ -654,7 +633,6 @@ def download_report_files(
             raise ValueError("manifest file entry was not an object")
         file_paths.append(manifest_paths(file_info.get("path"), file_info.get("gzip")))
 
-    curl_start = time.perf_counter()
     with tempfile.NamedTemporaryFile("w", encoding="utf-8") as config_file:
         for remote_relpath, _ in file_paths:
             remote_url = report_url + "/" + urllib.parse.quote(remote_relpath)
@@ -674,15 +652,13 @@ def download_report_files(
                 "--parallel-max",
                 str(min(CURL_PARALLEL_MAX, max(1, len(file_paths)))),
                 "--user",
-                client_config.curl_auth,
+                f"{self.username}:{self.password}",
                 "--config",
                 config_file.name,
             ],
             check=True,
         )
-    curl_seconds = time.perf_counter() - curl_start
 
-    ungzip_start = time.perf_counter()
     for remote_relpath, local_relpath in file_paths:
         if remote_relpath == local_relpath:
             continue
@@ -691,8 +667,7 @@ def download_report_files(
         with gzip.open(remote_path, "rb") as f_in, local_path.open("wb") as f_out:
             shutil.copyfileobj(f_in, f_out)
         remote_path.unlink()
-    ungzip_seconds = time.perf_counter() - ungzip_start
-    return DownloadStats(len(file_paths), curl_seconds, ungzip_seconds)
+    return len(file_paths)
 
 
 def fetch_selected_manifest(client_config: ClientConfig, repo: str, selector: RunSelector) -> dict[str, object] | None:
@@ -797,40 +772,25 @@ def cmd_start(client_config: ClientConfig, repo: str, branch: str) -> int:
 
 def cmd_download(client_config: ClientConfig, repo: str, selector: RunSelector) -> int:
     assert selector.branch is not None
-    total_start = time.perf_counter()
     try:
-        entries_start = time.perf_counter()
         entries = iter_entries(client_config)
         entry = latest_matching_repo_entry(entries, repo, selector)
-        entries_seconds = time.perf_counter() - entries_start
-        print(timing_line("load/select run", entries_seconds), file=sys.stderr)
         if entry is None:
             print("No matching log found.", file=sys.stderr)
             return 1
 
-        log_fetch_start = time.perf_counter()
         log_text = fetch_text(client_config, entry.url)
-        log_fetch_seconds = time.perf_counter() - log_fetch_start
-        print(timing_line("fetch log", log_fetch_seconds), file=sys.stderr)
 
-        report_url_start = time.perf_counter()
         report_url = find_report_url_in_log(client_config, repo, log_text)
-        report_url_seconds = time.perf_counter() - report_url_start
-        print(timing_line("parse report url", report_url_seconds), file=sys.stderr)
         if report_url is None:
             print("No published report found in log.", file=sys.stderr)
             return 1
 
-        manifest_start = time.perf_counter()
         manifest = fetch_manifest(client_config, report_url)
-        manifest_seconds = time.perf_counter() - manifest_start
-        print(timing_line("fetch manifest", manifest_seconds), file=sys.stderr)
         files = manifest["files"]
         assert isinstance(files, list)
         output_dir = Path(urllib.parse.urlsplit(report_url).path.rstrip("/")).name
-        stats = download_report_files(report_url, files, Path(output_dir), client_config)
-        print(timing_line("curl download", stats.curl_seconds), file=sys.stderr)
-        print(timing_line("ungzip files", stats.ungzip_seconds), file=sys.stderr)
+        file_count = download_report_files(report_url, files, Path(output_dir), client_config)
     except urllib.error.URLError as exc:
         print(f"error: failed to fetch {client_config.base_url}: {exc}", file=sys.stderr)
         return 1
@@ -840,9 +800,7 @@ def cmd_download(client_config: ClientConfig, repo: str, selector: RunSelector) 
     except (OSError, ValueError, gzip.BadGzipFile) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    total_seconds = time.perf_counter() - total_start
-    print(timing_line("total", total_seconds), file=sys.stderr)
-    print(f"Downloaded {stats.file_count} files to {output_dir}/")
+    print(f"Downloaded {file_count} files to {output_dir}/")
     return 0
 
 

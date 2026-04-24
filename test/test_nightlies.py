@@ -219,14 +219,14 @@ class TestCli(unittest.TestCase):
         with mock.patch.object(cli.subprocess, "run", self.fake_curl_run({
             report_url + "/results.json.gz": gzip.compress(b"{\"ok\":true}\n"),
         })):
-            stats = cli.download_report_files(
+            file_count = cli.download_report_files(
                 report_url,
                 [{"path": "results.json", "gzip": True}],
                 self.tmpdir / "downloaded",
                 client_config,
             )
 
-        self.assertEqual(stats.file_count, 1)
+        self.assertEqual(file_count, 1)
         self.assertEqual((self.tmpdir / "downloaded" / "results.json").read_text(), "{\"ok\":true}\n")
 
     def test_cmd_download_reports_curl_failures_cleanly(self) -> None:
