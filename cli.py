@@ -44,23 +44,23 @@ class ClientConfig:
 
     @property
     def logs_url(self) -> str:
-        return urllib.parse.urljoin(self.base_url, "logs/") + "?C=M&O=D"
+        return urllib.parse.urljoin(self.index_url, "logs/") + "?C=M&O=D"
 
     @property
     def reports_url(self) -> str:
-        return urllib.parse.urljoin(self.base_url, "reports/")
+        return urllib.parse.urljoin(self.index_url, "reports/")
 
     @property
     def sync_url(self) -> str:
-        return urllib.parse.urljoin(self.base_url, "dryrun")
+        return urllib.parse.urljoin(self.index_url, "dryrun")
 
     @property
     def start_url(self) -> str:
-        return urllib.parse.urljoin(self.base_url, "runnow")
+        return urllib.parse.urljoin(self.index_url, "runnow")
 
     def open(self, request: str | urllib.request.Request) -> urllib.response.addinfourl:
         password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-        password_mgr.add_password(None, self.base_url, self.username, self.password)
+        password_mgr.add_password(None, self.index_url, self.username, self.password)
         opener = urllib.request.build_opener(urllib.request.HTTPBasicAuthHandler(password_mgr))
         return opener.open(request)
 
@@ -88,7 +88,7 @@ def save_client_config(client_config: ClientConfig) -> Path:
     with path.open("w", encoding="utf-8") as handle:
         json.dump(
             {
-                "nightly_url": client_config.base_url,
+                "nightly_url": client_config.index_url,
                 "username": client_config.username,
                 "password": client_config.password,
             },
@@ -132,42 +132,6 @@ def load_client_config() -> ClientConfig:
 class LogEntry:
     name: str
     url: str
-
-
-@dataclass(frozen=True)
-class RepoRun:
-    date: str
-    time: str
-    branch: str
-
-
-@dataclass(frozen=True)
-class RunSelector:
-    branch: str | None
-    date: str | None
-    time: str | None
-
-
-@dataclass(frozen=True)
-class StartTarget:
-    repo: str
-    branch: str
-    disabled: bool
-
-
-@dataclass(frozen=True)
-class IndexState:
-    sync_disabled: bool
-    start_targets: list[StartTarget]
-
-
-def short_repo_name(repo_name: str) -> str:
-    return repo_name.split("/")[-1]
-
-
-CURL_PARALLEL_MAX = 32
-COMPLETE_RE = re.compile(r"^Nightly used memory=.*timeout=.*$", re.MULTILINE)
-PUBLISH_RE = re.compile(r"^Publishing report directory .* to .*/reports/([^/]+)/([^/\n]+)$", re.MULTILINE)
 
 
 class NginxIndexParser(HTMLParser):
@@ -215,23 +179,18 @@ class NginxIndexParser(HTMLParser):
         return list(deduped.values())
 
 
-def setup_hint() -> str:
-    return f"Run `{SETUP_COMMAND}`."
+@dataclass(frozen=True)
+class StartTarget:
+    repo: str
+    branch: str
+    disabled: bool
 
 
-def format_client_config_error(exc: MissingClientConfig | InvalidClientConfig) -> str:
-    return f"{exc}. {setup_hint()}"
-
-
-def normalize_base_url(url: str) -> str:
-    normalized = url.strip()
-    parsed = urllib.parse.urlsplit(normalized)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        raise ValueError("nightly URL must be an http or https URL")
-    if not normalized.endswith("/"):
-        normalized += "/"
-    return normalized
-
+@dataclass(frozen=True)
+class IndexState:
+    sync_disabled: bool
+    start_targets: list[StartTarget]
+    
 
 class IndexParser(HTMLParser):
     def __init__(self, base_url: str):
@@ -285,6 +244,40 @@ class IndexParser(HTMLParser):
         return IndexState(parser.sync_disabled, parser.start_targets)
 
 
+@dataclass(frozen=True)
+class RepoRun:
+    date: str
+    time: str
+    branch: str
+
+
+@dataclass(frozen=True)
+class RunSelector:
+    branch: str | None
+    date: str | None
+    time: str | None
+
+## Main CLI body
+
+def short_repo_name(repo_name: str) -> str:
+    return repo_name.split("/")[-1]
+
+
+CURL_PARALLEL_MAX = 32
+COMPLETE_RE = re.compile(r"^Nightly used memory=.*timeout=.*$", re.MULTILINE)
+PUBLISH_RE = re.compile(r"^Publishing report directory .* to .*/reports/([^/]+)/([^/\n]+)$", re.MULTILINE)
+
+
+def normalize_base_url(url: str) -> str:
+    normalized = url.strip()
+    parsed = urllib.parse.urlsplit(normalized)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError("nightly URL must be an http or https URL")
+    if not normalized.endswith("/"):
+        normalized += "/"
+    return normalized
+
+
 def fetch_text(client_config: ClientConfig, url: str) -> str:
     with client_config.open(url) as response:
         return response.read().decode("utf-8", errors="replace")
@@ -325,11 +318,11 @@ def iter_html_entries(response: urllib.response.addinfourl, base_url: str) -> It
 
 def iter_entries(client_config: ClientConfig) -> Iterator[LogEntry]:
     with client_config.open(client_config.logs_url) as response:
-        yield from iter_html_entries(response, url)
+        yield from iter_html_entries(response, client_config.logs_url)
 
 
 def fetch_index_state(client_config: ClientConfig) -> IndexState:
-    return IndexParser.parse(fetch_text(client_config, client_config.index_url), client_config.base_url)
+    return IndexParser.parse(fetch_text(client_config, client_config.index_url), client_config.index_url)
 
 
 def github_repo(url: str) -> str | None:
@@ -508,11 +501,7 @@ def resolve_start_target(
     )
     if configured_repos:
         raise ValueError(f"branch {branch!r} is not available for repo {repo!r}")
-    raise ValueError(f"repo {repo!r} is not configured on {client_config.base_url}")
-
-
-def log_complete(text: str) -> bool:
-    return COMPLETE_RE.search(text) is not None
+    raise ValueError(f"repo {repo!r} is not configured on {client_config.index_url}")
 
 
 def print_log(client_config: ClientConfig, url: str) -> None:
@@ -528,8 +517,7 @@ def tail_log(client_config: ClientConfig, url: str) -> None:
             sys.stdout.write(chunk)
             sys.stdout.flush()
             recent = (recent + chunk)[-4096:]
-            if log_complete(recent):
-                return
+            if COMPLETE_RE.search(recent): return
         time.sleep(1)
 
 
@@ -652,7 +640,7 @@ def download_report_files(
                 "--parallel-max",
                 str(min(CURL_PARALLEL_MAX, max(1, len(file_paths)))),
                 "--user",
-                f"{self.username}:{self.password}",
+                f"{client_config.username}:{client_config.password}",
                 "--config",
                 config_file.name,
             ],
@@ -726,6 +714,7 @@ def format_http_error(exc: urllib.error.HTTPError) -> str:
         return f"HTTP {exc.code}: {text}"
     return f"HTTP {exc.code}: {exc.reason}"
 
+## Individual commands
 
 def cmd_sync(client_config: ClientConfig) -> int:
     try:
@@ -738,7 +727,7 @@ def cmd_sync(client_config: ClientConfig) -> int:
         print(f"error: {format_http_error(exc)}", file=sys.stderr)
         return 1
     except urllib.error.URLError as exc:
-        print(f"error: failed to fetch {client_config.base_url}: {exc}", file=sys.stderr)
+        print(f"error: failed to fetch {client_config.index_url}: {exc}", file=sys.stderr)
         return 1
     return 0
 
@@ -762,7 +751,7 @@ def cmd_start(client_config: ClientConfig, repo: str, branch: str) -> int:
         print(f"error: {format_http_error(exc)}", file=sys.stderr)
         return 1
     except urllib.error.URLError as exc:
-        print(f"error: failed to fetch {client_config.base_url}: {exc}", file=sys.stderr)
+        print(f"error: failed to fetch {client_config.index_url}: {exc}", file=sys.stderr)
         return 1
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -792,7 +781,7 @@ def cmd_download(client_config: ClientConfig, repo: str, selector: RunSelector) 
         output_dir = Path(urllib.parse.urlsplit(report_url).path.rstrip("/")).name
         file_count = download_report_files(report_url, files, Path(output_dir), client_config)
     except urllib.error.URLError as exc:
-        print(f"error: failed to fetch {client_config.base_url}: {exc}", file=sys.stderr)
+        print(f"error: failed to fetch {client_config.index_url}: {exc}", file=sys.stderr)
         return 1
     except subprocess.CalledProcessError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -859,16 +848,13 @@ def cmd_status(client_config: ClientConfig, repo: str, selector: RunSelector) ->
         return 1
     return 0
 
+## Main method and flag handling
 
 def add_run_selector_args(parser: argparse.ArgumentParser, *, branch_required: bool) -> None:
     branch_nargs = None if branch_required else "?"
     parser.add_argument("branch", nargs=branch_nargs, default=None, help="Branch name.")
     parser.add_argument("date", nargs="?", default=None, help="Run date as YYYY-MM-DD.")
     parser.add_argument("time", nargs="?", default=None, help="Run time as HH:MM:SS or HHMMSS.")
-
-
-def selector_from_args(args: argparse.Namespace) -> RunSelector:
-    return RunSelector(args.branch, args.date, args.time)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -904,6 +890,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def format_client_config_error(exc: MissingClientConfig | InvalidClientConfig) -> str:
+    return f"{exc}. Run `{SETUP_COMMAND}` to fix."
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     os.chdir(args.cwd)
@@ -923,7 +913,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         return cmd_start(client_config, repo, args.branch)
-    selector = selector_from_args(args)
+    selector = RunSelector(args.branch, args.date, args.time)
     try:
         repo = args.repo or infer_repo(".")
     except (subprocess.CalledProcessError, ValueError) as exc:
