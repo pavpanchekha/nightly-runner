@@ -669,23 +669,6 @@ def fetch_selected_manifest(client_config: ClientConfig, repo: str, selector: Ru
     return fetch_manifest(client_config, report_url)
 
 
-def cmd_setup(url: str) -> int:
-    try:
-        username = input("Username: ").strip()
-        if not username:
-            raise ValueError("username must not be empty")
-        password = getpass.getpass("Password: ")
-        if not password:
-            raise ValueError("password must not be empty")
-        client_config = ClientConfig(normalize_base_url(url), username, password)
-        path = save_client_config(client_config)
-    except (EOFError, OSError, ValueError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    print(f"Saved CLI config to {path}")
-    return 0
-
-
 def post_form(client_config: ClientConfig, url: str, fields: dict[str, str]) -> None:
     request = urllib.request.Request(
         url,
@@ -715,6 +698,23 @@ def format_http_error(exc: urllib.error.HTTPError) -> str:
     return f"HTTP {exc.code}: {exc.reason}"
 
 ## Individual commands
+
+def cmd_setup(url: str) -> int:
+    try:
+        username = input("Username: ").strip()
+        if not username:
+            raise ValueError("username must not be empty")
+        password = getpass.getpass("Password: ")
+        if not password:
+            raise ValueError("password must not be empty")
+        client_config = ClientConfig(normalize_base_url(url), username, password)
+        path = save_client_config(client_config)
+    except (EOFError, OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Saved CLI config to {path}")
+    return 0
+
 
 def cmd_sync(client_config: ClientConfig) -> int:
     try:
