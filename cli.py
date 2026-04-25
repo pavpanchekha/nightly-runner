@@ -9,6 +9,7 @@ import argparse
 import datetime
 import getpass
 import gzip
+import itertools
 import json
 import os
 import re
@@ -366,15 +367,6 @@ def repo_entries(entries: Iterable[LogEntry], repo: str) -> Iterator[LogEntry]:
         rest = strip_timestamp_prefix(Path(entry.name).stem)
         if rest and rest.startswith(repo + "-"):
             yield entry
-
-
-def recent_repo_entries(entries: Iterable[LogEntry], repo: str) -> list[LogEntry]:
-    matched: list[LogEntry] = []
-    for entry in repo_entries(entries, repo):
-        matched.append(entry)
-        if len(matched) >= 20:
-            break
-    return list(reversed(matched))
 
 
 def parse_repo_run(repo: str, entry: LogEntry) -> RepoRun:
@@ -771,7 +763,7 @@ def cmd_list(
 ) -> int:
     try:
         if selector.branch is None and selector.date is None and selector.time is None:
-            entries = recent_repo_entries(iter_entries(client_config), repo)
+            entries = list(reversed(list(itertools.islice(repo_entries(iter_entries(client_config), repo), 20))))
         else:
             entries = list(reversed(matching_repo_entries(iter_entries(client_config), repo, selector)))
     except urllib.error.URLError as exc:
