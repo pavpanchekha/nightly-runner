@@ -258,10 +258,6 @@ class RunSelector:
 
 ## Main CLI body
 
-def short_repo_name(repo_name: str) -> str:
-    return repo_name.split("/")[-1]
-
-
 CURL_PARALLEL_MAX = 32
 COMPLETE_RE = re.compile(r"^Nightly used memory=.*timeout=.*$", re.MULTILINE)
 PUBLISH_RE = re.compile(r"^Publishing report directory .* to .*/reports/([^/]+)/([^/\n]+)$", re.MULTILINE)
@@ -324,7 +320,7 @@ def fetch_index_state(client_config: ClientConfig) -> IndexState:
     return IndexParser.parse(fetch_text(client_config, client_config.index_url), client_config.index_url)
 
 
-def github_repo(url: str) -> str | None:
+def github_repo_name(url: str) -> str | None:
     if url.startswith("git@github.com:"):
         path = url.removeprefix("git@github.com:")
     elif url.startswith("https://github.com/"):
@@ -336,7 +332,7 @@ def github_repo(url: str) -> str | None:
     parts = path.split("/")
     if len(parts) != 2 or not all(parts):
         return None
-    return path
+    return parts[1]
 
 
 def infer_repo(cwd: str) -> str:
@@ -349,10 +345,16 @@ def infer_repo(cwd: str) -> str:
     for line in result.stdout.splitlines():
         parts = line.split()
         if len(parts) >= 2:
-            repo = github_repo(parts[1])
+            repo = github_repo_name(parts[1])
             if repo is not None:
                 return repo
     raise ValueError(f"could not infer GitHub repo from git remotes in {cwd}")
+
+
+def validate_repo_name(repo: str) -> str:
+    if "/" in repo:
+        raise ValueError(f"repo must be the short repo name, not {repo!r}")
+    return repo
 
 
 def escape_branch_filename(branch: str) -> str:
@@ -374,10 +376,9 @@ def strip_timestamp_prefix(stem: str) -> str | None:
 
 
 def repo_entries(entries: Iterable[LogEntry], repo: str) -> Iterator[LogEntry]:
-    repo_name = short_repo_name(repo)
     for entry in entries:
         rest = strip_timestamp_prefix(Path(entry.name).stem)
-        if rest and rest.startswith(repo_name + "-"):
+        if rest and rest.startswith(repo + "-"):
             yield entry
 
 
@@ -392,8 +393,7 @@ def recent_repo_entries(entries: Iterable[LogEntry], repo: str) -> list[LogEntry
 
 def parse_repo_run(repo: str, entry: LogEntry) -> RepoRun:
     parts = Path(entry.name).stem.split("-")
-    repo_name = short_repo_name(repo)
-    branch_parts = parts[5 + len(repo_name.split("-")) :]
+    branch_parts = parts[5 + len(repo.split("-")) :]
     raw_time = parts[3]
     return RepoRun(
         date="-".join(parts[:3]),
@@ -466,41 +466,22 @@ def latest_matching_repo_entry(
 
 def resolve_start_target(
     index_state: IndexState,
-    client_config: ClientConfig,
     repo: str,
     branch: str,
 ) -> StartTarget:
-    exact_matches = [
+    matches = [
         target
         for target in index_state.start_targets
         if target.branch == branch and target.repo == repo
     ]
-    if len(exact_matches) == 1:
-        return exact_matches[0]
-    if len(exact_matches) > 1:
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
         raise ValueError(f"multiple configured start targets matched repo {repo!r} and branch {branch!r}")
 
-    repo_name = short_repo_name(repo)
-    short_matches = [
-        target
-        for target in index_state.start_targets
-        if target.branch == branch and short_repo_name(target.repo) == repo_name
-    ]
-    if len(short_matches) == 1:
-        return short_matches[0]
-    if len(short_matches) > 1:
-        options = ", ".join(sorted({target.repo for target in short_matches}))
-        raise ValueError(
-            f"branch {branch!r} exists in multiple configured repos matching {repo!r}: {options}"
-        )
-
-    configured_repos = {target.repo for target in index_state.start_targets if target.repo == repo}
-    configured_repos.update(
-        target.repo for target in index_state.start_targets if short_repo_name(target.repo) == repo_name
-    )
-    if configured_repos:
+    if repo in {target.repo for target in index_state.start_targets}:
         raise ValueError(f"branch {branch!r} is not available for repo {repo!r}")
-    raise ValueError(f"repo {repo!r} is not configured on {client_config.index_url}")
+    raise ValueError(f"repo {repo!r} is not configured")
 
 
 def print_log(client_config: ClientConfig, url: str) -> None:
@@ -521,12 +502,11 @@ def tail_log(client_config: ClientConfig, url: str) -> None:
 
 
 def find_report_url_in_log(client_config: ClientConfig, repo: str, log_text: str) -> str | None:
-    repo_name = short_repo_name(repo)
     matched: str | None = None
     for match in PUBLISH_RE.finditer(log_text):
-        if match.group(1) != repo_name:
+        if match.group(1) != repo:
             continue
-        matched = client_config.reports_url + repo_name + "/" + match.group(2)
+        matched = client_config.reports_url + repo + "/" + match.group(2)
     return matched
 
 
@@ -734,7 +714,7 @@ def cmd_sync(client_config: ClientConfig) -> int:
 def cmd_start(client_config: ClientConfig, repo: str, branch: str) -> int:
     try:
         index_state = fetch_index_state(client_config)
-        target = resolve_start_target(index_state, client_config, repo, branch)
+        target = resolve_start_target(index_state, repo, branch)
         if index_state.sync_disabled:
             print("error: Nightly sync already running", file=sys.stderr)
             return 1
@@ -806,7 +786,7 @@ def cmd_list(
         print(f"error: failed to fetch {client_config.logs_url}: {exc}", file=sys.stderr)
         return 1
     if not entries:
-        print(f"No runs found for repo {short_repo_name(repo)}.", file=sys.stderr)
+        print(f"No runs found for repo {repo}.", file=sys.stderr)
         return 1
     for entry in entries:
         run = parse_repo_run(repo, entry)
@@ -867,24 +847,24 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("sync", help="Start a sync-with-GitHub dry run from the web UI.")
 
     list_parser = subparsers.add_parser("list", help="List runs for a repo.")
-    list_parser.add_argument("--repo", help="Repository name, such as herbie or owner/herbie.")
+    list_parser.add_argument("--repo", help="Repository name, such as herbie.")
     add_run_selector_args(list_parser, branch_required=False)
 
     start_parser = subparsers.add_parser("start", help="Start a single repo branch run from the web UI.")
-    start_parser.add_argument("--repo", help="Repository name, such as herbie or owner/herbie.")
+    start_parser.add_argument("--repo", help="Repository name, such as herbie.")
     start_parser.add_argument("branch", help="Branch name.")
 
     log_parser = subparsers.add_parser("log", help="Print a log for a repo branch.")
-    log_parser.add_argument("--repo", help="Repository name, such as herbie or owner/herbie.")
+    log_parser.add_argument("--repo", help="Repository name, such as herbie.")
     log_parser.add_argument("-f", action="store_true", dest="follow", help="Follow the log until it completes.")
     add_run_selector_args(log_parser, branch_required=True)
 
     status_parser = subparsers.add_parser("status", help="Show published report status for a repo branch run.")
-    status_parser.add_argument("--repo", help="Repository name, such as herbie or owner/herbie.")
+    status_parser.add_argument("--repo", help="Repository name, such as herbie.")
     add_run_selector_args(status_parser, branch_required=True)
 
     download_parser = subparsers.add_parser("download", help="Download a published report for a repo branch run.")
-    download_parser.add_argument("--repo", help="Repository name, such as herbie or owner/herbie.")
+    download_parser.add_argument("--repo", help="Repository name, such as herbie.")
     add_run_selector_args(download_parser, branch_required=True)
     return parser
 
@@ -903,14 +883,14 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_sync(client_config)
     if args.command == "start":
         try:
-            repo = args.repo or infer_repo(".")
+            repo = validate_repo_name(args.repo) if args.repo else infer_repo(".")
         except (subprocess.CalledProcessError, ValueError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         return cmd_start(client_config, repo, args.branch)
     selector = RunSelector(args.branch, args.date, args.time)
     try:
-        repo = args.repo or infer_repo(".")
+        repo = validate_repo_name(args.repo) if args.repo else infer_repo(".")
     except (subprocess.CalledProcessError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

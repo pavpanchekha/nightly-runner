@@ -12,18 +12,26 @@ The published CLI is meant for one-shot use with `uvx`:
 ```bash
 uvx nightlies setup https://nightly.cs.washington.edu/
 uvx nightlies --help
-uvx nightlies list --repo uwplse/herbie
-uvx nightlies log --repo uwplse/herbie main
-uvx nightlies status --repo uwplse/herbie main
-uvx nightlies download --repo uwplse/herbie main
+uvx nightlies list
+uvx nightlies log main
+uvx nightlies status main
+uvx nightlies download main
 ```
 
-If you are already in a Git checkout for a repository that has a GitHub
-remote, the CLI can infer the repo name:
+Run these commands from a Git checkout for a nightly-enabled repository; the
+CLI infers the repo name from the GitHub remote. If you are somewhere else,
+use `-C` to point the CLI at the checkout:
 
 ```bash
 uvx nightlies -C ~/src/herbie list
 uvx nightlies -C ~/src/herbie log main
+```
+
+You can also pass a short repo name directly:
+
+```bash
+uvx nightlies list --repo herbie
+uvx nightlies log --repo herbie main
 ```
 
 To install it persistently instead of using `uvx`:

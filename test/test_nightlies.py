@@ -202,7 +202,7 @@ class TestCli(unittest.TestCase):
         ):
             rc = cli.cmd_download(
                 client_config,
-                "uwplse/herbie",
+                "herbie",
                 cli.RunSelector("taylor-order0", "2026-04-19", "12:34:56"),
             )
 
@@ -257,7 +257,7 @@ class TestCli(unittest.TestCase):
         ):
             rc = cli.cmd_download(
                 client_config,
-                "uwplse/herbie",
+                "herbie",
                 cli.RunSelector("taylor-order0", "2026-04-19", "12:34:56"),
             )
 
@@ -286,7 +286,7 @@ class TestCli(unittest.TestCase):
         ):
             rc = cli.cmd_list(
                 self.client_config(),
-                "uwplse/herbie",
+                "herbie",
                 cli.RunSelector("taylor-order0", "2026-04-20", "090832"),
             )
 
@@ -309,7 +309,7 @@ class TestCli(unittest.TestCase):
             mock.patch.object(cli, "iter_entries", return_value=iter(reversed(entries))),
             mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
         ):
-            rc = cli.cmd_list(self.client_config(), "uwplse/herbie", cli.RunSelector("taylor-order0", None, None))
+            rc = cli.cmd_list(self.client_config(), "herbie", cli.RunSelector("taylor-order0", None, None))
 
         self.assertEqual(rc, 0)
         self.assertEqual(
@@ -363,7 +363,7 @@ class TestCli(unittest.TestCase):
         ):
             rc = cli.cmd_status(
                 client_config,
-                "uwplse/herbie",
+                "herbie",
                 cli.RunSelector("taylor-order0", "2026-04-20", "150000"),
             )
 
@@ -396,7 +396,7 @@ class TestCli(unittest.TestCase):
         ):
             rc = cli.cmd_status(
                 self.client_config(),
-                "uwplse/herbie",
+                "herbie",
                 cli.RunSelector("taylor-order0", "2026-04-20", "150000"),
             )
 
@@ -425,10 +425,30 @@ class TestCli(unittest.TestCase):
 
     def test_main_requires_setup_before_other_commands(self) -> None:
         with mock.patch("sys.stderr", new_callable=io.StringIO) as stderr:
-            rc = cli.main(["list", "--repo", "uwplse/herbie"])
+            rc = cli.main(["list", "--repo", "herbie"])
 
         self.assertEqual(rc, 1)
         self.assertEqual(stderr.getvalue(), "error: client is not configured. Run `cli setup <url>` to fix.\n")
+
+    def test_main_rejects_full_repo_name(self) -> None:
+        with (
+            mock.patch.object(cli, "load_client_config", return_value=self.client_config()),
+            mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            rc = cli.main(["list", "--repo", "uwplse/herbie"])
+
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.getvalue(), "error: repo must be the short repo name, not 'uwplse/herbie'\n")
+
+    def test_infer_repo_returns_short_github_repo_name(self) -> None:
+        result = subprocess.CompletedProcess(
+            ["git", "-C", ".", "remote", "-v"],
+            0,
+            stdout="origin\tgit@github.com:uwplse/herbie.git (fetch)\n",
+        )
+
+        with mock.patch.object(cli.subprocess, "run", return_value=result):
+            self.assertEqual(cli.infer_repo("."), "herbie")
 
     def test_parse_index_state_reads_sync_and_start_controls(self) -> None:
         state = cli.IndexParser.parse(
@@ -442,7 +462,7 @@ class TestCli(unittest.TestCase):
               <button>Run</button>
             </form>
             <form action="https://nightly.cs.washington.edu/runnow" method="post">
-              <input type="hidden" name="repo" value="uwplse/ruler" />
+              <input type="hidden" name="repo" value="ruler" />
               <input type="hidden" name="branch" value="feature/test" />
               <button disabled>Run</button>
             </form>
@@ -455,7 +475,7 @@ class TestCli(unittest.TestCase):
             state.start_targets,
             [
                 cli.StartTarget("herbie", "main", False),
-                cli.StartTarget("uwplse/ruler", "feature/test", True),
+                cli.StartTarget("ruler", "feature/test", True),
             ],
         )
 
@@ -491,7 +511,7 @@ class TestCli(unittest.TestCase):
         self.assertEqual(request.get_method(), "POST")
         self.assertEqual(request.data, b"")
 
-    def test_cmd_start_maps_full_repo_name_to_server_repo_token(self) -> None:
+    def test_cmd_start_posts_server_repo_token(self) -> None:
         requests: list[urllib.request.Request] = []
 
         class CapturingOpener:
@@ -506,7 +526,7 @@ class TestCli(unittest.TestCase):
             self.client_open_patch(CapturingOpener()),
             mock.patch.object(cli, "fetch_index_state", return_value=state),
         ):
-            rc = cli.cmd_start(self.client_config(), "uwplse/herbie", "feature/test")
+            rc = cli.cmd_start(self.client_config(), "herbie", "feature/test")
 
         self.assertEqual(rc, 0)
         self.assertEqual(len(requests), 1)
@@ -522,7 +542,7 @@ class TestCli(unittest.TestCase):
             mock.patch.object(cli, "fetch_index_state", return_value=state),
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
-            rc = cli.cmd_start(self.client_config(), "uwplse/herbie", "feature/test")
+            rc = cli.cmd_start(self.client_config(), "herbie", "feature/test")
 
         self.assertEqual(rc, 1)
         self.assertEqual(
