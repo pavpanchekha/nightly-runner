@@ -407,6 +407,11 @@ class TestCli(unittest.TestCase):
         with (
             mock.patch("builtins.input", return_value="alice"),
             mock.patch.object(cli.getpass, "getpass", return_value="secret"),
+            mock.patch.object(
+                cli,
+                "fetch_index_state",
+                return_value=cli.IndexState(False, [cli.StartTarget("herbie", "main", False)]),
+            ),
             mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
         ):
             rc = cli.cmd_setup("https://nightlies.example")
@@ -416,12 +421,25 @@ class TestCli(unittest.TestCase):
         self.assertEqual(
             json.loads(cli.client_state_path().read_text()),
             {
-                "nightly_url": "https://nightlies.example/",
+                "nightly_url": "https://nightlies.example",
                 "username": "alice",
                 "password": "secret",
             },
         )
-        self.assertEqual(cli.load_client_config(), cli.ClientConfig("https://nightlies.example/", "alice", "secret"))
+        self.assertEqual(cli.load_client_config(), cli.ClientConfig("https://nightlies.example", "alice", "secret"))
+
+    def test_cmd_setup_refuses_page_without_nightly_controls(self) -> None:
+        with (
+            mock.patch("builtins.input", return_value="alice"),
+            mock.patch.object(cli.getpass, "getpass", return_value="secret"),
+            mock.patch.object(cli, "fetch_index_state", return_value=cli.IndexState(False, [])),
+            mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            rc = cli.cmd_setup("https://nightlies.example")
+
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.getvalue(), "error: could not find nightly controls at https://nightlies.example\n")
+        self.assertFalse(cli.client_state_path().exists())
 
     def test_main_requires_setup_before_other_commands(self) -> None:
         with mock.patch("sys.stderr", new_callable=io.StringIO) as stderr:

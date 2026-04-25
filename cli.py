@@ -118,11 +118,7 @@ def load_client_config() -> ClientConfig:
         raise InvalidClientConfig(
             f"invalid client config {path}: expected string fields nightly_url, username, and password"
         )
-    try:
-        base_url = normalize_base_url(nightly_url)
-    except ValueError as exc:
-        raise InvalidClientConfig(f"invalid client config {path}: {exc}") from exc
-    return ClientConfig(base_url, username, password)
+    return ClientConfig(nightly_url, username, password)
 
 
 ## Parsers; eventually the server should offer an API for all this
@@ -261,16 +257,6 @@ class RunSelector:
 CURL_PARALLEL_MAX = 32
 COMPLETE_RE = re.compile(r"^Nightly used memory=.*timeout=.*$", re.MULTILINE)
 PUBLISH_RE = re.compile(r"^Publishing report directory .* to .*/reports/([^/]+)/([^/\n]+)$", re.MULTILINE)
-
-
-def normalize_base_url(url: str) -> str:
-    normalized = url.strip()
-    parsed = urllib.parse.urlsplit(normalized)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        raise ValueError("nightly URL must be an http or https URL")
-    if not normalized.endswith("/"):
-        normalized += "/"
-    return normalized
 
 
 def fetch_text(client_config: ClientConfig, url: str) -> str:
@@ -686,8 +672,14 @@ def cmd_setup(url: str) -> int:
         password = getpass.getpass("Password: ")
         if not password:
             raise ValueError("password must not be empty")
-        client_config = ClientConfig(normalize_base_url(url), username, password)
+        client_config = ClientConfig(url.strip(), username, password)
+        index_state = fetch_index_state(client_config)
+        if not index_state.start_targets:
+            raise ValueError(f"could not find nightly controls at {client_config.index_url}")
         path = save_client_config(client_config)
+    except urllib.error.URLError as exc:
+        print(f"error: failed to fetch {url}: {exc}", file=sys.stderr)
+        return 1
     except (EOFError, OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
