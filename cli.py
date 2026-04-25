@@ -265,42 +265,21 @@ def fetch_text(client_config: ClientConfig, url: str) -> str:
         return response.read().decode("utf-8", errors="replace")
 
 
-def fetch_log_bytes(client_config: ClientConfig, url: str, start: int) -> tuple[str, int]:
-    req = urllib.request.Request(url)
-    req.add_header("Range", f"bytes={start}-")
-    try:
-        with client_config.open(req) as response:
-            data = response.read()
-            if response.status == 206:
-                return data.decode("utf-8", errors="replace"), start + len(data)
-            if len(data) <= start:
-                return "", start
-            return data[start:].decode("utf-8", errors="replace"), len(data)
-    except urllib.error.HTTPError as exc:
-        if exc.code == 416:
-            return "", start
-        raise
-
-
-def iter_html_entries(response: urllib.response.addinfourl, base_url: str) -> Iterator[LogEntry]:
-    parser = NginxIndexParser(base_url)
+def iter_entries(client_config: ClientConfig) -> Iterator[LogEntry]:
+    parser = NginxIndexParser(client_config.logs_url)
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-    while True:
-        chunk = response.read(65536)
-        if not chunk:
-            break
-        parser.feed(decoder.decode(chunk))
-        yield from parser.drain_entries()
+    with client_config.open(client_config.logs_url) as response:
+        while True:
+            chunk = response.read(65536)
+            if not chunk:
+                break
+            parser.feed(decoder.decode(chunk))
+            yield from parser.drain_entries()
     tail = decoder.decode(b"", final=True)
     if tail:
         parser.feed(tail)
     parser.close()
     yield from parser.drain_entries()
-
-
-def iter_entries(client_config: ClientConfig) -> Iterator[LogEntry]:
-    with client_config.open(client_config.logs_url) as response:
-        yield from iter_html_entries(response, client_config.logs_url)
 
 
 def fetch_index_state(client_config: ClientConfig) -> IndexState:
@@ -470,12 +449,30 @@ def tail_log(client_config: ClientConfig, url: str) -> None:
     offset = 0
     recent = ""
     while True:
-        chunk, offset = fetch_log_bytes(client_config, url, offset)
+        req = urllib.request.Request(url)
+        req.add_header("Range", f"bytes={offset}-")
+        try:
+            with client_config.open(req) as response:
+                data = response.read()
+                if response.status == 206:
+                    chunk = data.decode("utf-8", errors="replace")
+                    offset += len(data)
+                elif len(data) <= offset:
+                    chunk = ""
+                else:
+                    chunk = data[offset:].decode("utf-8", errors="replace")
+                    offset = len(data)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 416:
+                chunk = ""
+            else:
+                raise
         if chunk:
             sys.stdout.write(chunk)
             sys.stdout.flush()
             recent = (recent + chunk)[-4096:]
-            if COMPLETE_RE.search(recent): return
+            if COMPLETE_RE.search(recent):
+                return
         time.sleep(1)
 
 
