@@ -24,7 +24,6 @@ import urllib.request
 
 ## Setup & config file
 
-SETUP_COMMAND = "cli setup <url>"
 STATE_FILENAME = "state.json"
 
 
@@ -890,10 +889,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def format_client_config_error(exc: MissingClientConfig | InvalidClientConfig) -> str:
-    return f"{exc}. Run `{SETUP_COMMAND}` to fix."
-
-
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     os.chdir(args.cwd)
@@ -902,7 +897,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         client_config = load_client_config()
     except (MissingClientConfig, InvalidClientConfig) as exc:
-        print(f"error: {format_client_config_error(exc)}", file=sys.stderr)
+        print(f"error: {exc}. Run `cli setup <url>` to fix.", file=sys.stderr)
         return 1
     if args.command == "sync":
         return cmd_sync(client_config)
