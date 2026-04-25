@@ -64,6 +64,10 @@ class ClientConfig:
         opener = urllib.request.build_opener(urllib.request.HTTPBasicAuthHandler(password_mgr))
         return opener.open(request)
 
+    def fetch(self, url: str) -> str:
+        with self.open(url) as response:
+            return response.read().decode("utf-8", errors="replace")
+
 
 def client_state_path() -> Path:
     if os.name == "nt":
@@ -260,11 +264,6 @@ COMPLETE_RE = re.compile(r"^Nightly used memory=.*timeout=.*$", re.MULTILINE)
 PUBLISH_RE = re.compile(r"^Publishing report directory .* to .*/reports/([^/]+)/([^/\n]+)$", re.MULTILINE)
 
 
-def fetch_text(client_config: ClientConfig, url: str) -> str:
-    with client_config.open(url) as response:
-        return response.read().decode("utf-8", errors="replace")
-
-
 def iter_entries(client_config: ClientConfig) -> Iterator[LogEntry]:
     parser = NginxIndexParser(client_config.logs_url)
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
@@ -283,7 +282,7 @@ def iter_entries(client_config: ClientConfig) -> Iterator[LogEntry]:
 
 
 def fetch_index_state(client_config: ClientConfig) -> IndexState:
-    return IndexParser.parse(fetch_text(client_config, client_config.index_url), client_config.index_url)
+    return IndexParser.parse(client_config.fetch(client_config.index_url), client_config.index_url)
 
 
 def github_repo_name(url: str) -> str | None:
@@ -442,7 +441,7 @@ def resolve_start_target(
 
 
 def print_log(client_config: ClientConfig, url: str) -> None:
-    sys.stdout.write(fetch_text(client_config, url))
+    sys.stdout.write(client_config.fetch(url))
 
 
 def tail_log(client_config: ClientConfig, url: str) -> None:
@@ -486,7 +485,7 @@ def find_report_url_in_log(client_config: ClientConfig, repo: str, log_text: str
 
 
 def fetch_manifest(client_config: ClientConfig, report_url: str) -> dict[str, object]:
-    manifest = json.loads(fetch_text(client_config, report_url + "/nightly_info.json"))
+    manifest = json.loads(client_config.fetch(report_url + "/nightly_info.json"))
     if not isinstance(manifest, dict):
         raise ValueError("nightly_info.json did not contain a JSON object")
     files = manifest.get("files")
@@ -616,7 +615,7 @@ def fetch_selected_manifest(client_config: ClientConfig, repo: str, selector: Ru
     entry = latest_matching_repo_entry(iter_entries(client_config), repo, selector)
     if entry is None:
         return None
-    log_text = fetch_text(client_config, entry.url)
+    log_text = client_config.fetch(entry.url)
     report_url = find_report_url_in_log(client_config, repo, log_text)
     if report_url is None:
         raise ValueError("No published report found in log.")
@@ -728,7 +727,7 @@ def cmd_download(client_config: ClientConfig, repo: str, selector: RunSelector) 
             print("No matching log found.", file=sys.stderr)
             return 1
 
-        log_text = fetch_text(client_config, entry.url)
+        log_text = client_config.fetch(entry.url)
 
         report_url = find_report_url_in_log(client_config, repo, log_text)
         if report_url is None:
