@@ -264,6 +264,56 @@ class RunSelector:
     date: str | None
     time: str | None
 
+
+@dataclass(frozen=True)
+class ManifestFile:
+    remote_path: str
+    local_path: str
+
+
+@dataclass(frozen=True)
+class Manifest:
+    repo: str | None
+    branch: str | None
+    status: str | None
+    commit: str | None
+    started_at: str | None
+    finished_at: str | None
+    duration: str | float | int | None
+    report_url: str | None
+    log_url: str | None
+    image_url: str | None
+    files: list[ManifestFile]
+
+    def text(self) -> str:
+        lines: list[str] = []
+        if self.repo is not None and self.branch is not None:
+            lines.append(f"{self.repo} / {self.branch}")
+            lines.append("")
+
+        details: list[tuple[str, object]] = []
+        if self.status is not None:
+            details.append(("Status", self.status))
+        if self.commit is not None:
+            details.append(("Commit", self.commit))
+        if self.started_at is not None:
+            details.append(("Started", self.started_at))
+        if self.finished_at is not None:
+            details.append(("Finished", self.finished_at))
+        if self.duration is not None:
+            details.append(("Duration", self.duration))
+        details.append(("Files", len(self.files)))
+        if self.report_url is not None:
+            details.append(("Report", self.report_url))
+        if self.log_url is not None:
+            details.append(("Log", self.log_url))
+        if self.image_url is not None:
+            details.append(("Image", self.image_url))
+
+        for label, value in details:
+            lines.append(f"{label:8} {value}")
+        return "\n".join(lines)
+
 ## Log index
 
 def iter_entries(client_config: ClientConfig) -> Iterator[LogEntry]:
@@ -434,7 +484,7 @@ def fetch_published_report(
     client_config: ClientConfig,
     repo: str,
     entry: LogEntry,
-) -> tuple[str, dict[str, object]]:
+) -> tuple[str, Manifest]:
     log_text = client_config.fetch(entry.url)
     report_url = find_report_url_in_log(repo, log_text)
     if report_url is None:
@@ -442,86 +492,89 @@ def fetch_published_report(
     return report_url, fetch_manifest(client_config, report_url)
 
 
-def fetch_manifest(client_config: ClientConfig, report_url: str) -> dict[str, object]:
+def fetch_manifest(client_config: ClientConfig, report_url: str) -> Manifest:
+    return parse_manifest(client_config.fetch(report_url + "/nightly_info.json"))
+
+
+def parse_manifest(text: str) -> Manifest:
     try:
-        manifest = json.loads(client_config.fetch(report_url + "/nightly_info.json"))
+        payload = json.loads(text)
     except json.JSONDecodeError as exc:
         raise CliError(f"invalid nightly_info.json: {exc}") from exc
-    if not isinstance(manifest, dict):
+    if not isinstance(payload, dict):
         raise CliError("nightly_info.json did not contain a JSON object")
-    manifest_files(manifest)
-    return manifest
 
+    def optional_str(key: str) -> str | None:
+        value = payload.get(key)
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise CliError(f"nightly_info.json field {key} was not a string")
+        return value
 
-def manifest_files(manifest: dict[str, object]) -> list[object]:
-    files = manifest.get("files")
+    def optional_time(key: str) -> str | None:
+        value = optional_str(key)
+        if value is None:
+            return None
+        try:
+            parsed = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return value
+        if parsed.utcoffset() == datetime.timedelta(0):
+            return parsed.strftime("%Y-%m-%d %H:%M:%S UTC")
+        return parsed.isoformat(sep=" ")
+
+    def optional_duration() -> str | float | int | None:
+        duration_human = payload.get("duration_human")
+        if duration_human is not None:
+            if not isinstance(duration_human, str):
+                raise CliError("nightly_info.json field duration_human was not a string")
+            return duration_human
+        duration_seconds = payload.get("duration_seconds")
+        if duration_seconds is None:
+            return None
+        if not isinstance(duration_seconds, int | float):
+            raise CliError("nightly_info.json field duration_seconds was not a number")
+        return duration_seconds
+
+    files = payload.get("files")
     if not isinstance(files, list):
         raise CliError("nightly_info.json did not contain a files list")
-    return files
+    parsed_files: list[ManifestFile] = []
+    for file_info in files:
+        if not isinstance(file_info, dict):
+            raise CliError("manifest file entry was not an object")
+        path_value = file_info.get("path")
+        gzip_value = file_info.get("gzip")
+        if not isinstance(path_value, str):
+            raise CliError("manifest file path was not a string")
+        if not isinstance(gzip_value, bool):
+            raise CliError("manifest gzip flag was not a boolean")
+        path = Path(path_value)
+        if path.is_absolute() or ".." in path.parts:
+            raise CliError(f"unsafe manifest path {path_value!r}")
+        if gzip_value and path_value.endswith(".gz"):
+            parsed_files.append(ManifestFile(path_value, path_value.removesuffix(".gz")))
+        elif gzip_value:
+            parsed_files.append(ManifestFile(path_value + ".gz", path_value))
+        else:
+            parsed_files.append(ManifestFile(path_value, path_value))
 
-
-def format_manifest_time(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-    try:
-        parsed = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return value
-    if parsed.utcoffset() == datetime.timedelta(0):
-        return parsed.strftime("%Y-%m-%d %H:%M:%S UTC")
-    return parsed.isoformat(sep=" ")
-
-
-def manifest_text(manifest: dict[str, object]) -> str:
-    repo = manifest.get("repo")
-    branch = manifest.get("branch")
-    lines: list[str] = []
-    if isinstance(repo, str) and isinstance(branch, str):
-        lines.append(f"{repo} / {branch}")
-        lines.append("")
-
-    details: list[tuple[str, object]] = []
-    if "status" in manifest:
-        details.append(("Status", manifest["status"]))
-    commit = manifest.get("commit_short", manifest.get("commit"))
-    if commit is not None:
-        details.append(("Commit", commit))
-    started = format_manifest_time(manifest.get("started_at"))
-    if started is not None:
-        details.append(("Started", started))
-    finished = format_manifest_time(manifest.get("finished_at"))
-    if finished is not None:
-        details.append(("Finished", finished))
-    duration = manifest.get("duration_human", manifest.get("duration_seconds"))
-    if duration is not None:
-        details.append(("Duration", duration))
-    details.append(("Files", len(manifest_files(manifest))))
-    if "report_url" in manifest:
-        details.append(("Report", manifest["report_url"]))
-    if "log_url" in manifest:
-        details.append(("Log", manifest["log_url"]))
-    image_url = manifest.get("image_url")
-    if image_url:
-        details.append(("Image", image_url))
-
-    for label, value in details:
-        lines.append(f"{label:8} {value}")
-    return "\n".join(lines)
-
-
-def manifest_paths(path_value: object, gzip_value: object) -> tuple[str, str]:
-    if not isinstance(path_value, str):
-        raise CliError("manifest file path was not a string")
-    if not isinstance(gzip_value, bool):
-        raise CliError("manifest gzip flag was not a boolean")
-    path = Path(path_value)
-    if path.is_absolute() or ".." in path.parts:
-        raise CliError(f"unsafe manifest path {path_value!r}")
-    if gzip_value:
-        if path_value.endswith(".gz"):
-            return path_value, path_value[:-3]
-        return path_value + ".gz", path_value
-    return path_value, path_value
+    commit_short = optional_str("commit_short")
+    image_url = optional_str("image_url")
+    return Manifest(
+        repo=optional_str("repo"),
+        branch=optional_str("branch"),
+        status=optional_str("status"),
+        commit=commit_short if commit_short is not None else optional_str("commit"),
+        started_at=optional_time("started_at"),
+        finished_at=optional_time("finished_at"),
+        duration=optional_duration(),
+        report_url=optional_str("report_url"),
+        log_url=optional_str("log_url"),
+        image_url=image_url if image_url else None,
+        files=parsed_files,
+    )
 
 
 CURL_PARALLEL_MAX = 32
@@ -529,25 +582,19 @@ CURL_PARALLEL_MAX = 32
 
 def download_report_files(
     report_url: str,
-    files: list[object],
+    files: list[ManifestFile],
     output_dir: Path,
     client_config: ClientConfig,
 ) -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    file_paths: list[tuple[str, str]] = []
-    for file_info in files:
-        if not isinstance(file_info, dict):
-            raise CliError("manifest file entry was not an object")
-        file_paths.append(manifest_paths(file_info.get("path"), file_info.get("gzip")))
-
     with tempfile.NamedTemporaryFile("w", encoding="utf-8") as config_file:
-        for remote_relpath, _ in file_paths:
+        for file in files:
             remote_url = urllib.parse.urljoin(
                 client_config.index_url,
-                report_url + "/" + urllib.parse.quote(remote_relpath),
+                report_url + "/" + urllib.parse.quote(file.remote_path),
             )
-            local_path = output_dir / remote_relpath
+            local_path = output_dir / file.remote_path
             print(f'url = "{remote_url}"', file=config_file)
             print(f'output = "{local_path}"', file=config_file)
         config_file.flush()
@@ -561,7 +608,7 @@ def download_report_files(
                 "--create-dirs",
                 "--parallel",
                 "--parallel-max",
-                str(min(CURL_PARALLEL_MAX, max(1, len(file_paths)))),
+                str(min(CURL_PARALLEL_MAX, max(1, len(files)))),
                 "--user",
                 f"{client_config.username}:{client_config.password}",
                 "--config",
@@ -570,15 +617,15 @@ def download_report_files(
             check=True,
         )
 
-    for remote_relpath, local_relpath in file_paths:
-        if remote_relpath == local_relpath:
+    for file in files:
+        if file.remote_path == file.local_path:
             continue
-        remote_path = output_dir / remote_relpath
-        local_path = output_dir / local_relpath
+        remote_path = output_dir / file.remote_path
+        local_path = output_dir / file.local_path
         with gzip.open(remote_path, "rb") as f_in, local_path.open("wb") as f_out:
             shutil.copyfileobj(f_in, f_out)
         remote_path.unlink()
-    return len(file_paths)
+    return len(files)
 
 
 ## Error formatting
@@ -655,7 +702,7 @@ def cmd_download(client_config: ClientConfig, repo: str, selector: RunSelector) 
 
     report_url, manifest = fetch_published_report(client_config, repo, run_log.entry)
     output_dir = Path(urllib.parse.urlsplit(report_url).path.rstrip("/")).name
-    file_count = download_report_files(report_url, manifest_files(manifest), Path(output_dir), client_config)
+    file_count = download_report_files(report_url, manifest.files, Path(output_dir), client_config)
     print(f"Downloaded {file_count} files to {output_dir}/")
     return 0
 
@@ -693,7 +740,7 @@ def cmd_status(client_config: ClientConfig, repo: str, selector: RunSelector) ->
     if run_log is None:
         raise CliError("No matching log found.")
     _, manifest = fetch_published_report(client_config, repo, run_log.entry)
-    print(manifest_text(manifest))
+    print(manifest.text())
     return 0
 
 

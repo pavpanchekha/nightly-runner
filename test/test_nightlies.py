@@ -229,9 +229,10 @@ class TestCli(unittest.TestCase):
         with mock.patch.object(cli.subprocess, "run", self.fake_curl_run({
             report_url + "/results.json.gz": gzip.compress(b"{\"ok\":true}\n"),
         })):
+            manifest = cli.parse_manifest(json.dumps({"files": [{"path": "results.json", "gzip": True}]}))
             file_count = cli.download_report_files(
                 report_url,
-                [{"path": "results.json", "gzip": True}],
+                manifest.files,
                 self.tmpdir / "downloaded",
                 client_config,
             )
