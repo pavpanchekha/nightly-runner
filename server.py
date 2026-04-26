@@ -156,10 +156,20 @@ def server_static(filepath):
 def robots_txt():
     return bottle.static_file("robots.txt", root='static/')
 
+def reject_if_sync_running(runner: nightlies.NightlyRunner) -> None:
+    runner.load_pid()
+    if runner.data and "pid" in runner.data:
+        try:
+            os.kill(runner.data["pid"], 0)
+        except OSError:
+            return
+        raise bottle.HTTPError(409, "Nightly sync already running")
+
 @bottle.route("/dryrun", ["GET", "POST"])
 def dryrun():
     runner = nightlies.NightlyRunner(CONF_FILE)
     runner.load()
+    reject_if_sync_running(runner)
     runner.config["DEFAULT"]["dryrun"] = "true"
     run_nightlies(runner.config)
     bottle.redirect("/")
@@ -173,20 +183,17 @@ def fullrun():
 def runnow():
     repo = bottle.request.forms.get('repo')
     branch = bottle.request.forms.get('branch')
+    assert repo is not None
+    assert branch is not None
     runner = nightlies.NightlyRunner(CONF_FILE)
     runner.load()
-    runner.load_pid()
-    if runner.data and "pid" in runner.data:
-        try:
-            os.kill(runner.data["pid"], 0)
-        except OSError:
-            pass
-        else:
-            raise bottle.HTTPError(409, "Nightly sync already running")
+    reject_if_sync_running(runner)
     for r in runner.repos:
         if r.name == repo:
             r.read()
-            if branch in r.branches and "queued" in r.branches[branch].badges:
+            if branch not in r.branches:
+                raise bottle.HTTPError(404, f"Branch {branch} is not available on nightly {repo}")
+            if "queued" in r.branches[branch].badges:
                 branch_filename = r.branches[branch].filename
                 raise bottle.HTTPError(409, f"Job nightly:{repo}:{branch_filename} already queued")
             break
@@ -205,6 +212,8 @@ def runnow():
 def rmbranch():
     repo_name = bottle.request.forms.get('repo')
     branch = bottle.request.forms.get('branch')
+    assert repo_name is not None
+    assert branch is not None
     runner = nightlies.NightlyRunner(CONF_FILE)
     runner.load()
     for repo in runner.repos:

@@ -13,6 +13,10 @@ jobs:
         python-version: "3.14"
     - uses: astral-sh/setup-uv@v5
       with:
-        cache-dependency-glob: ".github/workflows/*.yml,pyproject.toml,setup.cfg"
+        cache-dependency-glob: |
+          .github/workflows/*.yml
+          pyproject.toml
+          setup.cfg
+          uv.lock
     - run: uv run test/test_nightlies.py
     - run: uv run --with mypy mypy
