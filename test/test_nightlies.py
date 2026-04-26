@@ -316,6 +316,31 @@ class TestCli(unittest.TestCase):
             "2026-04-20 09:08:32 taylor-order0\n",
         )
 
+    def test_main_log_without_branch_prints_latest_repo_run(self) -> None:
+        entries = [
+            cli.LogEntry(
+                name="2026-04-20-090832-1-herbie-taylor-order0.log",
+                url="https://nightly.cs.washington.edu/logs/taylor-new.log",
+            ),
+            cli.LogEntry(
+                name="2026-04-19-123456-1-herbie-main.log",
+                url="https://nightly.cs.washington.edu/logs/main.log",
+            ),
+        ]
+        opener = FakeOpener({entries[0].url: b"latest log\n"})
+
+        with (
+            self.client_open_patch(opener),
+            mock.patch.object(cli, "load_client_config", return_value=self.client_config()),
+            mock.patch.object(cli, "infer_repo", return_value="herbie"),
+            mock.patch.object(cli, "iter_entries", return_value=iter(entries)),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            rc = cli.main(["log"])
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(stdout.getvalue(), "latest log\n")
+
     def test_cmd_status_prints_manifest_metadata(self) -> None:
         report_name = "1713570000:taylor-order0:deadbeef"
         client_config = self.client_config()
@@ -379,6 +404,42 @@ class TestCli(unittest.TestCase):
             f"Report   {report_url}\n"
             "Log      https://nightly.cs.washington.edu/logs/taylor-order0.log\n",
         )
+
+    def test_main_status_without_branch_prints_latest_repo_run(self) -> None:
+        report_name = "1713570003:feature:decafbad"
+        client_config = self.client_config()
+        report_url = client_config.reports_url + "herbie/" + report_name
+        manifest = {
+            "repo": "herbie",
+            "branch": "feature",
+            "status": "success",
+            "files": [],
+        }
+        entry = cli.LogEntry(
+            name="2026-04-21-150000-1-herbie-feature.log",
+            url="https://nightly.cs.washington.edu/logs/feature.log",
+        )
+        opener = FakeOpener(
+            {
+                entry.url: (
+                    "Publishing report directory /tmp/report to "
+                    f"/srv/reports/herbie/{report_name}\n"
+                ).encode("utf-8"),
+                report_url + "/nightly_info.json": json.dumps(manifest).encode("utf-8"),
+            }
+        )
+
+        with (
+            self.client_open_patch(opener),
+            mock.patch.object(cli, "load_client_config", return_value=client_config),
+            mock.patch.object(cli, "infer_repo", return_value="herbie"),
+            mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            rc = cli.main(["status"])
+
+        self.assertEqual(rc, 0)
+        self.assertIn("herbie / feature\n", stdout.getvalue())
 
     def test_cmd_status_requires_published_report(self) -> None:
         entry = cli.LogEntry(

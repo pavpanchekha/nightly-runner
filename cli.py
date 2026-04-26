@@ -698,7 +698,6 @@ def cmd_start(client_config: ClientConfig, repo: str, branch: str) -> int:
 
 
 def cmd_download(client_config: ClientConfig, repo: str, selector: RunSelector) -> int:
-    assert selector.branch is not None
     entries = iter_entries(client_config)
     entry = latest_matching_repo_entry(entries, repo, selector)
     if entry is None:
@@ -737,7 +736,6 @@ def cmd_list(
 
 
 def cmd_log(client_config: ClientConfig, repo: str, selector: RunSelector, follow: bool) -> int:
-    assert selector.branch is not None
     entry = latest_matching_repo_entry(iter_entries(client_config), repo, selector)
     if entry is None:
         raise CliError("No matching log found.")
@@ -749,7 +747,6 @@ def cmd_log(client_config: ClientConfig, repo: str, selector: RunSelector, follo
 
 
 def cmd_status(client_config: ClientConfig, repo: str, selector: RunSelector) -> int:
-    assert selector.branch is not None
     manifest = fetch_selected_manifest(client_config, repo, selector)
     if manifest is None:
         raise CliError("No matching log found.")
@@ -758,9 +755,8 @@ def cmd_status(client_config: ClientConfig, repo: str, selector: RunSelector) ->
 
 ## Main method and flag handling
 
-def add_run_selector_args(parser: argparse.ArgumentParser, *, branch_required: bool) -> None:
-    branch_nargs = None if branch_required else "?"
-    parser.add_argument("branch", nargs=branch_nargs, default=None, help="Branch name.")
+def add_run_selector_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("branch", nargs="?", default=None, help="Branch name.")
     parser.add_argument("date", nargs="?", default=None, help="Run date as YYYY-MM-DD.")
     parser.add_argument("time", nargs="?", default=None, help="Run time as HH:MM:SS or HHMMSS.")
 
@@ -776,20 +772,20 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("sync", help="Start a sync-with-GitHub dry run from the web UI.")
 
     list_parser = subparsers.add_parser("list", help="List runs for a repo.")
-    add_run_selector_args(list_parser, branch_required=False)
+    add_run_selector_args(list_parser)
 
     start_parser = subparsers.add_parser("start", help="Start a single repo branch run from the web UI.")
     start_parser.add_argument("branch", help="Branch name.")
 
     log_parser = subparsers.add_parser("log", help="Print a log for a repo branch.")
     log_parser.add_argument("-f", action="store_true", dest="follow", help="Follow the log until it completes.")
-    add_run_selector_args(log_parser, branch_required=True)
+    add_run_selector_args(log_parser)
 
     status_parser = subparsers.add_parser("status", help="Show published report status for a repo branch run.")
-    add_run_selector_args(status_parser, branch_required=True)
+    add_run_selector_args(status_parser)
 
     download_parser = subparsers.add_parser("download", help="Download a published report for a repo branch run.")
-    add_run_selector_args(download_parser, branch_required=True)
+    add_run_selector_args(download_parser)
     return parser
 
 
@@ -814,7 +810,7 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_status(client_config, repo, selector)
         if args.command == "download":
             return cmd_download(client_config, repo, selector)
-        raise AssertionError(f"unknown command {args.command}")
+        raise CliError(f"unknown command {args.command}")
     except (MissingClientConfig, InvalidClientConfig) as exc:
         print(f"error: {exc}. Run `cli setup <url>` to fix.", file=sys.stderr)
         return 1
