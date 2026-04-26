@@ -293,8 +293,7 @@ def github_repo_name(url: str) -> str | None:
         path = url.removeprefix("https://github.com/")
     else:
         return None
-    if path.endswith(".git"):
-        path = path[:-4]
+    path = path.removesuffix(".git")
     parts = path.split("/")
     if len(parts) != 2 or not all(parts):
         return None
@@ -372,15 +371,9 @@ def resolve_start_target(
     repo: str,
     branch: str,
 ) -> StartTarget:
-    matches = [
-        target
-        for target in index_state.start_targets
-        if target.branch == branch and target.repo == repo
-    ]
-    if len(matches) == 1:
-        return matches[0]
-    if len(matches) > 1:
-        raise CliError(f"multiple configured start targets matched repo {repo!r} and branch {branch!r}")
+    for target in index_state.start_targets:
+        if target.branch == branch and target.repo == repo:
+            return target
 
     if repo in {target.repo for target in index_state.start_targets}:
         raise CliError(f"branch {branch!r} is not available for repo {repo!r}")
