@@ -1,7 +1,11 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "nightlies"
 version = "0.1.0"
-description = "A script that runs integration tests nightly"
+description = "CLI for querying nightly logs and reports"
 readme = "README.md"
 authors = [
     { name = "Pavel Panchekha", email = "me@pavpanchekha.com" },
@@ -9,8 +13,9 @@ authors = [
 requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE"]
-keywords = ["nightlies", "logs", "reports"]
+keywords = ["nightlies", "cli", "logs", "reports"]
 classifiers = [
+    "Environment :: Console",
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
@@ -21,6 +26,17 @@ dependencies = [
     "bottle>=0.13.4",
     "dbus-python>=1.4.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/pavpanchekha/nightlies"
+Repository = "https://github.com/pavpanchekha/nightlies"
+Issues = "https://github.com/pavpanchekha/nightlies/issues"
+
+[project.scripts]
+nightlies = "cli:main"
+
+[tool.setuptools]
+py-modules = ["cli"]
 
 [dependency-groups]
 dev = [

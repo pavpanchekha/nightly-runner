@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
-from typing import cast
 import configparser
+import gzip
+import io
 import json
 import os
 import shutil
@@ -14,6 +15,8 @@ import sys
 import tempfile
 import types
 import unittest
+import urllib.error
+import urllib.parse
 from types import SimpleNamespace
 from typing import Any, Literal, cast
 from unittest import mock
@@ -25,6 +28,7 @@ if str(ROOT) not in sys.path:
 
 from nightlies import NightlyRunner
 import apt
+import cli
 
 
 class FakeRunner:
@@ -39,6 +43,41 @@ class FakeRunner:
     def exec(self, level: int, cmd: list[str]) -> subprocess.CompletedProcess[bytes]:
         self.commands.append(cmd)
         return subprocess.CompletedProcess(cmd, 0, stdout=b"", stderr=b"")
+
+
+class FakeResponse:
+    def __init__(self, data: bytes, status: int = 200) -> None:
+        self.data = data
+        self.status = status
+        self.offset = 0
+
+    def read(self, size: int = -1) -> bytes:
+        if size < 0:
+            size = len(self.data) - self.offset
+        start = self.offset
+        end = min(len(self.data), start + size)
+        self.offset = end
+        return self.data[start:end]
+
+    def __enter__(self) -> "FakeResponse":
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> Literal[False]:
+        return False
+
+
+class FakeOpener:
+    def __init__(self, responses: dict[str, bytes]) -> None:
+        self.responses = responses
+        self.requests: list[str] = []
+
+    def open(self, request: str | object) -> FakeResponse:
+        if isinstance(request, str):
+            url = request
+        else:
+            url = cast(str, getattr(request, "full_url"))
+        self.requests.append(url)
+        return FakeResponse(self.responses[url])
 
 
 class TestApt(unittest.TestCase):
@@ -86,6 +125,565 @@ class TestApt(unittest.TestCase):
 
         self.assertTrue(apt._has_repository("ppa:owner/name", self.source_list, self.sources_dir))
         self.assertFalse(apt._has_repository("ppa:other/name", self.source_list, self.sources_dir))
+
+
+class TestCli(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp(prefix="cli-test-"))
+        self.old_cwd = Path.cwd()
+        self.env_patch = mock.patch.dict(os.environ, {"HOME": str(self.tmpdir)}, clear=False)
+        self.env_patch.start()
+        os.chdir(self.tmpdir)
+
+    def tearDown(self) -> None:
+        os.chdir(self.old_cwd)
+        self.env_patch.stop()
+        shutil.rmtree(self.tmpdir)
+
+    def client_config(self, base_url: str = "https://nightly.cs.washington.edu/") -> cli.ClientConfig:
+        return cli.ClientConfig(base_url, "uwplse", "uwplse")
+
+    def absolute_url(self, client_config: cli.ClientConfig, path: str) -> str:
+        return urllib.parse.urljoin(client_config.index_url, path)
+
+    def report_url(self, client_config: cli.ClientConfig, path: str) -> str:
+        return urllib.parse.urljoin(client_config.index_url, cli.REPORTS_PATH + path)
+
+    def client_open_patch(self, opener: object) -> Any:
+        return mock.patch.object(
+            cli.ClientConfig,
+            "open",
+            autospec=True,
+            side_effect=lambda _client_config, request: cast(Any, opener).open(request),
+        )
+
+    def fake_curl_run(
+        self,
+        responses: dict[str, bytes],
+    ) -> mock.Mock:
+        def run(cmd: list[str], check: bool) -> subprocess.CompletedProcess[bytes]:
+            self.assertTrue(check)
+            config_path = Path(cmd[cmd.index("--config") + 1])
+            lines = [line.strip() for line in config_path.read_text().splitlines() if line.strip()]
+            for i in range(0, len(lines), 2):
+                url = lines[i].removeprefix('url = "').removesuffix('"')
+                output = Path(lines[i + 1].removeprefix('output = "').removesuffix('"'))
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_bytes(responses[url])
+            return subprocess.CompletedProcess(cmd, 0, stdout=b"", stderr=b"")
+
+        return mock.Mock(side_effect=run)
+
+    def test_cmd_download_fetches_manifest_and_ungzips_files(self) -> None:
+        report_name = "1713570000:taylor-order0:deadbeef"
+        client_config = self.client_config()
+        report_url = self.report_url(client_config, "herbie/" + report_name)
+        manifest = {
+            "files": [
+                {"path": "index.html", "gzip": False},
+                {"path": "nightly_info.json", "gzip": False},
+                {"path": "results.json.gz", "gzip": True},
+            ]
+        }
+        opener = FakeOpener(
+            {
+                self.absolute_url(client_config, "/logs/taylor-order0.log"): (
+                    "Publishing report directory /tmp/report to "
+                    f"/srv/reports/herbie/{report_name}\n"
+                ).encode("utf-8"),
+                report_url + "/nightly_info.json": json.dumps(manifest).encode("utf-8"),
+                report_url + "/index.html": b"<h1>ok</h1>\n",
+                report_url + "/results.json.gz": gzip.compress(b"{\"ok\":true}\n"),
+            }
+        )
+        entry = cli.LogEntry(
+            name="2026-04-19-123456-1-herbie-taylor-order0.log",
+            url="/logs/taylor-order0.log",
+        )
+
+        with (
+            self.client_open_patch(opener),
+            mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
+            mock.patch.object(cli.subprocess, "run", self.fake_curl_run({
+                report_url + "/index.html": b"<h1>ok</h1>\n",
+                report_url + "/nightly_info.json": json.dumps(manifest).encode("utf-8"),
+                report_url + "/results.json.gz": gzip.compress(b"{\"ok\":true}\n"),
+            })),
+        ):
+            rc = cli.cmd_download(
+                client_config,
+                "herbie",
+                cli.RunSelector("taylor-order0", "2026-04-19", "12:34:56"),
+            )
+
+        self.assertEqual(rc, 0)
+        report_dir = self.tmpdir / report_name
+        self.assertEqual((report_dir / "index.html").read_text(), "<h1>ok</h1>\n")
+        self.assertEqual(json.loads((report_dir / "nightly_info.json").read_text())["files"][2]["path"], "results.json.gz")
+        self.assertEqual((report_dir / "results.json").read_text(), "{\"ok\":true}\n")
+
+    def test_download_report_files_accepts_logical_manifest_paths_for_gzip(self) -> None:
+        client_config = self.client_config()
+        report_url = self.report_url(client_config, "herbie/1713570001:taylor-order0:feedface")
+
+        with mock.patch.object(cli.subprocess, "run", self.fake_curl_run({
+            report_url + "/results.json.gz": gzip.compress(b"{\"ok\":true}\n"),
+        })):
+            manifest = cli.parse_manifest(json.dumps({"files": [{"path": "results.json", "gzip": True}]}))
+            file_count = cli.download_report_files(
+                report_url,
+                manifest.files,
+                self.tmpdir / "downloaded",
+                client_config,
+            )
+
+        self.assertEqual(file_count, 1)
+        self.assertEqual((self.tmpdir / "downloaded" / "results.json").read_text(), "{\"ok\":true}\n")
+
+    def test_cmd_download_reports_curl_failures_cleanly(self) -> None:
+        report_name = "1713570002:taylor-order0:badc0de"
+        client_config = self.client_config()
+        report_url = self.report_url(client_config, "herbie/" + report_name)
+        manifest = {"files": [{"path": "results.json", "gzip": False}]}
+        entry = cli.LogEntry(
+            name="2026-04-19-123456-1-herbie-taylor-order0.log",
+            url="/logs/taylor-order0.log",
+        )
+        opener = FakeOpener(
+            {
+                self.absolute_url(client_config, entry.url): (
+                    "Publishing report directory /tmp/report to "
+                    f"/srv/reports/herbie/{report_name}\n"
+                ).encode("utf-8"),
+                report_url + "/nightly_info.json": json.dumps(manifest).encode("utf-8"),
+            }
+        )
+        error = subprocess.CalledProcessError(22, ["curl", "--fail"])
+
+        with (
+            self.client_open_patch(opener),
+            mock.patch.object(cli, "load_client_config", return_value=client_config),
+            mock.patch.object(cli, "infer_repo", return_value="herbie"),
+            mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
+            mock.patch.object(cli.subprocess, "run", side_effect=error),
+            mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            rc = cli.main(["download", "taylor-order0", "2026-04-19", "12:34:56"])
+
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.getvalue(), "error: curl failed with exit status 22\n")
+
+    def test_cmd_list_accepts_branch_date_and_time_filters(self) -> None:
+        entries = [
+            cli.LogEntry(
+                name="2026-04-19-123456-1-herbie-main.log",
+                url="/logs/main.log",
+            ),
+            cli.LogEntry(
+                name="2026-04-19-123456-1-herbie-taylor-order0.log",
+                url="/logs/taylor-old.log",
+            ),
+            cli.LogEntry(
+                name="2026-04-20-090832-1-herbie-taylor-order0.log",
+                url="/logs/taylor-new.log",
+            ),
+        ]
+
+        with (
+            mock.patch.object(cli, "iter_entries", return_value=iter(reversed(entries))),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            args = cli.build_parser().parse_args(["list", "taylor-order0", "2026-04-20", "090832"])
+            rc = cli.cmd_list(
+                self.client_config(),
+                "herbie",
+                cli.RunSelector(args.branch, args.date, args.time),
+            )
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(stdout.getvalue(), "2026-04-20 09:08:32 taylor-order0\n")
+
+    def test_cmd_list_branch_lists_all_matching_runs(self) -> None:
+        entries = [
+            cli.LogEntry(
+                name="2026-04-19-123456-1-herbie-taylor-order0.log",
+                url="/logs/taylor-old.log",
+            ),
+            cli.LogEntry(
+                name="2026-04-20-090832-1-herbie-taylor-order0.log",
+                url="/logs/taylor-new.log",
+            ),
+        ]
+
+        with (
+            mock.patch.object(cli, "iter_entries", return_value=iter(reversed(entries))),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            rc = cli.cmd_list(self.client_config(), "herbie", cli.RunSelector("taylor-order0", None, None))
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(
+            stdout.getvalue(),
+            "2026-04-19 12:34:56 taylor-order0\n"
+            "2026-04-20 09:08:32 taylor-order0\n",
+        )
+
+    def test_main_log_without_branch_prints_latest_repo_run(self) -> None:
+        entries = [
+            cli.LogEntry(
+                name="2026-04-20-090832-1-herbie-taylor-order0.log",
+                url="/logs/taylor-new.log",
+            ),
+            cli.LogEntry(
+                name="2026-04-19-123456-1-herbie-main.log",
+                url="/logs/main.log",
+            ),
+        ]
+        opener = FakeOpener({self.absolute_url(self.client_config(), entries[0].url): b"latest log\n"})
+
+        with (
+            self.client_open_patch(opener),
+            mock.patch.object(cli, "load_client_config", return_value=self.client_config()),
+            mock.patch.object(cli, "infer_repo", return_value="herbie"),
+            mock.patch.object(cli, "iter_entries", return_value=iter(entries)),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            rc = cli.main(["log"])
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(stdout.getvalue(), "latest log\n")
+
+    def test_cmd_status_prints_manifest_metadata(self) -> None:
+        report_name = "1713570000:taylor-order0:deadbeef"
+        client_config = self.client_config()
+        report_url = self.report_url(client_config, "herbie/" + report_name)
+        manifest = {
+            "repo": "herbie",
+            "branch": "taylor-order0",
+            "branch_filename": "taylor-order0",
+            "commit": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+            "commit_short": "deadbeef",
+            "status": "success",
+            "started_at": "2026-04-20T15:00:00Z",
+            "finished_at": "2026-04-20T15:04:30Z",
+            "duration_seconds": 270.0,
+            "duration_human": "4.5m",
+            "log": "taylor-order0.log",
+            "log_url": "https://nightly.cs.washington.edu/logs/taylor-order0.log",
+            "report_url": report_url,
+            "image_url": None,
+            "files": [
+                {"path": "index.html", "gzip": False},
+                {"path": "nightly_info.json", "gzip": False},
+            ],
+        }
+        entry = cli.LogEntry(
+            name="2026-04-20-150000-1-herbie-taylor-order0.log",
+            url="/logs/taylor-order0.log",
+        )
+        opener = FakeOpener(
+            {
+                self.absolute_url(client_config, entry.url): (
+                    "Publishing report directory /tmp/report to "
+                    f"/srv/reports/herbie/{report_name}\n"
+                ).encode("utf-8"),
+                report_url + "/nightly_info.json": json.dumps(manifest).encode("utf-8"),
+            }
+        )
+
+        with (
+            self.client_open_patch(opener),
+            mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            args = cli.build_parser().parse_args(["status", "taylor-order0", "2026-04-20", "150000"])
+            rc = cli.cmd_status(
+                client_config,
+                "herbie",
+                cli.RunSelector(args.branch, args.date, args.time),
+            )
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(
+            stdout.getvalue(),
+            "herbie / taylor-order0\n"
+            "\n"
+            "Status   success\n"
+            "Commit   deadbeef\n"
+            "Started  2026-04-20 15:00:00 UTC\n"
+            "Finished 2026-04-20 15:04:30 UTC\n"
+            "Duration 4.5m\n"
+            "Files    2\n"
+            f"Report   {report_url}\n"
+            "Log      https://nightly.cs.washington.edu/logs/taylor-order0.log\n",
+        )
+
+    def test_main_status_without_branch_prints_latest_repo_run(self) -> None:
+        report_name = "1713570003:feature:decafbad"
+        client_config = self.client_config()
+        report_url = self.report_url(client_config, "herbie/" + report_name)
+        manifest = {
+            "repo": "herbie",
+            "branch": "feature",
+            "status": "success",
+            "files": [],
+        }
+        entry = cli.LogEntry(
+            name="2026-04-21-150000-1-herbie-feature.log",
+            url="/logs/feature.log",
+        )
+        opener = FakeOpener(
+            {
+                self.absolute_url(client_config, entry.url): (
+                    "Publishing report directory /tmp/report to "
+                    f"/srv/reports/herbie/{report_name}\n"
+                ).encode("utf-8"),
+                report_url + "/nightly_info.json": json.dumps(manifest).encode("utf-8"),
+            }
+        )
+
+        with (
+            self.client_open_patch(opener),
+            mock.patch.object(cli, "load_client_config", return_value=client_config),
+            mock.patch.object(cli, "infer_repo", return_value="herbie"),
+            mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            rc = cli.main(["status"])
+
+        self.assertEqual(rc, 0)
+        self.assertIn("herbie / feature\n", stdout.getvalue())
+
+    def test_cmd_status_requires_published_report(self) -> None:
+        entry = cli.LogEntry(
+            name="2026-04-20-150000-1-herbie-taylor-order0.log",
+            url="/logs/taylor-order0.log",
+        )
+        opener = FakeOpener({self.absolute_url(self.client_config(), entry.url): b"still running\n"})
+
+        with (
+            self.client_open_patch(opener),
+            mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
+        ):
+            with self.assertRaisesRegex(cli.CliError, "No published report found in log."):
+                args = cli.build_parser().parse_args(["status", "taylor-order0", "2026-04-20", "150000"])
+                cli.cmd_status(
+                    self.client_config(),
+                    "herbie",
+                    cli.RunSelector(args.branch, args.date, args.time),
+                )
+
+
+    def test_cmd_setup_saves_client_config(self) -> None:
+        state = cli.IndexState(False, [cli.StartTarget("herbie", "main", False)])
+
+        with (
+            mock.patch("builtins.input", return_value="alice"),
+            mock.patch.object(cli.getpass, "getpass", return_value="secret"),
+            mock.patch.object(cli.ClientConfig, "fetch", return_value=""),
+            mock.patch.object(cli.IndexParser, "parse", return_value=state),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            rc = cli.cmd_setup("https://nightlies.example")
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(stdout.getvalue(), f"Saved CLI config to {cli.client_state_path()}\n")
+        self.assertEqual(
+            json.loads(cli.client_state_path().read_text()),
+            {
+                "nightly_url": "https://nightlies.example",
+                "username": "alice",
+                "password": "secret",
+            },
+        )
+        self.assertEqual(cli.load_client_config(), cli.ClientConfig("https://nightlies.example", "alice", "secret"))
+
+    def test_cmd_setup_refuses_page_without_nightly_controls(self) -> None:
+        state = cli.IndexState(False, [])
+
+        with (
+            mock.patch("builtins.input", return_value="alice"),
+            mock.patch.object(cli.getpass, "getpass", return_value="secret"),
+            mock.patch.object(cli.ClientConfig, "fetch", return_value=""),
+            mock.patch.object(cli.IndexParser, "parse", return_value=state),
+            mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            rc = cli.main(["setup", "https://nightlies.example"])
+
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.getvalue(), "error: could not find nightly controls at https://nightlies.example\n")
+        self.assertFalse(cli.client_state_path().exists())
+
+    def test_main_requires_setup_before_other_commands(self) -> None:
+        with mock.patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            rc = cli.main(["list"])
+
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.getvalue(), "error: client is not configured. Run `cli setup <url>` to fix.\n")
+
+    def test_nginx_index_parser_uses_relative_log_urls(self) -> None:
+        entries = cli.NginxIndexParser.parse(
+            '<a href="2026-04-20-090832-1-herbie-main.log">main</a>',
+            "/logs/",
+        )
+
+        self.assertEqual(
+            entries,
+            [
+                cli.LogEntry(
+                    "2026-04-20-090832-1-herbie-main.log",
+                    "/logs/2026-04-20-090832-1-herbie-main.log",
+                )
+            ],
+        )
+
+    def test_infer_repo_returns_short_github_repo_name(self) -> None:
+        result = subprocess.CompletedProcess(
+            ["git", "-C", ".", "remote", "-v"],
+            0,
+            stdout="origin\tgit@github.com:uwplse/herbie.git (fetch)\n",
+        )
+
+        with mock.patch.object(cli.subprocess, "run", return_value=result):
+            self.assertEqual(cli.infer_repo("."), "herbie")
+
+    def test_parse_index_state_reads_sync_and_start_controls(self) -> None:
+        state = cli.IndexParser.parse(
+            """
+            <form action="/dryrun" method="post">
+              <button disabled>Sync with Github</button>
+            </form>
+            <form action="runnow" method="post">
+              <input type="hidden" name="repo" value="herbie" />
+              <input type="hidden" name="branch" value="main" />
+              <button>Run</button>
+            </form>
+            <form action="https://nightly.cs.washington.edu/runnow" method="post">
+              <input type="hidden" name="repo" value="ruler" />
+              <input type="hidden" name="branch" value="feature/test" />
+              <button disabled>Run</button>
+            </form>
+            """,
+            cli.INDEX_PATH,
+        )
+
+        self.assertTrue(state.sync_disabled)
+        self.assertEqual(
+            state.start_targets,
+            [
+                cli.StartTarget("herbie", "main", False),
+                cli.StartTarget("ruler", "feature/test", True),
+            ],
+        )
+
+    def test_cmd_sync_refuses_when_ui_disables_sync(self) -> None:
+        state = cli.IndexState(True, [])
+
+        with (
+            mock.patch.object(cli, "load_client_config", return_value=self.client_config()),
+            mock.patch.object(cli.ClientConfig, "fetch", return_value=""),
+            mock.patch.object(cli.IndexParser, "parse", return_value=state),
+            mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            rc = cli.main(["sync"])
+
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.getvalue(), "error: Nightly sync already running\n")
+
+    def test_cmd_sync_posts_to_dryrun_endpoint(self) -> None:
+        requests: list[urllib.request.Request] = []
+
+        class CapturingOpener:
+            def open(self, request: object) -> FakeResponse:
+                assert not isinstance(request, str)
+                requests.append(cast(urllib.request.Request, request))
+                return FakeResponse(b"ok")
+
+        with (
+            self.client_open_patch(CapturingOpener()),
+            mock.patch.object(cli.ClientConfig, "fetch", return_value=""),
+            mock.patch.object(cli.IndexParser, "parse", return_value=cli.IndexState(False, [])),
+        ):
+            rc = cli.cmd_sync(self.client_config())
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(requests), 1)
+        request = requests[0]
+        self.assertEqual(request.full_url, urllib.parse.urljoin(self.client_config().index_url, cli.SYNC_PATH))
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(request.data, b"")
+
+    def test_cmd_start_posts_server_repo_token(self) -> None:
+        requests: list[urllib.request.Request] = []
+
+        class CapturingOpener:
+            def open(self, request: object) -> FakeResponse:
+                assert not isinstance(request, str)
+                requests.append(cast(urllib.request.Request, request))
+                return FakeResponse(b"ok")
+
+        state = cli.IndexState(False, [cli.StartTarget("herbie", "feature/test", False)])
+
+        with (
+            self.client_open_patch(CapturingOpener()),
+            mock.patch.object(cli.ClientConfig, "fetch", return_value=""),
+            mock.patch.object(cli.IndexParser, "parse", return_value=state),
+        ):
+            rc = cli.cmd_start(self.client_config(), "herbie", "feature/test")
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(requests), 1)
+        request = requests[0]
+        self.assertEqual(request.full_url, urllib.parse.urljoin(self.client_config().index_url, cli.START_PATH))
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(request.data, b"repo=herbie&branch=feature%2Ftest")
+
+    def test_cmd_start_refuses_queued_branch(self) -> None:
+        state = cli.IndexState(False, [cli.StartTarget("herbie", "feature/test", True)])
+
+        with (
+            mock.patch.object(cli, "load_client_config", return_value=self.client_config()),
+            mock.patch.object(cli, "infer_repo", return_value="herbie"),
+            mock.patch.object(cli.ClientConfig, "fetch", return_value=""),
+            mock.patch.object(cli.IndexParser, "parse", return_value=state),
+            mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            rc = cli.main(["start", "feature/test"])
+
+        self.assertEqual(rc, 1)
+        self.assertEqual(
+            stderr.getvalue(),
+            "error: Branch feature/test on herbie already queued\n",
+        )
+
+    def test_cmd_start_surfaces_http_error_message(self) -> None:
+        client_config = self.client_config()
+
+        class ErrorOpener:
+            def open(self, request: object) -> FakeResponse:
+                assert not isinstance(request, str)
+                raise urllib.error.HTTPError(
+                    urllib.parse.urljoin(client_config.index_url, cli.START_PATH),
+                    409,
+                    "Conflict",
+                    hdrs=None,
+                    fp=io.BytesIO(b"Nightly sync already running"),
+                )
+
+        state = cli.IndexState(False, [cli.StartTarget("herbie", "main", False)])
+
+        with (
+            self.client_open_patch(ErrorOpener()),
+            mock.patch.object(cli, "load_client_config", return_value=client_config),
+            mock.patch.object(cli, "infer_repo", return_value="herbie"),
+            mock.patch.object(cli.ClientConfig, "fetch", return_value=""),
+            mock.patch.object(cli.IndexParser, "parse", return_value=state),
+            mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            rc = cli.main(["start", "main"])
+
+        self.assertEqual(rc, 1)
+        self.assertEqual(stderr.getvalue(), "error: Nightly sync already running\n")
 
 
 class TestNightlyRunnerHarness(unittest.TestCase):
