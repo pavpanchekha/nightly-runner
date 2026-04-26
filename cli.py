@@ -264,9 +264,6 @@ class RunSelector:
     date: str | None
     time: str | None
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "time", normalize_time(self.time))
-
 ## Log index
 
 def iter_entries(client_config: ClientConfig) -> Iterator[LogEntry]:

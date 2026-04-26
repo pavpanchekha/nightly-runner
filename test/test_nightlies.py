@@ -292,10 +292,11 @@ class TestCli(unittest.TestCase):
             mock.patch.object(cli, "iter_entries", return_value=iter(reversed(entries))),
             mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
         ):
+            args = cli.build_parser().parse_args(["list", "taylor-order0", "2026-04-20", "090832"])
             rc = cli.cmd_list(
                 self.client_config(),
                 "herbie",
-                cli.RunSelector("taylor-order0", "2026-04-20", "090832"),
+                cli.RunSelector(args.branch, args.date, args.time),
             )
 
         self.assertEqual(rc, 0)
@@ -394,10 +395,11 @@ class TestCli(unittest.TestCase):
             mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
             mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
         ):
+            args = cli.build_parser().parse_args(["status", "taylor-order0", "2026-04-20", "150000"])
             rc = cli.cmd_status(
                 client_config,
                 "herbie",
-                cli.RunSelector("taylor-order0", "2026-04-20", "150000"),
+                cli.RunSelector(args.branch, args.date, args.time),
             )
 
         self.assertEqual(rc, 0)
@@ -463,10 +465,11 @@ class TestCli(unittest.TestCase):
             mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
         ):
             with self.assertRaisesRegex(cli.CliError, "No published report found in log."):
+                args = cli.build_parser().parse_args(["status", "taylor-order0", "2026-04-20", "150000"])
                 cli.cmd_status(
                     self.client_config(),
                     "herbie",
-                    cli.RunSelector("taylor-order0", "2026-04-20", "150000"),
+                    cli.RunSelector(args.branch, args.date, args.time),
                 )
 
 
