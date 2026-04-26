@@ -252,11 +252,12 @@ class TestCli(unittest.TestCase):
         with (
             self.client_open_patch(opener),
             mock.patch.object(cli, "load_client_config", return_value=client_config),
+            mock.patch.object(cli, "infer_repo", return_value="herbie"),
             mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
             mock.patch.object(cli.subprocess, "run", side_effect=error),
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
-            rc = cli.main(["download", "--repo", "herbie", "taylor-order0", "2026-04-19", "12:34:56"])
+            rc = cli.main(["download", "taylor-order0", "2026-04-19", "12:34:56"])
 
         self.assertEqual(rc, 1)
         self.assertIn("error: Command '['curl', '--fail']' returned non-zero exit status 22.", stderr.getvalue())
@@ -438,20 +439,10 @@ class TestCli(unittest.TestCase):
 
     def test_main_requires_setup_before_other_commands(self) -> None:
         with mock.patch("sys.stderr", new_callable=io.StringIO) as stderr:
-            rc = cli.main(["list", "--repo", "herbie"])
+            rc = cli.main(["list"])
 
         self.assertEqual(rc, 1)
         self.assertEqual(stderr.getvalue(), "error: client is not configured. Run `cli setup <url>` to fix.\n")
-
-    def test_main_rejects_full_repo_name(self) -> None:
-        with (
-            mock.patch.object(cli, "load_client_config", return_value=self.client_config()),
-            mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
-        ):
-            rc = cli.main(["list", "--repo", "uwplse/herbie"])
-
-        self.assertEqual(rc, 1)
-        self.assertEqual(stderr.getvalue(), "error: repo must be the short repo name, not 'uwplse/herbie'\n")
 
     def test_infer_repo_returns_short_github_repo_name(self) -> None:
         result = subprocess.CompletedProcess(
@@ -554,10 +545,11 @@ class TestCli(unittest.TestCase):
 
         with (
             mock.patch.object(cli, "load_client_config", return_value=self.client_config()),
+            mock.patch.object(cli, "infer_repo", return_value="herbie"),
             mock.patch.object(cli, "fetch_index_state", return_value=state),
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
-            rc = cli.main(["start", "--repo", "herbie", "feature/test"])
+            rc = cli.main(["start", "feature/test"])
 
         self.assertEqual(rc, 1)
         self.assertEqual(
@@ -584,10 +576,11 @@ class TestCli(unittest.TestCase):
         with (
             self.client_open_patch(ErrorOpener()),
             mock.patch.object(cli, "load_client_config", return_value=client_config),
+            mock.patch.object(cli, "infer_repo", return_value="herbie"),
             mock.patch.object(cli, "fetch_index_state", return_value=state),
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
-            rc = cli.main(["start", "--repo", "herbie", "main"])
+            rc = cli.main(["start", "main"])
 
         self.assertEqual(rc, 1)
         self.assertEqual(stderr.getvalue(), "error: Nightly sync already running\n")

@@ -27,13 +27,6 @@ uvx nightlies -C ~/src/herbie list
 uvx nightlies -C ~/src/herbie log main
 ```
 
-You can also pass a short repo name directly:
-
-```bash
-uvx nightlies list --repo herbie
-uvx nightlies log --repo herbie main
-```
-
 To install it persistently instead of using `uvx`:
 
 ```bash

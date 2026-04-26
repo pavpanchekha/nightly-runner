@@ -328,12 +328,6 @@ def infer_repo(cwd: str) -> str:
     raise CliError(f"could not infer GitHub repo from git remotes in {cwd}")
 
 
-def validate_repo_name(repo: str) -> str:
-    if "/" in repo:
-        raise CliError(f"repo must be the short repo name, not {repo!r}")
-    return repo
-
-
 def escape_branch_filename(branch: str) -> str:
     return branch.replace("%", "_25").replace("/", "_2f")
 
@@ -782,24 +776,19 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("sync", help="Start a sync-with-GitHub dry run from the web UI.")
 
     list_parser = subparsers.add_parser("list", help="List runs for a repo.")
-    list_parser.add_argument("--repo", help="Repository name, such as herbie.")
     add_run_selector_args(list_parser, branch_required=False)
 
     start_parser = subparsers.add_parser("start", help="Start a single repo branch run from the web UI.")
-    start_parser.add_argument("--repo", help="Repository name, such as herbie.")
     start_parser.add_argument("branch", help="Branch name.")
 
     log_parser = subparsers.add_parser("log", help="Print a log for a repo branch.")
-    log_parser.add_argument("--repo", help="Repository name, such as herbie.")
     log_parser.add_argument("-f", action="store_true", dest="follow", help="Follow the log until it completes.")
     add_run_selector_args(log_parser, branch_required=True)
 
     status_parser = subparsers.add_parser("status", help="Show published report status for a repo branch run.")
-    status_parser.add_argument("--repo", help="Repository name, such as herbie.")
     add_run_selector_args(status_parser, branch_required=True)
 
     download_parser = subparsers.add_parser("download", help="Download a published report for a repo branch run.")
-    download_parser.add_argument("--repo", help="Repository name, such as herbie.")
     add_run_selector_args(download_parser, branch_required=True)
     return parser
 
@@ -813,11 +802,10 @@ def main(argv: list[str] | None = None) -> int:
         client_config = load_client_config()
         if args.command == "sync":
             return cmd_sync(client_config)
+        repo = infer_repo(".")
         if args.command == "start":
-            repo = validate_repo_name(args.repo) if args.repo else infer_repo(".")
             return cmd_start(client_config, repo, args.branch)
         selector = RunSelector(args.branch, args.date, args.time)
-        repo = validate_repo_name(args.repo) if args.repo else infer_repo(".")
         if args.command == "list":
             return cmd_list(client_config, repo, selector)
         if args.command == "log":
