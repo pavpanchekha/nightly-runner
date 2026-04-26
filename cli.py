@@ -401,9 +401,8 @@ def matching_repo_entries(
     entries: Iterable[LogEntry],
     repo: str,
     selector: RunSelector,
-) -> list[LogEntry]:
+) -> Iterator[LogEntry]:
     normalized_time = normalize_time(selector.time)
-    matched: list[LogEntry] = []
     for entry in repo_entries(entries, repo):
         run = parse_repo_run(repo, entry)
         if selector.branch is not None and run.branch != selector.branch:
@@ -412,18 +411,7 @@ def matching_repo_entries(
             continue
         if normalized_time is not None and run.time != normalized_time:
             continue
-        matched.append(entry)
-    return matched
-
-
-def latest_matching_repo_entry(
-    entries: Iterable[LogEntry],
-    repo: str,
-    selector: RunSelector,
-) -> LogEntry | None:
-    for entry in matching_repo_entries(entries, repo, selector):
-        return entry
-    return None
+        yield entry
 
 
 def resolve_start_target(
@@ -497,10 +485,15 @@ def fetch_manifest(client_config: ClientConfig, report_url: str) -> dict[str, ob
         raise CliError(f"invalid nightly_info.json: {exc}") from exc
     if not isinstance(manifest, dict):
         raise CliError("nightly_info.json did not contain a JSON object")
+    manifest_files(manifest)
+    return manifest
+
+
+def manifest_files(manifest: dict[str, object]) -> list[object]:
     files = manifest.get("files")
     if not isinstance(files, list):
         raise CliError("nightly_info.json did not contain a files list")
-    return manifest
+    return files
 
 
 def format_manifest_time(value: object) -> str | None:
@@ -538,9 +531,7 @@ def manifest_text(manifest: dict[str, object]) -> str:
     duration = manifest.get("duration_human", manifest.get("duration_seconds"))
     if duration is not None:
         details.append(("Duration", duration))
-    files = manifest["files"]
-    assert isinstance(files, list)
-    details.append(("Files", len(files)))
+    details.append(("Files", len(manifest_files(manifest))))
     if "report_url" in manifest:
         details.append(("Report", manifest["report_url"]))
     if "log_url" in manifest:
@@ -620,17 +611,6 @@ def download_report_files(
     return len(file_paths)
 
 
-def fetch_selected_manifest(client_config: ClientConfig, repo: str, selector: RunSelector) -> dict[str, object] | None:
-    entry = latest_matching_repo_entry(iter_entries(client_config), repo, selector)
-    if entry is None:
-        return None
-    log_text = client_config.fetch(entry.url)
-    report_url = find_report_url_in_log(client_config, repo, log_text)
-    if report_url is None:
-        raise CliError("No published report found in log.")
-    return fetch_manifest(client_config, report_url)
-
-
 def post_form(client_config: ClientConfig, url: str, fields: dict[str, str]) -> None:
     request = urllib.request.Request(
         url,
@@ -691,15 +671,13 @@ def cmd_start(client_config: ClientConfig, repo: str, branch: str) -> int:
     if index_state.sync_disabled:
         raise CliError("Nightly sync already running")
     if target.disabled:
-        branch_filename = escape_branch_filename(target.branch)
-        raise CliError(f"Job nightly:{target.repo}:{branch_filename} already queued")
+        raise CliError(f"Branch {target.branch} on {target.repo} already queued")
     post_form(client_config, client_config.start_url, {"repo": target.repo, "branch": target.branch})
     return 0
 
 
 def cmd_download(client_config: ClientConfig, repo: str, selector: RunSelector) -> int:
-    entries = iter_entries(client_config)
-    entry = latest_matching_repo_entry(entries, repo, selector)
+    entry = next(matching_repo_entries(iter_entries(client_config), repo, selector), None)
     if entry is None:
         raise CliError("No matching log found.")
 
@@ -710,10 +688,8 @@ def cmd_download(client_config: ClientConfig, repo: str, selector: RunSelector) 
         raise CliError("No published report found in log.")
 
     manifest = fetch_manifest(client_config, report_url)
-    files = manifest["files"]
-    assert isinstance(files, list)
     output_dir = Path(urllib.parse.urlsplit(report_url).path.rstrip("/")).name
-    file_count = download_report_files(report_url, files, Path(output_dir), client_config)
+    file_count = download_report_files(report_url, manifest_files(manifest), Path(output_dir), client_config)
     print(f"Downloaded {file_count} files to {output_dir}/")
     return 0
 
@@ -723,10 +699,11 @@ def cmd_list(
     repo: str,
     selector: RunSelector,
 ) -> int:
-    if selector.branch is None and selector.date is None and selector.time is None:
-        entries = list(reversed(list(itertools.islice(repo_entries(iter_entries(client_config), repo), 20))))
-    else:
-        entries = list(reversed(matching_repo_entries(iter_entries(client_config), repo, selector)))
+    entries = list(itertools.islice(
+        matching_repo_entries(iter_entries(client_config), repo, selector),
+        20,
+    ))
+    entries.reverse()
     if not entries:
         raise CliError(f"No runs found for repo {repo}.")
     for entry in entries:
@@ -736,7 +713,7 @@ def cmd_list(
 
 
 def cmd_log(client_config: ClientConfig, repo: str, selector: RunSelector, follow: bool) -> int:
-    entry = latest_matching_repo_entry(iter_entries(client_config), repo, selector)
+    entry = next(matching_repo_entries(iter_entries(client_config), repo, selector), None)
     if entry is None:
         raise CliError("No matching log found.")
     if follow:
@@ -747,9 +724,14 @@ def cmd_log(client_config: ClientConfig, repo: str, selector: RunSelector, follo
 
 
 def cmd_status(client_config: ClientConfig, repo: str, selector: RunSelector) -> int:
-    manifest = fetch_selected_manifest(client_config, repo, selector)
-    if manifest is None:
+    entry = next(matching_repo_entries(iter_entries(client_config), repo, selector), None)
+    if entry is None:
         raise CliError("No matching log found.")
+    log_text = client_config.fetch(entry.url)
+    report_url = find_report_url_in_log(client_config, repo, log_text)
+    if report_url is None:
+        raise CliError("No published report found in log.")
+    manifest = fetch_manifest(client_config, report_url)
     print(manifest_text(manifest))
     return 0
 

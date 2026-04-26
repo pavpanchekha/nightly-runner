@@ -615,7 +615,7 @@ class TestCli(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertEqual(
             stderr.getvalue(),
-            "error: Job nightly:herbie:feature_2ftest already queued\n",
+            "error: Branch feature/test on herbie already queued\n",
         )
 
     def test_cmd_start_surfaces_http_error_message(self) -> None:
