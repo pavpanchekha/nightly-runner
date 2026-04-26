@@ -130,14 +130,6 @@ def load_client_config() -> ClientConfig:
     return ClientConfig(nightly_url, username, password)
 
 
-def format_error(exc: BaseException) -> str:
-    if isinstance(exc, urllib.error.HTTPError):
-        return format_http_error(exc)
-    if isinstance(exc, urllib.error.URLError):
-        return f"failed to fetch: {exc}"
-    return str(exc)
-
-
 ## Parsers; eventually the server should offer an API for all this
 
 @dataclass(frozen=True)
@@ -371,30 +363,6 @@ def normalize_time(value: str | None) -> str | None:
     if len(digits) == 6 and digits.isdigit():
         return ":".join([digits[:2], digits[2:4], digits[4:6]])
     return value
-
-
-def find_repo_log(
-    entries: list[LogEntry],
-    repo: str,
-    branch: str,
-    date: str | None = None,
-    time_value: str | None = None,
-) -> LogEntry | None:
-    normalized_time = normalize_time(time_value)
-    matched: list[LogEntry] = []
-    for entry in repo_entries(entries, repo):
-        run = parse_repo_run(repo, entry)
-        if run.branch != branch:
-            continue
-        if date is not None and run.date != date:
-            continue
-        if normalized_time is not None and run.time != normalized_time:
-            continue
-        matched.append(entry)
-    if not matched:
-        return None
-    matched.sort(key=lambda entry: entry.name)
-    return matched[-1]
 
 
 def matching_repo_entries(
@@ -638,6 +606,17 @@ def format_http_error(exc: urllib.error.HTTPError) -> str:
     if text:
         return f"HTTP {exc.code}: {text}"
     return f"HTTP {exc.code}: {exc.reason}"
+
+
+def format_error(exc: BaseException) -> str:
+    if isinstance(exc, urllib.error.HTTPError):
+        return format_http_error(exc)
+    if isinstance(exc, urllib.error.URLError):
+        return f"failed to fetch: {exc}"
+    if isinstance(exc, subprocess.CalledProcessError):
+        command = exc.cmd[0] if isinstance(exc.cmd, list) and exc.cmd else "command"
+        return f"{command} failed with exit status {exc.returncode}"
+    return str(exc)
 
 ## Individual commands
 

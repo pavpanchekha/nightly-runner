@@ -260,7 +260,7 @@ class TestCli(unittest.TestCase):
             rc = cli.main(["download", "taylor-order0", "2026-04-19", "12:34:56"])
 
         self.assertEqual(rc, 1)
-        self.assertIn("error: Command '['curl', '--fail']' returned non-zero exit status 22.", stderr.getvalue())
+        self.assertEqual(stderr.getvalue(), "error: curl failed with exit status 22\n")
 
     def test_cmd_list_accepts_branch_date_and_time_filters(self) -> None:
         entries = [
