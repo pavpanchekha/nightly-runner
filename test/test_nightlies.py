@@ -468,14 +468,13 @@ class TestCli(unittest.TestCase):
 
 
     def test_cmd_setup_saves_client_config(self) -> None:
+        state = cli.IndexState(False, [cli.StartTarget("herbie", "main", False)])
+
         with (
             mock.patch("builtins.input", return_value="alice"),
             mock.patch.object(cli.getpass, "getpass", return_value="secret"),
-            mock.patch.object(
-                cli,
-                "fetch_index_state",
-                return_value=cli.IndexState(False, [cli.StartTarget("herbie", "main", False)]),
-            ),
+            mock.patch.object(cli.ClientConfig, "fetch", return_value=""),
+            mock.patch.object(cli.IndexParser, "parse", return_value=state),
             mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
         ):
             rc = cli.cmd_setup("https://nightlies.example")
@@ -493,10 +492,13 @@ class TestCli(unittest.TestCase):
         self.assertEqual(cli.load_client_config(), cli.ClientConfig("https://nightlies.example", "alice", "secret"))
 
     def test_cmd_setup_refuses_page_without_nightly_controls(self) -> None:
+        state = cli.IndexState(False, [])
+
         with (
             mock.patch("builtins.input", return_value="alice"),
             mock.patch.object(cli.getpass, "getpass", return_value="secret"),
-            mock.patch.object(cli, "fetch_index_state", return_value=cli.IndexState(False, [])),
+            mock.patch.object(cli.ClientConfig, "fetch", return_value=""),
+            mock.patch.object(cli.IndexParser, "parse", return_value=state),
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
             rc = cli.main(["setup", "https://nightlies.example"])
@@ -568,9 +570,12 @@ class TestCli(unittest.TestCase):
         )
 
     def test_cmd_sync_refuses_when_ui_disables_sync(self) -> None:
+        state = cli.IndexState(True, [])
+
         with (
             mock.patch.object(cli, "load_client_config", return_value=self.client_config()),
-            mock.patch.object(cli, "fetch_index_state", return_value=cli.IndexState(True, [])),
+            mock.patch.object(cli.ClientConfig, "fetch", return_value=""),
+            mock.patch.object(cli.IndexParser, "parse", return_value=state),
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
             rc = cli.main(["sync"])
@@ -589,7 +594,8 @@ class TestCli(unittest.TestCase):
 
         with (
             self.client_open_patch(CapturingOpener()),
-            mock.patch.object(cli, "fetch_index_state", return_value=cli.IndexState(False, [])),
+            mock.patch.object(cli.ClientConfig, "fetch", return_value=""),
+            mock.patch.object(cli.IndexParser, "parse", return_value=cli.IndexState(False, [])),
         ):
             rc = cli.cmd_sync(self.client_config())
 
@@ -613,7 +619,8 @@ class TestCli(unittest.TestCase):
 
         with (
             self.client_open_patch(CapturingOpener()),
-            mock.patch.object(cli, "fetch_index_state", return_value=state),
+            mock.patch.object(cli.ClientConfig, "fetch", return_value=""),
+            mock.patch.object(cli.IndexParser, "parse", return_value=state),
         ):
             rc = cli.cmd_start(self.client_config(), "herbie", "feature/test")
 
@@ -630,7 +637,8 @@ class TestCli(unittest.TestCase):
         with (
             mock.patch.object(cli, "load_client_config", return_value=self.client_config()),
             mock.patch.object(cli, "infer_repo", return_value="herbie"),
-            mock.patch.object(cli, "fetch_index_state", return_value=state),
+            mock.patch.object(cli.ClientConfig, "fetch", return_value=""),
+            mock.patch.object(cli.IndexParser, "parse", return_value=state),
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
             rc = cli.main(["start", "feature/test"])
@@ -661,7 +669,8 @@ class TestCli(unittest.TestCase):
             self.client_open_patch(ErrorOpener()),
             mock.patch.object(cli, "load_client_config", return_value=client_config),
             mock.patch.object(cli, "infer_repo", return_value="herbie"),
-            mock.patch.object(cli, "fetch_index_state", return_value=state),
+            mock.patch.object(cli.ClientConfig, "fetch", return_value=""),
+            mock.patch.object(cli.IndexParser, "parse", return_value=state),
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
             rc = cli.main(["start", "main"])

@@ -264,13 +264,6 @@ class RunSelector:
     date: str | None
     time: str | None
 
-## Main CLI body
-
-CURL_PARALLEL_MAX = 32
-COMPLETE_RE = re.compile(r"^Nightly used memory=.*timeout=.*$", re.MULTILINE)
-PUBLISH_RE = re.compile(r"^Publishing report directory .* to .*/reports/([^/]+)/([^/\n]+)$", re.MULTILINE)
-
-
 ## Log index
 
 def iter_entries(client_config: ClientConfig) -> Iterator[LogEntry]:
@@ -353,21 +346,12 @@ def parse_run_log(repo: str, entry: LogEntry) -> RunLog | None:
     )
 
 
-def normalize_time(value: str | None) -> str | None:
-    if value is None:
-        return None
-    digits = value.replace(":", "")
-    if len(digits) == 6 and digits.isdigit():
-        return ":".join([digits[:2], digits[2:4], digits[4:6]])
-    return value
-
 
 def matching_run_logs(
     entries: Iterable[LogEntry],
     repo: str,
     selector: RunSelector,
 ) -> Iterator[RunLog]:
-    normalized_time = normalize_time(selector.time)
     for entry in entries:
         run = parse_run_log(repo, entry)
         if run is None:
@@ -376,16 +360,12 @@ def matching_run_logs(
             continue
         if selector.date is not None and run.date != selector.date:
             continue
-        if normalized_time is not None and run.time != normalized_time:
+        if selector.time is not None and run.time != selector.time:
             continue
         yield run
 
 
 ## Server controls
-
-def fetch_index_state(client_config: ClientConfig) -> IndexState:
-    return IndexParser.parse(client_config.fetch(INDEX_PATH), INDEX_PATH)
-
 
 def resolve_start_target(
     index_state: IndexState,
@@ -408,6 +388,9 @@ def resolve_start_target(
 
 
 ## Logs
+
+COMPLETE_RE = re.compile(r"^Nightly used memory=.*timeout=.*$", re.MULTILINE)
+
 
 def tail_log(client_config: ClientConfig, url: str) -> None:
     offset = 0
@@ -441,6 +424,9 @@ def tail_log(client_config: ClientConfig, url: str) -> None:
 
 
 ## Reports
+
+PUBLISH_RE = re.compile(r"^Publishing report directory .* to .*/reports/([^/]+)/([^/\n]+)$", re.MULTILINE)
+
 
 def find_report_url_in_log(repo: str, log_text: str) -> str | None:
     matched: str | None = None
@@ -545,6 +531,9 @@ def manifest_paths(path_value: object, gzip_value: object) -> tuple[str, str]:
     return path_value, path_value
 
 
+CURL_PARALLEL_MAX = 32
+
+
 def download_report_files(
     report_url: str,
     files: list[object],
@@ -639,7 +628,7 @@ def cmd_setup(url: str) -> int:
     if not password:
         raise CliError("password must not be empty")
     client_config = ClientConfig(url.strip(), username, password)
-    index_state = fetch_index_state(client_config)
+    index_state = IndexParser.parse(client_config.fetch(INDEX_PATH), INDEX_PATH)
     if not index_state.start_targets:
         raise CliError(f"could not find nightly controls at {client_config.index_url}")
     path = save_client_config(client_config)
@@ -648,7 +637,7 @@ def cmd_setup(url: str) -> int:
 
 
 def cmd_sync(client_config: ClientConfig) -> int:
-    index_state = fetch_index_state(client_config)
+    index_state = IndexParser.parse(client_config.fetch(INDEX_PATH), INDEX_PATH)
     if index_state.sync_disabled:
         raise CliError("Nightly sync already running")
     client_config.post(SYNC_PATH, {})
@@ -656,7 +645,7 @@ def cmd_sync(client_config: ClientConfig) -> int:
 
 
 def cmd_start(client_config: ClientConfig, repo: str, branch: str) -> int:
-    index_state = fetch_index_state(client_config)
+    index_state = IndexParser.parse(client_config.fetch(INDEX_PATH), INDEX_PATH)
     target = resolve_start_target(index_state, repo, branch)
     if index_state.sync_disabled:
         raise CliError("Nightly sync already running")
@@ -714,12 +703,22 @@ def cmd_status(client_config: ClientConfig, repo: str, selector: RunSelector) ->
     print(manifest_text(manifest))
     return 0
 
+
 ## Main method and flag handling
+
+def normalize_time(value: str | None) -> str | None:
+    if value is None:
+        return None
+    digits = value.replace(":", "")
+    if len(digits) == 6 and digits.isdigit():
+        return ":".join([digits[:2], digits[2:4], digits[4:6]])
+    return value
+
 
 def add_run_selector_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("branch", nargs="?", default=None, help="Branch name.")
     parser.add_argument("date", nargs="?", default=None, help="Run date as YYYY-MM-DD.")
-    parser.add_argument("time", nargs="?", default=None, help="Run time as HH:MM:SS or HHMMSS.")
+    parser.add_argument("time", nargs="?", default=None, type=normalize_time, help="Run time as HH:MM:SS or HHMMSS.")
 
 
 def build_parser() -> argparse.ArgumentParser:
