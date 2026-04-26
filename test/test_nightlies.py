@@ -251,15 +251,12 @@ class TestCli(unittest.TestCase):
 
         with (
             self.client_open_patch(opener),
+            mock.patch.object(cli, "load_client_config", return_value=client_config),
             mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
             mock.patch.object(cli.subprocess, "run", side_effect=error),
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
-            rc = cli.cmd_download(
-                client_config,
-                "herbie",
-                cli.RunSelector("taylor-order0", "2026-04-19", "12:34:56"),
-            )
+            rc = cli.main(["download", "--repo", "herbie", "taylor-order0", "2026-04-19", "12:34:56"])
 
         self.assertEqual(rc, 1)
         self.assertIn("error: Command '['curl', '--fail']' returned non-zero exit status 22.", stderr.getvalue())
@@ -392,16 +389,14 @@ class TestCli(unittest.TestCase):
         with (
             self.client_open_patch(opener),
             mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
-            mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
-            rc = cli.cmd_status(
-                self.client_config(),
-                "herbie",
-                cli.RunSelector("taylor-order0", "2026-04-20", "150000"),
-            )
+            with self.assertRaisesRegex(cli.CliError, "No published report found in log."):
+                cli.cmd_status(
+                    self.client_config(),
+                    "herbie",
+                    cli.RunSelector("taylor-order0", "2026-04-20", "150000"),
+                )
 
-        self.assertEqual(rc, 1)
-        self.assertEqual(stderr.getvalue(), "error: No published report found in log.\n")
 
     def test_cmd_setup_saves_client_config(self) -> None:
         with (
@@ -435,7 +430,7 @@ class TestCli(unittest.TestCase):
             mock.patch.object(cli, "fetch_index_state", return_value=cli.IndexState(False, [])),
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
-            rc = cli.cmd_setup("https://nightlies.example")
+            rc = cli.main(["setup", "https://nightlies.example"])
 
         self.assertEqual(rc, 1)
         self.assertEqual(stderr.getvalue(), "error: could not find nightly controls at https://nightlies.example\n")
@@ -499,10 +494,11 @@ class TestCli(unittest.TestCase):
 
     def test_cmd_sync_refuses_when_ui_disables_sync(self) -> None:
         with (
+            mock.patch.object(cli, "load_client_config", return_value=self.client_config()),
             mock.patch.object(cli, "fetch_index_state", return_value=cli.IndexState(True, [])),
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
-            rc = cli.cmd_sync(self.client_config())
+            rc = cli.main(["sync"])
 
         self.assertEqual(rc, 1)
         self.assertEqual(stderr.getvalue(), "error: Nightly sync already running\n")
@@ -557,10 +553,11 @@ class TestCli(unittest.TestCase):
         state = cli.IndexState(False, [cli.StartTarget("herbie", "feature/test", True)])
 
         with (
+            mock.patch.object(cli, "load_client_config", return_value=self.client_config()),
             mock.patch.object(cli, "fetch_index_state", return_value=state),
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
-            rc = cli.cmd_start(self.client_config(), "herbie", "feature/test")
+            rc = cli.main(["start", "--repo", "herbie", "feature/test"])
 
         self.assertEqual(rc, 1)
         self.assertEqual(
@@ -586,10 +583,11 @@ class TestCli(unittest.TestCase):
 
         with (
             self.client_open_patch(ErrorOpener()),
+            mock.patch.object(cli, "load_client_config", return_value=client_config),
             mock.patch.object(cli, "fetch_index_state", return_value=state),
             mock.patch("sys.stderr", new_callable=io.StringIO) as stderr,
         ):
-            rc = cli.cmd_start(client_config, "herbie", "main")
+            rc = cli.main(["start", "--repo", "herbie", "main"])
 
         self.assertEqual(rc, 1)
         self.assertEqual(stderr.getvalue(), "error: Nightly sync already running\n")

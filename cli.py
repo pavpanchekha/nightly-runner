@@ -28,11 +28,15 @@ import urllib.request
 STATE_FILENAME = "state.json"
 
 
-class MissingClientConfig(ValueError):
+class CliError(Exception):
     pass
 
 
-class InvalidClientConfig(ValueError):
+class MissingClientConfig(CliError):
+    pass
+
+
+class InvalidClientConfig(CliError):
     pass
 
 
@@ -124,6 +128,14 @@ def load_client_config() -> ClientConfig:
             f"invalid client config {path}: expected string fields nightly_url, username, and password"
         )
     return ClientConfig(nightly_url, username, password)
+
+
+def format_error(exc: BaseException) -> str:
+    if isinstance(exc, urllib.error.HTTPError):
+        return format_http_error(exc)
+    if isinstance(exc, urllib.error.URLError):
+        return f"failed to fetch: {exc}"
+    return str(exc)
 
 
 ## Parsers; eventually the server should offer an API for all this
@@ -313,12 +325,12 @@ def infer_repo(cwd: str) -> str:
             repo = github_repo_name(parts[1])
             if repo is not None:
                 return repo
-    raise ValueError(f"could not infer GitHub repo from git remotes in {cwd}")
+    raise CliError(f"could not infer GitHub repo from git remotes in {cwd}")
 
 
 def validate_repo_name(repo: str) -> str:
     if "/" in repo:
-        raise ValueError(f"repo must be the short repo name, not {repo!r}")
+        raise CliError(f"repo must be the short repo name, not {repo!r}")
     return repo
 
 
@@ -433,11 +445,11 @@ def resolve_start_target(
     if len(matches) == 1:
         return matches[0]
     if len(matches) > 1:
-        raise ValueError(f"multiple configured start targets matched repo {repo!r} and branch {branch!r}")
+        raise CliError(f"multiple configured start targets matched repo {repo!r} and branch {branch!r}")
 
     if repo in {target.repo for target in index_state.start_targets}:
-        raise ValueError(f"branch {branch!r} is not available for repo {repo!r}")
-    raise ValueError(f"repo {repo!r} is not configured")
+        raise CliError(f"branch {branch!r} is not available for repo {repo!r}")
+    raise CliError(f"repo {repo!r} is not configured")
 
 
 def print_log(client_config: ClientConfig, url: str) -> None:
@@ -485,12 +497,15 @@ def find_report_url_in_log(client_config: ClientConfig, repo: str, log_text: str
 
 
 def fetch_manifest(client_config: ClientConfig, report_url: str) -> dict[str, object]:
-    manifest = json.loads(client_config.fetch(report_url + "/nightly_info.json"))
+    try:
+        manifest = json.loads(client_config.fetch(report_url + "/nightly_info.json"))
+    except json.JSONDecodeError as exc:
+        raise CliError(f"invalid nightly_info.json: {exc}") from exc
     if not isinstance(manifest, dict):
-        raise ValueError("nightly_info.json did not contain a JSON object")
+        raise CliError("nightly_info.json did not contain a JSON object")
     files = manifest.get("files")
     if not isinstance(files, list):
-        raise ValueError("nightly_info.json did not contain a files list")
+        raise CliError("nightly_info.json did not contain a files list")
     return manifest
 
 
@@ -547,12 +562,12 @@ def manifest_text(manifest: dict[str, object]) -> str:
 
 def manifest_paths(path_value: object, gzip_value: object) -> tuple[str, str]:
     if not isinstance(path_value, str):
-        raise ValueError("manifest file path was not a string")
+        raise CliError("manifest file path was not a string")
     if not isinstance(gzip_value, bool):
-        raise ValueError("manifest gzip flag was not a boolean")
+        raise CliError("manifest gzip flag was not a boolean")
     path = Path(path_value)
     if path.is_absolute() or ".." in path.parts:
-        raise ValueError(f"unsafe manifest path {path_value!r}")
+        raise CliError(f"unsafe manifest path {path_value!r}")
     if gzip_value:
         if path_value.endswith(".gz"):
             return path_value, path_value[:-3]
@@ -571,7 +586,7 @@ def download_report_files(
     file_paths: list[tuple[str, str]] = []
     for file_info in files:
         if not isinstance(file_info, dict):
-            raise ValueError("manifest file entry was not an object")
+            raise CliError("manifest file entry was not an object")
         file_paths.append(manifest_paths(file_info.get("path"), file_info.get("gzip")))
 
     with tempfile.NamedTemporaryFile("w", encoding="utf-8") as config_file:
@@ -618,7 +633,7 @@ def fetch_selected_manifest(client_config: ClientConfig, repo: str, selector: Ru
     log_text = client_config.fetch(entry.url)
     report_url = find_report_url_in_log(client_config, repo, log_text)
     if report_url is None:
-        raise ValueError("No published report found in log.")
+        raise CliError("No published report found in log.")
     return fetch_manifest(client_config, report_url)
 
 
@@ -653,101 +668,59 @@ def format_http_error(exc: urllib.error.HTTPError) -> str:
 ## Individual commands
 
 def cmd_setup(url: str) -> int:
-    try:
-        username = input("Username: ").strip()
-        if not username:
-            raise ValueError("username must not be empty")
-        password = getpass.getpass("Password: ")
-        if not password:
-            raise ValueError("password must not be empty")
-        client_config = ClientConfig(url.strip(), username, password)
-        index_state = fetch_index_state(client_config)
-        if not index_state.start_targets:
-            raise ValueError(f"could not find nightly controls at {client_config.index_url}")
-        path = save_client_config(client_config)
-    except urllib.error.URLError as exc:
-        print(f"error: failed to fetch {url}: {exc}", file=sys.stderr)
-        return 1
-    except (EOFError, OSError, ValueError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
+    username = input("Username: ").strip()
+    if not username:
+        raise CliError("username must not be empty")
+    password = getpass.getpass("Password: ")
+    if not password:
+        raise CliError("password must not be empty")
+    client_config = ClientConfig(url.strip(), username, password)
+    index_state = fetch_index_state(client_config)
+    if not index_state.start_targets:
+        raise CliError(f"could not find nightly controls at {client_config.index_url}")
+    path = save_client_config(client_config)
     print(f"Saved CLI config to {path}")
     return 0
 
 
 def cmd_sync(client_config: ClientConfig) -> int:
-    try:
-        index_state = fetch_index_state(client_config)
-        if index_state.sync_disabled:
-            print("error: Nightly sync already running", file=sys.stderr)
-            return 1
-        post_form(client_config, client_config.sync_url, {})
-    except urllib.error.HTTPError as exc:
-        print(f"error: {format_http_error(exc)}", file=sys.stderr)
-        return 1
-    except urllib.error.URLError as exc:
-        print(f"error: failed to fetch {client_config.index_url}: {exc}", file=sys.stderr)
-        return 1
+    index_state = fetch_index_state(client_config)
+    if index_state.sync_disabled:
+        raise CliError("Nightly sync already running")
+    post_form(client_config, client_config.sync_url, {})
     return 0
 
 
 def cmd_start(client_config: ClientConfig, repo: str, branch: str) -> int:
-    try:
-        index_state = fetch_index_state(client_config)
-        target = resolve_start_target(index_state, repo, branch)
-        if index_state.sync_disabled:
-            print("error: Nightly sync already running", file=sys.stderr)
-            return 1
-        if target.disabled:
-            branch_filename = escape_branch_filename(target.branch)
-            print(
-                f"error: Job nightly:{target.repo}:{branch_filename} already queued",
-                file=sys.stderr,
-            )
-            return 1
-        post_form(client_config, client_config.start_url, {"repo": target.repo, "branch": target.branch})
-    except urllib.error.HTTPError as exc:
-        print(f"error: {format_http_error(exc)}", file=sys.stderr)
-        return 1
-    except urllib.error.URLError as exc:
-        print(f"error: failed to fetch {client_config.index_url}: {exc}", file=sys.stderr)
-        return 1
-    except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
+    index_state = fetch_index_state(client_config)
+    target = resolve_start_target(index_state, repo, branch)
+    if index_state.sync_disabled:
+        raise CliError("Nightly sync already running")
+    if target.disabled:
+        branch_filename = escape_branch_filename(target.branch)
+        raise CliError(f"Job nightly:{target.repo}:{branch_filename} already queued")
+    post_form(client_config, client_config.start_url, {"repo": target.repo, "branch": target.branch})
     return 0
 
 
 def cmd_download(client_config: ClientConfig, repo: str, selector: RunSelector) -> int:
     assert selector.branch is not None
-    try:
-        entries = iter_entries(client_config)
-        entry = latest_matching_repo_entry(entries, repo, selector)
-        if entry is None:
-            print("No matching log found.", file=sys.stderr)
-            return 1
+    entries = iter_entries(client_config)
+    entry = latest_matching_repo_entry(entries, repo, selector)
+    if entry is None:
+        raise CliError("No matching log found.")
 
-        log_text = client_config.fetch(entry.url)
+    log_text = client_config.fetch(entry.url)
 
-        report_url = find_report_url_in_log(client_config, repo, log_text)
-        if report_url is None:
-            print("No published report found in log.", file=sys.stderr)
-            return 1
+    report_url = find_report_url_in_log(client_config, repo, log_text)
+    if report_url is None:
+        raise CliError("No published report found in log.")
 
-        manifest = fetch_manifest(client_config, report_url)
-        files = manifest["files"]
-        assert isinstance(files, list)
-        output_dir = Path(urllib.parse.urlsplit(report_url).path.rstrip("/")).name
-        file_count = download_report_files(report_url, files, Path(output_dir), client_config)
-    except urllib.error.URLError as exc:
-        print(f"error: failed to fetch {client_config.index_url}: {exc}", file=sys.stderr)
-        return 1
-    except subprocess.CalledProcessError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    except (OSError, ValueError, gzip.BadGzipFile) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
+    manifest = fetch_manifest(client_config, report_url)
+    files = manifest["files"]
+    assert isinstance(files, list)
+    output_dir = Path(urllib.parse.urlsplit(report_url).path.rstrip("/")).name
+    file_count = download_report_files(report_url, files, Path(output_dir), client_config)
     print(f"Downloaded {file_count} files to {output_dir}/")
     return 0
 
@@ -757,17 +730,12 @@ def cmd_list(
     repo: str,
     selector: RunSelector,
 ) -> int:
-    try:
-        if selector.branch is None and selector.date is None and selector.time is None:
-            entries = list(reversed(list(itertools.islice(repo_entries(iter_entries(client_config), repo), 20))))
-        else:
-            entries = list(reversed(matching_repo_entries(iter_entries(client_config), repo, selector)))
-    except urllib.error.URLError as exc:
-        print(f"error: failed to fetch {client_config.logs_url}: {exc}", file=sys.stderr)
-        return 1
+    if selector.branch is None and selector.date is None and selector.time is None:
+        entries = list(reversed(list(itertools.islice(repo_entries(iter_entries(client_config), repo), 20))))
+    else:
+        entries = list(reversed(matching_repo_entries(iter_entries(client_config), repo, selector)))
     if not entries:
-        print(f"No runs found for repo {repo}.", file=sys.stderr)
-        return 1
+        raise CliError(f"No runs found for repo {repo}.")
     for entry in entries:
         run = parse_repo_run(repo, entry)
         print(f"{run.date:10} {run.time:8} {run.branch}")
@@ -776,35 +744,22 @@ def cmd_list(
 
 def cmd_log(client_config: ClientConfig, repo: str, selector: RunSelector, follow: bool) -> int:
     assert selector.branch is not None
-    try:
-        entry = latest_matching_repo_entry(iter_entries(client_config), repo, selector)
-        if entry is None:
-            print("No matching log found.", file=sys.stderr)
-            return 1
-        if follow:
-            tail_log(client_config, entry.url)
-        else:
-            print_log(client_config, entry.url)
-    except urllib.error.URLError as exc:
-        print(f"error: failed to fetch {client_config.logs_url}: {exc}", file=sys.stderr)
-        return 1
+    entry = latest_matching_repo_entry(iter_entries(client_config), repo, selector)
+    if entry is None:
+        raise CliError("No matching log found.")
+    if follow:
+        tail_log(client_config, entry.url)
+    else:
+        print_log(client_config, entry.url)
     return 0
 
 
 def cmd_status(client_config: ClientConfig, repo: str, selector: RunSelector) -> int:
     assert selector.branch is not None
-    try:
-        manifest = fetch_selected_manifest(client_config, repo, selector)
-        if manifest is None:
-            print("No matching log found.", file=sys.stderr)
-            return 1
-        print(manifest_text(manifest))
-    except urllib.error.URLError as exc:
-        print(f"error: failed to fetch {client_config.logs_url}: {exc}", file=sys.stderr)
-        return 1
-    except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
+    manifest = fetch_selected_manifest(client_config, repo, selector)
+    if manifest is None:
+        raise CliError("No matching log found.")
+    print(manifest_text(manifest))
     return 0
 
 ## Main method and flag handling
@@ -851,38 +806,33 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    os.chdir(args.cwd)
-    if args.command == "setup":
-        return cmd_setup(args.url)
     try:
+        os.chdir(args.cwd)
+        if args.command == "setup":
+            return cmd_setup(args.url)
         client_config = load_client_config()
+        if args.command == "sync":
+            return cmd_sync(client_config)
+        if args.command == "start":
+            repo = validate_repo_name(args.repo) if args.repo else infer_repo(".")
+            return cmd_start(client_config, repo, args.branch)
+        selector = RunSelector(args.branch, args.date, args.time)
+        repo = validate_repo_name(args.repo) if args.repo else infer_repo(".")
+        if args.command == "list":
+            return cmd_list(client_config, repo, selector)
+        if args.command == "log":
+            return cmd_log(client_config, repo, selector, args.follow)
+        if args.command == "status":
+            return cmd_status(client_config, repo, selector)
+        if args.command == "download":
+            return cmd_download(client_config, repo, selector)
+        raise AssertionError(f"unknown command {args.command}")
     except (MissingClientConfig, InvalidClientConfig) as exc:
         print(f"error: {exc}. Run `cli setup <url>` to fix.", file=sys.stderr)
         return 1
-    if args.command == "sync":
-        return cmd_sync(client_config)
-    if args.command == "start":
-        try:
-            repo = validate_repo_name(args.repo) if args.repo else infer_repo(".")
-        except (subprocess.CalledProcessError, ValueError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 1
-        return cmd_start(client_config, repo, args.branch)
-    selector = RunSelector(args.branch, args.date, args.time)
-    try:
-        repo = validate_repo_name(args.repo) if args.repo else infer_repo(".")
-    except (subprocess.CalledProcessError, ValueError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
+    except (CliError, EOFError, OSError, gzip.BadGzipFile, subprocess.CalledProcessError, urllib.error.URLError) as exc:
+        print(f"error: {format_error(exc)}", file=sys.stderr)
         return 1
-    if args.command == "list":
-        return cmd_list(client_config, repo, selector)
-    if args.command == "log":
-        return cmd_log(client_config, repo, selector, args.follow)
-    if args.command == "status":
-        return cmd_status(client_config, repo, selector)
-    if args.command == "download":
-        return cmd_download(client_config, repo, selector)
-    raise AssertionError(f"unknown command {args.command}")
 
 
 if __name__ == "__main__":
