@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nightlies"
 version = "0.1.0"
-description = "CLI for querying nightly.cs.washington.edu logs and reports"
+description = "CLI for querying nightly logs and reports"
 readme = "README.md"
 authors = [
     { name = "Pavel Panchekha", email = "me@pavpanchekha.com" },
