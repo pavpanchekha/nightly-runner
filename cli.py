@@ -249,7 +249,8 @@ class IndexParser(HTMLParser):
 
 
 @dataclass(frozen=True)
-class RepoRun:
+class RunLog:
+    entry: LogEntry
     date: str
     time: str
     branch: str
@@ -268,6 +269,8 @@ COMPLETE_RE = re.compile(r"^Nightly used memory=.*timeout=.*$", re.MULTILINE)
 PUBLISH_RE = re.compile(r"^Publishing report directory .* to .*/reports/([^/]+)/([^/\n]+)$", re.MULTILINE)
 
 
+## Log index
+
 def iter_entries(client_config: ClientConfig) -> Iterator[LogEntry]:
     parser = NginxIndexParser(client_config.logs_url)
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
@@ -285,9 +288,7 @@ def iter_entries(client_config: ClientConfig) -> Iterator[LogEntry]:
     yield from parser.drain_entries()
 
 
-def fetch_index_state(client_config: ClientConfig) -> IndexState:
-    return IndexParser.parse(client_config.fetch(client_config.index_url), client_config.index_url)
-
+## Repo discovery
 
 def github_repo_name(url: str) -> str | None:
     if url.startswith("git@github.com:"):
@@ -320,36 +321,29 @@ def infer_repo(cwd: str) -> str:
     raise CliError(f"could not infer GitHub repo from git remotes in {cwd}")
 
 
-def escape_branch_filename(branch: str) -> str:
-    return branch.replace("%", "_25").replace("/", "_2f")
+## Run logs
 
-
-def strip_timestamp_prefix(stem: str) -> str | None:
-    parts = stem.split("-")
-    if len(parts) < 4:
+def parse_run_log(repo: str, entry: LogEntry) -> RunLog | None:
+    parts = Path(entry.name).stem.split("-")
+    if len(parts) < 5:
         return None
     if len(parts[0]) != 4 or len(parts[1]) != 2 or len(parts[2]) != 2:
         return None
-    if len(parts[3]) != 6 or not parts[3].isdigit():
+    raw_time = parts[3]
+    if len(raw_time) != 6 or not raw_time.isdigit():
         return None
+
     rest = parts[4:]
     if rest and rest[0].isdigit():
         rest = rest[1:]
-    return "-".join(rest) if rest else ""
-
-
-def repo_entries(entries: Iterable[LogEntry], repo: str) -> Iterator[LogEntry]:
-    for entry in entries:
-        rest = strip_timestamp_prefix(Path(entry.name).stem)
-        if rest and rest.startswith(repo + "-"):
-            yield entry
-
-
-def parse_repo_run(repo: str, entry: LogEntry) -> RepoRun:
-    parts = Path(entry.name).stem.split("-")
-    branch_parts = parts[5 + len(repo.split("-")) :]
-    raw_time = parts[3]
-    return RepoRun(
+    repo_parts = repo.split("-")
+    if rest[: len(repo_parts)] != repo_parts:
+        return None
+    branch_parts = rest[len(repo_parts) :]
+    if not branch_parts:
+        return None
+    return RunLog(
+        entry=entry,
         date="-".join(parts[:3]),
         time=":".join([raw_time[:2], raw_time[2:4], raw_time[4:6]]),
         branch="-".join(branch_parts),
@@ -365,21 +359,29 @@ def normalize_time(value: str | None) -> str | None:
     return value
 
 
-def matching_repo_entries(
+def matching_run_logs(
     entries: Iterable[LogEntry],
     repo: str,
     selector: RunSelector,
-) -> Iterator[LogEntry]:
+) -> Iterator[RunLog]:
     normalized_time = normalize_time(selector.time)
-    for entry in repo_entries(entries, repo):
-        run = parse_repo_run(repo, entry)
+    for entry in entries:
+        run = parse_run_log(repo, entry)
+        if run is None:
+            continue
         if selector.branch is not None and run.branch != selector.branch:
             continue
         if selector.date is not None and run.date != selector.date:
             continue
         if normalized_time is not None and run.time != normalized_time:
             continue
-        yield entry
+        yield run
+
+
+## Server controls
+
+def fetch_index_state(client_config: ClientConfig) -> IndexState:
+    return IndexParser.parse(client_config.fetch(client_config.index_url), client_config.index_url)
 
 
 def resolve_start_target(
@@ -402,9 +404,18 @@ def resolve_start_target(
     raise CliError(f"repo {repo!r} is not configured")
 
 
-def print_log(client_config: ClientConfig, url: str) -> None:
-    sys.stdout.write(client_config.fetch(url))
+def post_form(client_config: ClientConfig, url: str, fields: dict[str, str]) -> None:
+    request = urllib.request.Request(
+        url,
+        data=urllib.parse.urlencode(fields).encode("utf-8"),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with client_config.open(request) as response:
+        response.read()
 
+
+## Logs
 
 def tail_log(client_config: ClientConfig, url: str) -> None:
     offset = 0
@@ -437,6 +448,8 @@ def tail_log(client_config: ClientConfig, url: str) -> None:
         time.sleep(1)
 
 
+## Reports
+
 def find_report_url_in_log(client_config: ClientConfig, repo: str, log_text: str) -> str | None:
     matched: str | None = None
     for match in PUBLISH_RE.finditer(log_text):
@@ -444,6 +457,18 @@ def find_report_url_in_log(client_config: ClientConfig, repo: str, log_text: str
             continue
         matched = client_config.reports_url + repo + "/" + match.group(2)
     return matched
+
+
+def fetch_published_report(
+    client_config: ClientConfig,
+    repo: str,
+    entry: LogEntry,
+) -> tuple[str, dict[str, object]]:
+    log_text = client_config.fetch(entry.url)
+    report_url = find_report_url_in_log(client_config, repo, log_text)
+    if report_url is None:
+        raise CliError("No published report found in log.")
+    return report_url, fetch_manifest(client_config, report_url)
 
 
 def fetch_manifest(client_config: ClientConfig, report_url: str) -> dict[str, object]:
@@ -579,16 +604,7 @@ def download_report_files(
     return len(file_paths)
 
 
-def post_form(client_config: ClientConfig, url: str, fields: dict[str, str]) -> None:
-    request = urllib.request.Request(
-        url,
-        data=urllib.parse.urlencode(fields).encode("utf-8"),
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        method="POST",
-    )
-    with client_config.open(request) as response:
-        response.read()
-
+## Error formatting
 
 def format_http_error(exc: urllib.error.HTTPError) -> str:
     try:
@@ -656,17 +672,11 @@ def cmd_start(client_config: ClientConfig, repo: str, branch: str) -> int:
 
 
 def cmd_download(client_config: ClientConfig, repo: str, selector: RunSelector) -> int:
-    entry = next(matching_repo_entries(iter_entries(client_config), repo, selector), None)
-    if entry is None:
+    run_log = next(matching_run_logs(iter_entries(client_config), repo, selector), None)
+    if run_log is None:
         raise CliError("No matching log found.")
 
-    log_text = client_config.fetch(entry.url)
-
-    report_url = find_report_url_in_log(client_config, repo, log_text)
-    if report_url is None:
-        raise CliError("No published report found in log.")
-
-    manifest = fetch_manifest(client_config, report_url)
+    report_url, manifest = fetch_published_report(client_config, repo, run_log.entry)
     output_dir = Path(urllib.parse.urlsplit(report_url).path.rstrip("/")).name
     file_count = download_report_files(report_url, manifest_files(manifest), Path(output_dir), client_config)
     print(f"Downloaded {file_count} files to {output_dir}/")
@@ -679,38 +689,33 @@ def cmd_list(
     selector: RunSelector,
 ) -> int:
     entries = list(itertools.islice(
-        matching_repo_entries(iter_entries(client_config), repo, selector),
+        matching_run_logs(iter_entries(client_config), repo, selector),
         20,
     ))
     entries.reverse()
     if not entries:
         raise CliError(f"No runs found for repo {repo}.")
-    for entry in entries:
-        run = parse_repo_run(repo, entry)
+    for run in entries:
         print(f"{run.date:10} {run.time:8} {run.branch}")
     return 0
 
 
 def cmd_log(client_config: ClientConfig, repo: str, selector: RunSelector, follow: bool) -> int:
-    entry = next(matching_repo_entries(iter_entries(client_config), repo, selector), None)
-    if entry is None:
+    run_log = next(matching_run_logs(iter_entries(client_config), repo, selector), None)
+    if run_log is None:
         raise CliError("No matching log found.")
     if follow:
-        tail_log(client_config, entry.url)
+        tail_log(client_config, run_log.entry.url)
     else:
-        print_log(client_config, entry.url)
+        sys.stdout.write(client_config.fetch(run_log.entry.url))
     return 0
 
 
 def cmd_status(client_config: ClientConfig, repo: str, selector: RunSelector) -> int:
-    entry = next(matching_repo_entries(iter_entries(client_config), repo, selector), None)
-    if entry is None:
+    run_log = next(matching_run_logs(iter_entries(client_config), repo, selector), None)
+    if run_log is None:
         raise CliError("No matching log found.")
-    log_text = client_config.fetch(entry.url)
-    report_url = find_report_url_in_log(client_config, repo, log_text)
-    if report_url is None:
-        raise CliError("No published report found in log.")
-    manifest = fetch_manifest(client_config, report_url)
+    _, manifest = fetch_published_report(client_config, repo, run_log.entry)
     print(manifest_text(manifest))
     return 0
 
