@@ -14,6 +14,7 @@ import sys
 import tempfile
 import unittest
 import urllib.error
+import urllib.parse
 from typing import Any, Literal, cast
 from unittest import mock
 
@@ -139,6 +140,12 @@ class TestCli(unittest.TestCase):
     def client_config(self, base_url: str = "https://nightly.cs.washington.edu/") -> cli.ClientConfig:
         return cli.ClientConfig(base_url, "uwplse", "uwplse")
 
+    def absolute_url(self, client_config: cli.ClientConfig, path: str) -> str:
+        return urllib.parse.urljoin(client_config.index_url, path)
+
+    def report_url(self, client_config: cli.ClientConfig, path: str) -> str:
+        return urllib.parse.urljoin(client_config.index_url, cli.REPORTS_PATH + path)
+
     def client_open_patch(self, opener: object) -> Any:
         return mock.patch.object(
             cli.ClientConfig,
@@ -167,7 +174,7 @@ class TestCli(unittest.TestCase):
     def test_cmd_download_fetches_manifest_and_ungzips_files(self) -> None:
         report_name = "1713570000:taylor-order0:deadbeef"
         client_config = self.client_config()
-        report_url = client_config.reports_url + "herbie/" + report_name
+        report_url = self.report_url(client_config, "herbie/" + report_name)
         manifest = {
             "files": [
                 {"path": "index.html", "gzip": False},
@@ -177,7 +184,7 @@ class TestCli(unittest.TestCase):
         }
         opener = FakeOpener(
             {
-                "https://nightly.cs.washington.edu/logs/taylor-order0.log": (
+                self.absolute_url(client_config, "/logs/taylor-order0.log"): (
                     "Publishing report directory /tmp/report to "
                     f"/srv/reports/herbie/{report_name}\n"
                 ).encode("utf-8"),
@@ -188,7 +195,7 @@ class TestCli(unittest.TestCase):
         )
         entry = cli.LogEntry(
             name="2026-04-19-123456-1-herbie-taylor-order0.log",
-            url="https://nightly.cs.washington.edu/logs/taylor-order0.log",
+            url="/logs/taylor-order0.log",
         )
 
         with (
@@ -214,7 +221,7 @@ class TestCli(unittest.TestCase):
 
     def test_download_report_files_accepts_logical_manifest_paths_for_gzip(self) -> None:
         client_config = self.client_config()
-        report_url = client_config.reports_url + "herbie/1713570001:taylor-order0:feedface"
+        report_url = self.report_url(client_config, "herbie/1713570001:taylor-order0:feedface")
 
         with mock.patch.object(cli.subprocess, "run", self.fake_curl_run({
             report_url + "/results.json.gz": gzip.compress(b"{\"ok\":true}\n"),
@@ -232,15 +239,15 @@ class TestCli(unittest.TestCase):
     def test_cmd_download_reports_curl_failures_cleanly(self) -> None:
         report_name = "1713570002:taylor-order0:badc0de"
         client_config = self.client_config()
-        report_url = client_config.reports_url + "herbie/" + report_name
+        report_url = self.report_url(client_config, "herbie/" + report_name)
         manifest = {"files": [{"path": "results.json", "gzip": False}]}
         entry = cli.LogEntry(
             name="2026-04-19-123456-1-herbie-taylor-order0.log",
-            url="https://nightly.cs.washington.edu/logs/taylor-order0.log",
+            url="/logs/taylor-order0.log",
         )
         opener = FakeOpener(
             {
-                entry.url: (
+                self.absolute_url(client_config, entry.url): (
                     "Publishing report directory /tmp/report to "
                     f"/srv/reports/herbie/{report_name}\n"
                 ).encode("utf-8"),
@@ -266,15 +273,15 @@ class TestCli(unittest.TestCase):
         entries = [
             cli.LogEntry(
                 name="2026-04-19-123456-1-herbie-main.log",
-                url="https://nightly.cs.washington.edu/logs/main.log",
+                url="/logs/main.log",
             ),
             cli.LogEntry(
                 name="2026-04-19-123456-1-herbie-taylor-order0.log",
-                url="https://nightly.cs.washington.edu/logs/taylor-old.log",
+                url="/logs/taylor-old.log",
             ),
             cli.LogEntry(
                 name="2026-04-20-090832-1-herbie-taylor-order0.log",
-                url="https://nightly.cs.washington.edu/logs/taylor-new.log",
+                url="/logs/taylor-new.log",
             ),
         ]
 
@@ -295,11 +302,11 @@ class TestCli(unittest.TestCase):
         entries = [
             cli.LogEntry(
                 name="2026-04-19-123456-1-herbie-taylor-order0.log",
-                url="https://nightly.cs.washington.edu/logs/taylor-old.log",
+                url="/logs/taylor-old.log",
             ),
             cli.LogEntry(
                 name="2026-04-20-090832-1-herbie-taylor-order0.log",
-                url="https://nightly.cs.washington.edu/logs/taylor-new.log",
+                url="/logs/taylor-new.log",
             ),
         ]
 
@@ -320,14 +327,14 @@ class TestCli(unittest.TestCase):
         entries = [
             cli.LogEntry(
                 name="2026-04-20-090832-1-herbie-taylor-order0.log",
-                url="https://nightly.cs.washington.edu/logs/taylor-new.log",
+                url="/logs/taylor-new.log",
             ),
             cli.LogEntry(
                 name="2026-04-19-123456-1-herbie-main.log",
-                url="https://nightly.cs.washington.edu/logs/main.log",
+                url="/logs/main.log",
             ),
         ]
-        opener = FakeOpener({entries[0].url: b"latest log\n"})
+        opener = FakeOpener({self.absolute_url(self.client_config(), entries[0].url): b"latest log\n"})
 
         with (
             self.client_open_patch(opener),
@@ -344,7 +351,7 @@ class TestCli(unittest.TestCase):
     def test_cmd_status_prints_manifest_metadata(self) -> None:
         report_name = "1713570000:taylor-order0:deadbeef"
         client_config = self.client_config()
-        report_url = client_config.reports_url + "herbie/" + report_name
+        report_url = self.report_url(client_config, "herbie/" + report_name)
         manifest = {
             "repo": "herbie",
             "branch": "taylor-order0",
@@ -367,11 +374,11 @@ class TestCli(unittest.TestCase):
         }
         entry = cli.LogEntry(
             name="2026-04-20-150000-1-herbie-taylor-order0.log",
-            url="https://nightly.cs.washington.edu/logs/taylor-order0.log",
+            url="/logs/taylor-order0.log",
         )
         opener = FakeOpener(
             {
-                entry.url: (
+                self.absolute_url(client_config, entry.url): (
                     "Publishing report directory /tmp/report to "
                     f"/srv/reports/herbie/{report_name}\n"
                 ).encode("utf-8"),
@@ -408,7 +415,7 @@ class TestCli(unittest.TestCase):
     def test_main_status_without_branch_prints_latest_repo_run(self) -> None:
         report_name = "1713570003:feature:decafbad"
         client_config = self.client_config()
-        report_url = client_config.reports_url + "herbie/" + report_name
+        report_url = self.report_url(client_config, "herbie/" + report_name)
         manifest = {
             "repo": "herbie",
             "branch": "feature",
@@ -417,11 +424,11 @@ class TestCli(unittest.TestCase):
         }
         entry = cli.LogEntry(
             name="2026-04-21-150000-1-herbie-feature.log",
-            url="https://nightly.cs.washington.edu/logs/feature.log",
+            url="/logs/feature.log",
         )
         opener = FakeOpener(
             {
-                entry.url: (
+                self.absolute_url(client_config, entry.url): (
                     "Publishing report directory /tmp/report to "
                     f"/srv/reports/herbie/{report_name}\n"
                 ).encode("utf-8"),
@@ -444,9 +451,9 @@ class TestCli(unittest.TestCase):
     def test_cmd_status_requires_published_report(self) -> None:
         entry = cli.LogEntry(
             name="2026-04-20-150000-1-herbie-taylor-order0.log",
-            url="https://nightly.cs.washington.edu/logs/taylor-order0.log",
+            url="/logs/taylor-order0.log",
         )
-        opener = FakeOpener({entry.url: b"still running\n"})
+        opener = FakeOpener({self.absolute_url(self.client_config(), entry.url): b"still running\n"})
 
         with (
             self.client_open_patch(opener),
@@ -505,6 +512,22 @@ class TestCli(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertEqual(stderr.getvalue(), "error: client is not configured. Run `cli setup <url>` to fix.\n")
 
+    def test_nginx_index_parser_uses_relative_log_urls(self) -> None:
+        entries = cli.NginxIndexParser.parse(
+            '<a href="2026-04-20-090832-1-herbie-main.log">main</a>',
+            "/logs/",
+        )
+
+        self.assertEqual(
+            entries,
+            [
+                cli.LogEntry(
+                    "2026-04-20-090832-1-herbie-main.log",
+                    "/logs/2026-04-20-090832-1-herbie-main.log",
+                )
+            ],
+        )
+
     def test_infer_repo_returns_short_github_repo_name(self) -> None:
         result = subprocess.CompletedProcess(
             ["git", "-C", ".", "remote", "-v"],
@@ -518,10 +541,10 @@ class TestCli(unittest.TestCase):
     def test_parse_index_state_reads_sync_and_start_controls(self) -> None:
         state = cli.IndexParser.parse(
             """
-            <form action="https://nightly.cs.washington.edu/dryrun" method="post">
+            <form action="/dryrun" method="post">
               <button disabled>Sync with Github</button>
             </form>
-            <form action="https://nightly.cs.washington.edu/runnow" method="post">
+            <form action="runnow" method="post">
               <input type="hidden" name="repo" value="herbie" />
               <input type="hidden" name="branch" value="main" />
               <button>Run</button>
@@ -532,7 +555,7 @@ class TestCli(unittest.TestCase):
               <button disabled>Run</button>
             </form>
             """,
-            self.client_config().index_url,
+            cli.INDEX_PATH,
         )
 
         self.assertTrue(state.sync_disabled)
@@ -573,7 +596,7 @@ class TestCli(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(len(requests), 1)
         request = requests[0]
-        self.assertEqual(request.full_url, self.client_config().sync_url)
+        self.assertEqual(request.full_url, urllib.parse.urljoin(self.client_config().index_url, cli.SYNC_PATH))
         self.assertEqual(request.get_method(), "POST")
         self.assertEqual(request.data, b"")
 
@@ -597,7 +620,7 @@ class TestCli(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(len(requests), 1)
         request = requests[0]
-        self.assertEqual(request.full_url, self.client_config().start_url)
+        self.assertEqual(request.full_url, urllib.parse.urljoin(self.client_config().index_url, cli.START_PATH))
         self.assertEqual(request.get_method(), "POST")
         self.assertEqual(request.data, b"repo=herbie&branch=feature%2Ftest")
 
@@ -625,7 +648,7 @@ class TestCli(unittest.TestCase):
             def open(self, request: object) -> FakeResponse:
                 assert not isinstance(request, str)
                 raise urllib.error.HTTPError(
-                    client_config.start_url,
+                    urllib.parse.urljoin(client_config.index_url, cli.START_PATH),
                     409,
                     "Conflict",
                     hdrs=None,

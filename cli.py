@@ -26,6 +26,11 @@ import urllib.request
 ## Setup & config file
 
 STATE_FILENAME = "state.json"
+INDEX_PATH = "/"
+LOGS_PATH = "/logs/?C=M&O=D"
+REPORTS_PATH = "/reports/"
+SYNC_PATH = "/dryrun"
+START_PATH = "/runnow"
 
 
 class CliError(Exception):
@@ -46,22 +51,6 @@ class ClientConfig:
     username: str
     password: str
 
-    @property
-    def logs_url(self) -> str:
-        return urllib.parse.urljoin(self.index_url, "logs/") + "?C=M&O=D"
-
-    @property
-    def reports_url(self) -> str:
-        return urllib.parse.urljoin(self.index_url, "reports/")
-
-    @property
-    def sync_url(self) -> str:
-        return urllib.parse.urljoin(self.index_url, "dryrun")
-
-    @property
-    def start_url(self) -> str:
-        return urllib.parse.urljoin(self.index_url, "runnow")
-
     def open(self, request: str | urllib.request.Request) -> urllib.response.addinfourl:
         password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
         password_mgr.add_password(None, self.index_url, self.username, self.password)
@@ -69,8 +58,18 @@ class ClientConfig:
         return opener.open(request)
 
     def fetch(self, url: str) -> str:
-        with self.open(url) as response:
+        with self.open(urllib.parse.urljoin(self.index_url, url)) as response:
             return response.read().decode("utf-8", errors="replace")
+
+    def post(self, url: str, fields: dict[str, str]) -> None:
+        request = urllib.request.Request(
+            urllib.parse.urljoin(self.index_url, url),
+            data=urllib.parse.urlencode(fields).encode("utf-8"),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            method="POST",
+        )
+        with self.open(request) as response:
+            response.read()
 
 
 def client_state_path() -> Path:
@@ -139,9 +138,9 @@ class LogEntry:
 
 
 class NginxIndexParser(HTMLParser):
-    def __init__(self, base_url: str):
+    def __init__(self, base_path: str):
         super().__init__()
-        self.base_url = base_url
+        self.base_path = base_path
         self.entries: list[LogEntry] = []
         self._href: str | None = None
         self._text: list[str] = []
@@ -165,7 +164,7 @@ class NginxIndexParser(HTMLParser):
         self._text = []
         if not href.endswith(".log") or text == "Parent directory/":
             return
-        self.entries.append(LogEntry(Path(href).name, urllib.parse.urljoin(self.base_url, href)))
+        self.entries.append(LogEntry(Path(href).name, urllib.parse.urljoin(self.base_path, href)))
 
     def drain_entries(self) -> list[LogEntry]:
         entries = self.entries
@@ -173,8 +172,8 @@ class NginxIndexParser(HTMLParser):
         return entries
 
     @classmethod
-    def parse(cls, payload: str, base_url: str) -> list[LogEntry]:
-        parser = cls(base_url)
+    def parse(cls, payload: str, base_path: str) -> list[LogEntry]:
+        parser = cls(base_path)
         parser.feed(payload)
         parser.close()
         deduped: dict[str, LogEntry] = {}
@@ -197,12 +196,12 @@ class IndexState:
     
 
 class IndexParser(HTMLParser):
-    def __init__(self, base_url: str):
+    def __init__(self, base_path: str):
         super().__init__()
-        self.base_url = base_url
+        self.base_path = base_path
         self.sync_disabled = False
         self.start_targets: list[StartTarget] = []
-        self._form_action: str | None = None
+        self._form_path: str | None = None
         self._form_inputs: dict[str, str] = {}
         self._button_disabled = False
 
@@ -210,11 +209,15 @@ class IndexParser(HTMLParser):
         attr_map = dict(attrs)
         if tag == "form":
             action = attr_map.get("action")
-            self._form_action = urllib.parse.urljoin(self.base_url, action) if action else None
+            if action is None:
+                self._form_path = None
+            else:
+                path = urllib.parse.urlsplit(urllib.parse.urljoin(self.base_path, action)).path
+                self._form_path = "/" + path.strip("/")
             self._form_inputs = {}
             self._button_disabled = False
             return
-        if self._form_action is None:
+        if self._form_path is None:
             return
         if tag == "input":
             name = attr_map.get("name")
@@ -226,23 +229,22 @@ class IndexParser(HTMLParser):
             self._button_disabled = "disabled" in attr_map
 
     def handle_endtag(self, tag: str) -> None:
-        if tag != "form" or self._form_action is None:
+        if tag != "form" or self._form_path is None:
             return
-        form_path = "/" + urllib.parse.urlsplit(self._form_action).path.strip("/")
-        if form_path == "/" + urllib.parse.urlsplit(urllib.parse.urljoin(self.base_url, "dryrun")).path.strip("/"):
+        if self._form_path == SYNC_PATH:
             self.sync_disabled = self._button_disabled
-        elif form_path == "/" + urllib.parse.urlsplit(urllib.parse.urljoin(self.base_url, "runnow")).path.strip("/"):
+        elif self._form_path == START_PATH:
             repo = self._form_inputs.get("repo")
             branch = self._form_inputs.get("branch")
             if repo is not None and branch is not None:
                 self.start_targets.append(StartTarget(repo, branch, self._button_disabled))
-        self._form_action = None
+        self._form_path = None
         self._form_inputs = {}
         self._button_disabled = False
 
     @classmethod
-    def parse(cls, payload: str, base_url: str) -> IndexState:
-        parser = cls(base_url)
+    def parse(cls, payload: str, base_path: str) -> IndexState:
+        parser = cls(base_path)
         parser.feed(payload)
         parser.close()
         return IndexState(parser.sync_disabled, parser.start_targets)
@@ -272,9 +274,10 @@ PUBLISH_RE = re.compile(r"^Publishing report directory .* to .*/reports/([^/]+)/
 ## Log index
 
 def iter_entries(client_config: ClientConfig) -> Iterator[LogEntry]:
-    parser = NginxIndexParser(client_config.logs_url)
+    logs_url = urllib.parse.urljoin(client_config.index_url, LOGS_PATH)
+    parser = NginxIndexParser(urllib.parse.urlsplit(LOGS_PATH).path)
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-    with client_config.open(client_config.logs_url) as response:
+    with client_config.open(logs_url) as response:
         while True:
             chunk = response.read(65536)
             if not chunk:
@@ -381,7 +384,7 @@ def matching_run_logs(
 ## Server controls
 
 def fetch_index_state(client_config: ClientConfig) -> IndexState:
-    return IndexParser.parse(client_config.fetch(client_config.index_url), client_config.index_url)
+    return IndexParser.parse(client_config.fetch(INDEX_PATH), INDEX_PATH)
 
 
 def resolve_start_target(
@@ -404,24 +407,13 @@ def resolve_start_target(
     raise CliError(f"repo {repo!r} is not configured")
 
 
-def post_form(client_config: ClientConfig, url: str, fields: dict[str, str]) -> None:
-    request = urllib.request.Request(
-        url,
-        data=urllib.parse.urlencode(fields).encode("utf-8"),
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        method="POST",
-    )
-    with client_config.open(request) as response:
-        response.read()
-
-
 ## Logs
 
 def tail_log(client_config: ClientConfig, url: str) -> None:
     offset = 0
     recent = ""
     while True:
-        req = urllib.request.Request(url)
+        req = urllib.request.Request(urllib.parse.urljoin(client_config.index_url, url))
         req.add_header("Range", f"bytes={offset}-")
         try:
             with client_config.open(req) as response:
@@ -450,12 +442,12 @@ def tail_log(client_config: ClientConfig, url: str) -> None:
 
 ## Reports
 
-def find_report_url_in_log(client_config: ClientConfig, repo: str, log_text: str) -> str | None:
+def find_report_url_in_log(repo: str, log_text: str) -> str | None:
     matched: str | None = None
     for match in PUBLISH_RE.finditer(log_text):
         if match.group(1) != repo:
             continue
-        matched = client_config.reports_url + repo + "/" + match.group(2)
+        matched = REPORTS_PATH + repo + "/" + match.group(2)
     return matched
 
 
@@ -465,7 +457,7 @@ def fetch_published_report(
     entry: LogEntry,
 ) -> tuple[str, dict[str, object]]:
     log_text = client_config.fetch(entry.url)
-    report_url = find_report_url_in_log(client_config, repo, log_text)
+    report_url = find_report_url_in_log(repo, log_text)
     if report_url is None:
         raise CliError("No published report found in log.")
     return report_url, fetch_manifest(client_config, report_url)
@@ -569,7 +561,10 @@ def download_report_files(
 
     with tempfile.NamedTemporaryFile("w", encoding="utf-8") as config_file:
         for remote_relpath, _ in file_paths:
-            remote_url = report_url + "/" + urllib.parse.quote(remote_relpath)
+            remote_url = urllib.parse.urljoin(
+                client_config.index_url,
+                report_url + "/" + urllib.parse.quote(remote_relpath),
+            )
             local_path = output_dir / remote_relpath
             print(f'url = "{remote_url}"', file=config_file)
             print(f'output = "{local_path}"', file=config_file)
@@ -656,7 +651,7 @@ def cmd_sync(client_config: ClientConfig) -> int:
     index_state = fetch_index_state(client_config)
     if index_state.sync_disabled:
         raise CliError("Nightly sync already running")
-    post_form(client_config, client_config.sync_url, {})
+    client_config.post(SYNC_PATH, {})
     return 0
 
 
@@ -667,7 +662,7 @@ def cmd_start(client_config: ClientConfig, repo: str, branch: str) -> int:
         raise CliError("Nightly sync already running")
     if target.disabled:
         raise CliError(f"Branch {target.branch} on {target.repo} already queued")
-    post_form(client_config, client_config.start_url, {"repo": target.repo, "branch": target.branch})
+    client_config.post(START_PATH, {"repo": target.repo, "branch": target.branch})
     return 0
 
 
