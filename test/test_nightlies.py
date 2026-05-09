@@ -328,7 +328,7 @@ class TestCli(unittest.TestCase):
             "2026-04-20 09:08:32 taylor-order0\n",
         )
 
-    def test_main_log_without_branch_prints_latest_repo_run(self) -> None:
+    def test_main_log_without_branch_defaults_to_current_branch(self) -> None:
         entries = [
             cli.LogEntry(
                 name="2026-04-20-090832-1-herbie-taylor-order0.log",
@@ -339,19 +339,20 @@ class TestCli(unittest.TestCase):
                 url="/logs/main.log",
             ),
         ]
-        opener = FakeOpener({self.absolute_url(self.client_config(), entries[0].url): b"latest log\n"})
+        opener = FakeOpener({self.absolute_url(self.client_config(), entries[1].url): b"main log\n"})
 
         with (
             self.client_open_patch(opener),
             mock.patch.object(cli, "load_client_config", return_value=self.client_config()),
             mock.patch.object(cli, "infer_repo", return_value="herbie"),
+            mock.patch.object(cli, "current_branch", return_value="main"),
             mock.patch.object(cli, "iter_entries", return_value=iter(entries)),
             mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
         ):
             rc = cli.main(["log"])
 
         self.assertEqual(rc, 0)
-        self.assertEqual(stdout.getvalue(), "latest log\n")
+        self.assertEqual(stdout.getvalue(), "main log\n")
 
     def test_cmd_status_prints_manifest_metadata(self) -> None:
         report_name = "1713570000:taylor-order0:deadbeef"
@@ -418,7 +419,7 @@ class TestCli(unittest.TestCase):
             "Log      https://nightly.cs.washington.edu/logs/taylor-order0.log\n",
         )
 
-    def test_main_status_without_branch_prints_latest_repo_run(self) -> None:
+    def test_main_status_without_branch_defaults_to_current_branch(self) -> None:
         report_name = "1713570003:feature:decafbad"
         client_config = self.client_config()
         report_url = self.report_url(client_config, "herbie/" + report_name)
@@ -446,6 +447,7 @@ class TestCli(unittest.TestCase):
             self.client_open_patch(opener),
             mock.patch.object(cli, "load_client_config", return_value=client_config),
             mock.patch.object(cli, "infer_repo", return_value="herbie"),
+            mock.patch.object(cli, "current_branch", return_value="feature"),
             mock.patch.object(cli, "iter_entries", return_value=iter([entry])),
             mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
         ):
@@ -520,6 +522,35 @@ class TestCli(unittest.TestCase):
 
         self.assertEqual(rc, 1)
         self.assertEqual(stderr.getvalue(), "error: client is not configured. Run `cli setup <url>` to fix.\n")
+
+    def test_main_list_without_branch_does_not_default_to_current_branch(self) -> None:
+        entries = [
+            cli.LogEntry(
+                name="2026-04-19-123456-1-herbie-main.log",
+                url="/logs/main.log",
+            ),
+            cli.LogEntry(
+                name="2026-04-20-090832-1-herbie-feature.log",
+                url="/logs/feature.log",
+            ),
+        ]
+
+        with (
+            mock.patch.object(cli, "load_client_config", return_value=self.client_config()),
+            mock.patch.object(cli, "infer_repo", return_value="herbie"),
+            mock.patch.object(cli, "current_branch") as current_branch,
+            mock.patch.object(cli, "iter_entries", return_value=iter(reversed(entries))),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            rc = cli.main(["list"])
+
+        self.assertEqual(rc, 0)
+        current_branch.assert_not_called()
+        self.assertEqual(
+            stdout.getvalue(),
+            "2026-04-19 12:34:56 main\n"
+            "2026-04-20 09:08:32 feature\n",
+        )
 
     def test_nginx_index_parser_uses_relative_log_urls(self) -> None:
         entries = cli.NginxIndexParser.parse(
@@ -655,6 +686,31 @@ class TestCli(unittest.TestCase):
             stderr.getvalue(),
             "error: Branch feature/test on herbie already queued\n",
         )
+
+    def test_main_start_without_branch_defaults_to_current_branch(self) -> None:
+        requests: list[urllib.request.Request] = []
+
+        class CapturingOpener:
+            def open(self, request: object) -> FakeResponse:
+                assert not isinstance(request, str)
+                requests.append(cast(urllib.request.Request, request))
+                return FakeResponse(b"ok")
+
+        state = cli.IndexState(False, [cli.StartTarget("herbie", "feature/test", False)])
+
+        with (
+            self.client_open_patch(CapturingOpener()),
+            mock.patch.object(cli, "load_client_config", return_value=self.client_config()),
+            mock.patch.object(cli, "infer_repo", return_value="herbie"),
+            mock.patch.object(cli, "current_branch", return_value="feature/test"),
+            mock.patch.object(cli.ClientConfig, "fetch", return_value=""),
+            mock.patch.object(cli.IndexParser, "parse", return_value=state),
+        ):
+            rc = cli.main(["start"])
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0].data, b"repo=herbie&branch=feature%2Ftest")
 
     def test_cmd_start_surfaces_http_error_message(self) -> None:
         client_config = self.client_config()

@@ -366,6 +366,19 @@ def infer_repo(cwd: str) -> str:
     raise CliError(f"could not infer GitHub repo from git remotes in {cwd}")
 
 
+def current_branch(cwd: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", cwd, "branch", "--show-current"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    branch = result.stdout.strip()
+    if not branch:
+        raise CliError(f"could not infer current Git branch in {cwd}")
+    return branch
+
+
 ## Run logs
 
 def parse_run_log(repo: str, entry: LogEntry) -> RunLog | None:
@@ -775,7 +788,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_run_selector_args(list_parser)
 
     start_parser = subparsers.add_parser("start", help="Start a single repo branch run from the web UI.")
-    start_parser.add_argument("branch", help="Branch name.")
+    start_parser.add_argument("branch", nargs="?", default=None, help="Branch name.")
 
     log_parser = subparsers.add_parser("log", help="Print a log for a repo branch.")
     log_parser.add_argument("-f", action="store_true", dest="follow", help="Follow the log until it completes.")
@@ -799,6 +812,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "sync":
             return cmd_sync(client_config)
         repo = infer_repo(".")
+        if args.command in {"log", "start", "status"} and args.branch is None:
+            args.branch = current_branch(".")
         if args.command == "start":
             return cmd_start(client_config, repo, args.branch)
         selector = RunSelector(args.branch, args.date, args.time)
