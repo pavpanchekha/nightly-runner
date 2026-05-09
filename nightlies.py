@@ -8,7 +8,7 @@ import configparser
 import json
 import shlex, shutil
 import slack, apt
-from config import parse_cores, parse_size, format_size_slurm
+from config import parse_cores, parse_size, format_size_slurm, short_repo_name
 import urllib.request, urllib.error
 
 def format_cmd(s : Sequence[Union[str, Path]]) -> str:
@@ -75,7 +75,8 @@ class NightlyRunner:
 
         defaults = self.config.defaults()
         self.base_url = defaults.get("baseurl")
-        if self.base_url and not self.base_url.endswith("/"): self.base_url += "/"
+        if self.base_url:
+            self.base_url = self.base_url.rstrip("/") + "/"
         self.dir = Path(defaults.get("repos", ".")).resolve()
         self.log_dir = Path(defaults.get("logs", "logs")).resolve()
         self.dryrun = "dryrun" in defaults
@@ -300,7 +301,7 @@ class Repository:
             self.url = "git@github.com:" + name + ".git"
             self.gh_name = name
 
-        self.name = name.split("/")[-1]
+        self.name = short_repo_name(name)
         self.dir = runner.dir / self.name
         self.checkout = self.dir / ".checkout"
         self.status = self.dir / ".status"

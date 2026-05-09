@@ -3,7 +3,7 @@
 <link rel="stylesheet" href="/static/style.css">
 <script async src="/static/nightly.js"></script>
 
-% include("header.view", current=current, branches=branches, baseurl=baseurl, running=running, system_state=system_state, logins=logins, upgrade=upgrade)
+% include("header.view", current=current, branches=branches, running=running, system_state=system_state, logins=logins, upgrade=upgrade)
 
 % sync_disabled = "disabled" if current else ""
 %if sync_disabled:
@@ -11,17 +11,17 @@
 %end
 
 <div>
-  <form action="{{baseurl}}/logs/" method="get" class="inline">
+  <form action="/logs/" method="get" class="inline">
     <input type=hidden name=C value=M>
     <input type=hidden name=O value=D>
     <button>View logs</button>
   </form>
 
-  <form action="{{baseurl}}/dryrun" method="post" class="inline">
+  <form action="/dryrun" method="post" class="inline">
     <button {{sync_disabled}}>Sync with Github</button>
   </form>
 
-  <form action="{{baseurl}}/fullrun" method="post" class="inline">
+  <form action="/fullrun" method="post" class="inline">
     <button {{sync_disabled}}>Start a full run</button>
   </form>
 
@@ -31,7 +31,7 @@
   </form>
   %end
 
-  <form action="{{baseurl}}/docs" method="get" class="inline">
+  <form action="/docs" method="get" class="inline">
     <button>Documentation</button>
   </form>
 </div>
@@ -53,7 +53,7 @@
   %for branch in sorted(repo.branches.values(), key=lambda b: b.last_run(), reverse=True):
     <tr>
       <td class="left">
-        <form action="{{baseurl}}/runnow" method="post" class="inline">
+        <form action="/runnow" method="post" class="inline">
           <input type="hidden" name="repo" value="{{repo.name}}" />
           <input type="hidden" name="branch" value="{{branch.name}}" />
           <button {{"disabled" if current or "queued" in branch.badges else ""}}>Run</button>
@@ -68,7 +68,7 @@
         %end
         %end
       <td class="right">
-        <form action="{{baseurl}}/rmbranch" method="post" class="inline">
+        <form action="/rmbranch" method="post" class="inline">
           <input type="hidden" name="repo" value="{{repo.name}}" />
           <input type="hidden" name="branch" value="{{branch.name}}" />
           <button>Reset</button>

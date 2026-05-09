@@ -11,3 +11,6 @@ secrets/
 nightly-test/
 __pycache__
 .worktrees
+*.egg-info/
+build/
+uv.lock

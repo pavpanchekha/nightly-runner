@@ -36,6 +36,10 @@ def escape_branch_filename(branch: str) -> str:
     return branch.replace("%", "_25").replace("/", "_2f")
 
 
+def short_repo_name(repo_name: str) -> str:
+    return repo_name.split("/")[-1]
+
+
 def parse_size(size: str | None) -> int | None:
     if size is None:
         return size
@@ -67,7 +71,7 @@ def parse_cores(cores: str | None) -> int | None:
 class BranchConfig:
     def __init__(self, config: Config, repo_name: str, branch_name: str):
         self.config = config
-        self.repo_name = repo_name.split("/")[-1]
+        self.repo_name = short_repo_name(repo_name)
         self.branch_name = branch_name
         self.branch_filename = escape_branch_filename(branch_name)
         

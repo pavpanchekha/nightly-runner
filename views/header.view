@@ -23,7 +23,7 @@
         The nightly server can be upgraded from <kbd>{{upgrade["from"][:8]}}</kbd> to <kbd>{{upgrade["to"][:8]}}</kbd>
       </td>
       <td class="right">
-        <form action="{{baseurl}}/upgrade" method="post" class="inline">
+        <form action="/upgrade" method="post" class="inline">
           <button {{"disabled" if upgrade["disabled"] else ""}}>Upgrade</button>
         </form>
       </td>
@@ -39,7 +39,7 @@
 %if current and "pid" in current and "start" in current and "log" in current:
     <tr>
       <td class="left">
-        <form action="{{baseurl}}/logs/{{Path(current['log']).name}}" method="get" class="inline">
+        <form action="/logs/{{Path(current['log']).name}}" method="get" class="inline">
           <button>Log</button>
         </form>
       <td class="middle">
@@ -50,7 +50,7 @@
         ({{current["nr_action"]}} <kbd>{{current.get("nr_repo", "")}}</kbd>)
         %end
       <td class="right">
-        <form action="{{baseurl}}/killsync" method="post" class="inline">
+        <form action="/killsync" method="post" class="inline">
           <button {{ "" if running else "disabled" }}>Kill</button>
         </form>
   %if not running:
@@ -59,7 +59,7 @@
       <td class="middle">
         Nightly seems dead (PID not found).
       <td class="right">
-        <form action="{{baseurl}}/delete_pid" method="post" class="inline">
+        <form action="/delete_pid" method="post" class="inline">
           <button>Delete lockfile</button>
         </form>
   %end
@@ -69,7 +69,7 @@
 %for br in branches:
     <tr>
       <td class="left">
-        <form action="{{baseurl}}/logs/{{quote(br.log)}}" method="get" class="inline">
+        <form action="/logs/{{quote(br.log)}}" method="get" class="inline">
           <button>Log</button>
         </form>
       <td class="middle">
@@ -82,7 +82,7 @@
         (last print {{format_time(br.last_print)}} ago)
         %end
       <td class="right">
-        <form action="{{baseurl}}/killbranch" method="post" class="inline">
+        <form action="/killbranch" method="post" class="inline">
           <input type="hidden" name="job_id" value="{{br.job_id}}">
           <button>Kill</button>
         </form>
