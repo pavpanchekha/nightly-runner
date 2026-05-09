@@ -22,11 +22,6 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Utilities",
 ]
-dependencies = [
-    "bottle>=0.13.4",
-    "dbus-python>=1.4.0",
-]
-
 [project.urls]
 Homepage = "https://github.com/pavpanchekha/nightlies"
 Repository = "https://github.com/pavpanchekha/nightlies"
